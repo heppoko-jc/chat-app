@@ -1,5 +1,4 @@
 // app/api/push/subscribe/route.ts
-
 import { NextRequest, NextResponse } from "next/server";
 import webpush from "web-push";
 import { PrismaClient } from "@prisma/client";
@@ -7,7 +6,6 @@ import { verifyJwt } from "@/lib/jwt";
 
 const prisma = new PrismaClient();
 
-// VAPID 鍵の設定
 webpush.setVapidDetails(
   "mailto:you@domain.com",
   process.env.VAPID_PUBLIC_KEY!,
@@ -15,34 +13,30 @@ webpush.setVapidDetails(
 );
 
 export async function POST(req: NextRequest) {
-  try {
-    // Authorization ヘッダーの検証
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-    const token = authHeader.slice(7);
-    const userId = verifyJwt(token);
+  // 認証は try/catch の外で個別に 401 を返す
+  const auth = req.headers.get("Authorization");
+  if (!auth?.startsWith("Bearer ")) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+  const token = auth.slice(7);
 
-    // リクエストボディから購読情報を取得
+  let userId: string;
+  try {
+    userId = verifyJwt(token);
+  } catch {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  try {
     const { subscription } = await req.json();
-    if (!subscription || typeof subscription.endpoint !== "string") {
+    if (!subscription?.endpoint) {
       return NextResponse.json({ error: "Invalid subscription" }, { status: 400 });
     }
 
-    // DB に upsert（既存なら更新、なければ作成）
     await prisma.pushSubscription.upsert({
       where: { endpoint: subscription.endpoint },
-      update: {
-        subscription,
-        userId,
-        isActive: true,
-      },
-      create: {
-        endpoint: subscription.endpoint,
-        subscription,
-        userId,
-      },
+      update: { subscription, userId, isActive: true },
+      create: { endpoint: subscription.endpoint, subscription, userId },
     });
 
     return NextResponse.json({ success: true });

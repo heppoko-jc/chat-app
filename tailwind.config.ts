@@ -12,8 +12,10 @@ export default {
       colors: {
         background: "var(--background)",
         foreground: "var(--foreground)",
+        'orange-350': '#fc9e58',
       },
     },
   },
   plugins: [],
+  safelist: ['animate-slide-in']
 } satisfies Config;

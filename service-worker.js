@@ -32,8 +32,8 @@ self.addEventListener('push', event => {
 // 通知クリック時のハンドラ
 self.addEventListener('notificationclick', event => {
   event.notification.close();
-  const { type, chatId } = event.notification.data;
-  const targetUrl = type === 'match' ? '/notifications' : `/chat/${chatId}`;
+  const { type, matchId } = event.notification.data;
+  const targetUrl = type === 'match' ? '/notifications' : `/chat/${matchId}`;
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then(winClients => {

@@ -2,7 +2,6 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import PushRegistrar from "./components/PushRegistrar";
-import ClientPageTransitionWrapper from "./components/ClientPageTransitionWrapper";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -25,7 +24,7 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({
-  children,
+
 }: Readonly<{
   children: React.ReactNode;
 }>) {
@@ -65,9 +64,6 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <ClientPageTransitionWrapper>
-          {children}
-        </ClientPageTransitionWrapper>
 
         <PushRegistrar /> {/* ← ここでクライアント専用処理を走らせる */}
       </body>

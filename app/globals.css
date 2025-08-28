@@ -12,3 +12,61 @@ body {
   background: var(--background);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+@keyframes slide-in {
+  0% {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  20% {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(-150%);
+    opacity: 0;
+  }
+}
+
+.animate-slide-in {
+  animation: slide-in 8s linear forwards;
+}
+
+.neon-gradient {
+  background: linear-gradient(270deg, #ff5f6d, #ffc371, #40c9ff, #ff5f6d);
+  background-size: 300% 100%;
+  animation: neon-bg 6s ease infinite;
+  box-shadow: 0 0 10px #fff5, 0 0 20px #ff9f9f, 0 0 30px #ffaaff;
+  border: 1px solid white;
+  border-radius: 0;
+}
+
+
+@keyframes slide-out-left {
+  0% {
+    transform: translateX(0%);
+    opacity: 1;
+  }
+  100% {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+}
+.animate-slide-out-left {
+  animation: slide-out-left 0.3s ease forwards;
+}
+
+@keyframes neon-bg {
+  0% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+
+html, body {
+  overscroll-behavior: none;
+}
+
+html, body {
+  overflow: hidden;
+  height: 100%;
+}

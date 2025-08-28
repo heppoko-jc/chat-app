@@ -76,3 +76,11 @@ model PushSubscription {
 
   @@index([userId])
 }
+
+model PresetMessage {
+  id        String   @id @default(uuid())
+  content   String
+  createdBy String   // ユーザーID（匿名の場合もあり）
+  createdAt DateTime @default(now())
+  count     Int      @default(0) // 送信回数
+}
