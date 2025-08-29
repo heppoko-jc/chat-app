@@ -15,6 +15,15 @@ webpush.setVapidDetails(
   process.env.VAPID_PRIVATE_KEY!
 );
 
+// unknown から statusCode を安全に取り出すヘルパー（no-explicit-any 回避）
+function getStatusCode(reason: unknown): number | undefined {
+  if (typeof reason === "object" && reason !== null) {
+    const val = (reason as Record<string, unknown>)["statusCode"];
+    if (typeof val === "number") return val;
+  }
+  return undefined;
+}
+
 /**
  * GET /api/chat/[chatId]
  */
@@ -92,16 +101,21 @@ export async function POST(req: NextRequest) {
       include: { sender: { select: { id: true, name: true } } },
     });
 
-    // → Socket.IO でリアルタイム配信
-    const socket = ioClient(SOCKET_URL, { transports: ["websocket"] });
-    socket.emit("sendMessage", { chatId, message: newMessage });
-    socket.disconnect();
+    // 受信者
+    const receiverId = chat.user1Id === senderId ? chat.user2Id : chat.user1Id;
+
+    // → Socket.IO でリアルタイム配信（接続完了を待ってから emit）
+    try {
+      const socket = ioClient(SOCKET_URL, { transports: ["websocket"] });
+      await new Promise<void>((resolve) => socket.on("connect", () => resolve()));
+      socket.emit("sendMessage", { chatId, toUserId: receiverId, message: newMessage });
+      setTimeout(() => socket.disconnect(), 50);
+    } catch (e) {
+      console.error("⚠️ Socket.IO relay failed:", e);
+      // 通知はベストエフォートなので続行
+    }
 
     // → Web Push 通知
-    const receiverId =
-      chat.user1Id === senderId ? chat.user2Id : chat.user1Id;
-
-    // 有効購読情報を取得
     const subs = await prisma.pushSubscription.findMany({
       where: { userId: receiverId, isActive: true },
     });
@@ -113,8 +127,8 @@ export async function POST(req: NextRequest) {
       body: newMessage.content,
     });
 
-    // 型アサーションで JsonValue → WebPushSubscription
-    await Promise.all(
+    // 失敗購読の自動無効化（404/410）— any を使わずに判定
+    const results = await Promise.allSettled(
       subs.map((s) =>
         webpush.sendNotification(
           s.subscription as unknown as WebPushSubscription,
@@ -122,6 +136,23 @@ export async function POST(req: NextRequest) {
         )
       )
     );
+
+    const toDeactivate: string[] = [];
+    results.forEach((r, idx) => {
+      if (r.status === "rejected") {
+        const status = getStatusCode(r.reason);
+        if (status === 404 || status === 410) {
+          toDeactivate.push(subs[idx].endpoint);
+        }
+      }
+    });
+
+    if (toDeactivate.length > 0) {
+      await prisma.pushSubscription.updateMany({
+        where: { endpoint: { in: toDeactivate } },
+        data: { isActive: false },
+      });
+    }
 
     return NextResponse.json(newMessage);
   } catch (error) {

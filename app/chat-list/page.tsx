@@ -151,6 +151,11 @@ export default function ChatList() {
         )
       setChats(formatted)
 
+      // ここを追加: 既存チャットの部屋に全部 join
+      formatted
+      .filter(c => !c.chatId.startsWith('dummy-'))
+      .forEach(c => socket.emit('joinChat', c.chatId)); 
+
       // 未読件数計算
       const unread: { [chatId: string]: number } = {}
       for (const chat of res.data) {
