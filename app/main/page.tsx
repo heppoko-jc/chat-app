@@ -163,7 +163,6 @@ export default function Main() {
     }
 
     socket.on('matchEstablished', handleMatchEstablished)
-    // ★ ここを修正：ブロックで包んで戻り値を返さない
     return () => {
       socket.off('matchEstablished', handleMatchEstablished)
     }
@@ -411,13 +410,13 @@ export default function Main() {
         onTouchEnd={handleTouchEnd}
       >
         <div
-          className="flex h-full transition-transform duration-450"
+          className="flex w-full h-full transition-transform duration-300 will-change-transform"
           style={{ transform: step === 'select-message' ? 'translateX(0%)' : 'translateX(-100%)' }}
         >
           {/* メッセージ選択（新着順） */}
           <div
-            className="min-w-full flex-shrink-0 text-lg overflow-y-auto px-5 pt-[180px] pb-[40px]"
-            style={{ maxHeight: 'calc(100vh - 140px)' }}
+            className="basis-full flex-none box-border text-lg overflow-y-auto px-4 pt-[180px] pb-[40px]"
+            style={{ maxHeight: 'calc(100dvh - 140px)' }}
           >
             <div className="flex flex-col gap-3">
               {messageOptions.map((msg) => (
@@ -432,7 +431,7 @@ export default function Main() {
                     borderColor: selectedMessage === msg.content ? '#ea580c' : '#fed7aa',
                   }}
                 >
-                  <span>{msg.content}</span>
+                  <span className="truncate">{msg.content}</span>
                   <span className="text-xs text-gray-500 ml-2 whitespace-nowrap">{msg.count}回シェアされました</span>
                 </button>
               ))}
@@ -441,8 +440,8 @@ export default function Main() {
 
           {/* 送信先選択 */}
           <div
-            className="min-w-full flex-shrink-0 text-lg overflow-y-auto px-5 pt-[180px] pb-[40px]"
-            style={{ maxHeight: 'calc(100vh - 140px)' }}
+            className="basis-full flex-none box-border text-lg overflow-y-auto px-4 pt-[180px] pb-[40px]"
+            style={{ maxHeight: 'calc(100dvh - 140px)' }}
           >
             <div className="flex flex-col gap-2">
               {users
@@ -473,11 +472,14 @@ export default function Main() {
         </div>
       </main>
 
-      {/* リスト切替トグル */}
-      <div className="fixed bottom-[56px] left-8 right-8 z-30 bg-white py-2 px-4 rounded-3xl shadow-lg border border-orange-200">
+      {/* リスト切替トグル（TabBarの上に余裕を持って配置） */}
+      <div
+        className="fixed left-4 right-4 z-30 bg-white py-2 px-4 rounded-3xl shadow-lg border border-orange-200"
+        style={{ bottom: 'calc(76px + env(safe-area-inset-bottom))' }}
+      >
         <div className="relative flex">
           <span
-            className="absolute top-0 bottom-0 w-1/2 bg-orange-100 rounded-3xl transition-transform duration-400"
+            className="absolute top-0 bottom-0 w-1/2 bg-orange-100 rounded-3xl transition-transform duration-300"
             style={{ transform: step === 'select-message' ? 'translateX(0%)' : 'translateX(100%)' }}
           />
           <button onClick={() => setStep('select-message')} className={`relative z-10 flex-1 py-2 text-center text-base font-bold rounded-3xl transition text-orange-600 ${step === 'select-message' ? 'bg-orange-200 shadow' : ''}`}>
