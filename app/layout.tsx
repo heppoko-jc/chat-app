@@ -4,7 +4,8 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import PushRegistrar from "./components/PushRegistrar";
 import Providers from "./providers";
-import RegisterSW from "./register-sw"; // ← 追加
+import RegisterSW from "./register-sw"; // SW登録（client）
+import SWVisibilityPinger from "./components/SWVisibilityPinger"; // ← 追加（client）
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -29,7 +30,7 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en">
+    <html lang="ja">
       <head>
         <link rel="manifest" href="/manifest.json" />
         <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png" />
@@ -39,10 +40,13 @@ export default function RootLayout({
         <meta name="color-scheme" content="light" />
       </head>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
-        {/* 先にSWを登録してから… */}
+        {/* 先にSWを登録（ready に到達してから pinger が動きます） */}
         <RegisterSW />
 
-        {/* プッシュ購読などアプリ本体 */}
+        {/* 画面状態をSWへ常時送信（通知抑制のためのハートビート） */}
+        <SWVisibilityPinger />
+
+        {/* アプリ本体 */}
         <Providers>
           {children}
           <PushRegistrar />
