@@ -14,13 +14,22 @@ export interface ChatItem {
   matchedUser: { id: string; name: string }
   matchMessage: string
   latestMessage: string
-  latestMessageAt: string | null // ← null を許可
+  latestMessageAt: string | null
   latestMessageAtRaw: string | null
-  latestMessageSenderId: string | null // ← null を許可
+  latestMessageSenderId: string | null
   latestMessageAtDisplay?: string
   messages: { id: string; senderId: string; content: string; createdAt: string }[]
   matchMessageMatchedAt?: string | null
   matchHistory?: { message: string; matchedAt: string }[]
+}
+
+type MatchEvent = {
+  chatId?: string
+  targetUserId?: string
+  matchedUserId?: string
+  matchedUserName?: string
+  message?: string
+  matchedAt?: string
 }
 
 // ユーザー名からイニシャル生成
@@ -89,36 +98,41 @@ export default function ChatList() {
   const [isOpenedMatchStateLoaded, setIsOpenedMatchStateLoaded] = useState(false)
   const [newMatchChats, setNewMatchChats] = useState<Set<string>>(new Set())
 
-  // 開いたマッチチャットの状態をローカルストレージから読み込み（userIdごと）
+  // userId 取得
+  useEffect(() => {
+    setUserId(localStorage.getItem('userId'))
+  }, [])
+
+  // userId をサーバに登録（ユーザールーム参加）
   useEffect(() => {
     if (!userId) return
-    if (typeof window !== 'undefined') {
-      const openedMatchData = localStorage.getItem(`opened-match-chats-${userId}`)
-      if (openedMatchData) {
-        try {
-          const openedMatchArray = JSON.parse(openedMatchData)
-          setOpenedMatchChats(new Set(openedMatchArray))
-        } catch (error) {
-          console.error('開いたマッチチャットデータの読み込みエラー:', error)
-        }
-      }
-      setIsOpenedMatchStateLoaded(true)
-    } else {
-      setIsOpenedMatchStateLoaded(true)
-    }
+    socket.emit('setUserId', userId)
   }, [userId])
 
-  // newMatchChatsの状態をlocalStorageから読み込み（userIdごと）
+  // 開いたマッチチャットの状態を localStorage から読み込み（userIdごと）
   useEffect(() => {
     if (!userId) return
-    if (typeof window !== 'undefined') {
-      const newMatchData = localStorage.getItem(`new-match-chats-${userId}`)
-      if (newMatchData) {
-        try {
-          const arr = JSON.parse(newMatchData)
-          setNewMatchChats(new Set(arr))
-        } catch {}
+    const openedMatchData = localStorage.getItem(`opened-match-chats-${userId}`)
+    if (openedMatchData) {
+      try {
+        const openedMatchArray = JSON.parse(openedMatchData)
+        setOpenedMatchChats(new Set(openedMatchArray))
+      } catch (error) {
+        console.error('開いたマッチチャットデータの読み込みエラー:', error)
       }
+    }
+    setIsOpenedMatchStateLoaded(true)
+  }, [userId])
+
+  // newMatchChats の状態を localStorage から読み込み（userIdごと）
+  useEffect(() => {
+    if (!userId) return
+    const newMatchData = localStorage.getItem(`new-match-chats-${userId}`)
+    if (newMatchData) {
+      try {
+        const arr = JSON.parse(newMatchData)
+        setNewMatchChats(new Set(arr))
+      } catch {}
     }
   }, [userId])
 
@@ -149,12 +163,13 @@ export default function ChatList() {
             (b.latestMessageAt ? new Date(b.latestMessageAt).getTime() : 0) -
             (a.latestMessageAt ? new Date(a.latestMessageAt).getTime() : 0)
         )
+
       setChats(formatted)
 
-      // ここを追加: 既存チャットの部屋に全部 join
+      // 取得した実チャットはすべて join（冪等）
       formatted
-      .filter(c => !c.chatId.startsWith('dummy-'))
-      .forEach(c => socket.emit('joinChat', c.chatId)); 
+        .filter((c) => !c.chatId.startsWith('dummy-'))
+        .forEach((c) => socket.emit('joinChat', c.chatId))
 
       // 未読件数計算
       const unread: { [chatId: string]: number } = {}
@@ -179,17 +194,14 @@ export default function ChatList() {
     }
   }
 
+  // 初回ロード
   useEffect(() => {
-    setUserId(localStorage.getItem('userId'))
-    if (isOpenedMatchStateLoaded) {
-      fetchChats()
-    }
+    if (isOpenedMatchStateLoaded) fetchChats()
   }, [isOpenedMatchStateLoaded])
 
-  // チャットリスト取得時にmatchMessageの変化を検知（userIdごと）
+  // リスト取得時に matchMessage の変化を検知（userIdごと）
   useEffect(() => {
     if (!isOpenedMatchStateLoaded || chats.length === 0 || !userId) return
-    if (typeof window === 'undefined') return
 
     const prevMatchMessagesRaw = localStorage.getItem(`prev-match-messages-${userId}`)
     let prevMatchMessages: Record<string, string> = {}
@@ -206,6 +218,7 @@ export default function ChatList() {
         newSet = new Set(JSON.parse(newMatchData))
       } catch {}
     }
+
     let changed = false
     chats.forEach((chat) => {
       const prev = prevMatchMessages[chat.chatId]
@@ -223,6 +236,7 @@ export default function ChatList() {
         changed = true
       }
     })
+
     if (changed) {
       setNewMatchChats(newSet)
       localStorage.setItem(`new-match-chats-${userId}`, JSON.stringify(Array.from(newSet)))
@@ -235,43 +249,75 @@ export default function ChatList() {
     localStorage.setItem(`prev-match-messages-${userId}`, JSON.stringify(nextMatchMessages))
   }, [chats, isOpenedMatchStateLoaded, userId])
 
-  // WebSocketでマッチ通知を受信 → 新規マッチのハイライト
+  // ===== マッチ通知をリアルタイム反映 =====
   useEffect(() => {
     if (!userId) return
-    socket.emit('setUserId', userId)
 
-    const handleMatchEstablished = (data: {
-      matchId: string
-      message: string
-      matchedAt: string
-      matchedUserId?: string
-      matchedUserName?: string
-      targetUserId?: string
-    }) => {
+    const applyMatchToList = (data: MatchEvent) => {
+      // 自分宛以外は無視（targetUserId があればチェック）
       if (data.targetUserId && data.targetUserId !== userId) return
 
-      if (data.matchedUserId) {
-        const matchedChat = chats.find((chat) => chat.matchedUser.id === data.matchedUserId)
-        if (matchedChat) {
-          setNewMatchChats((prev) => {
-            const newSet = new Set(prev)
-            newSet.add(matchedChat.chatId)
-            if (userId) localStorage.setItem(`new-match-chats-${userId}`, JSON.stringify(Array.from(newSet)))
-            return newSet
-          })
+      setChats((prev) => {
+        let idx = -1
+
+        // 1) chatId で探す
+        if (data.chatId) {
+          idx = prev.findIndex((c) => c.chatId === data.chatId)
         }
-      }
-      // ついでにリスト更新（matchMessage 反映）
-      fetchChats()
+
+        // 2) 見つからないなら matchedUserId で推定
+        if (idx === -1 && data.matchedUserId) {
+          idx = prev.findIndex((c) => c.matchedUser.id === data.matchedUserId)
+        }
+
+        if (idx === -1) {
+          // ローカルで見つからない場合はフル再取得（保険）
+          fetchChats()
+          return prev
+        }
+
+        const next = [...prev]
+        const chat = { ...next[idx] }
+
+        // match 情報を即反映
+        const mm = data.message ?? '（マッチメッセージなし）'
+        const ma = data.matchedAt ?? null
+        chat.matchMessage = mm
+        chat.matchMessageMatchedAt = ma
+        chat.matchHistory = [
+          ...(chat.matchHistory ?? []),
+          ...(ma ? [{ message: mm, matchedAt: ma }] : []),
+        ].sort((a, b) => new Date(a.matchedAt).getTime() - new Date(b.matchedAt).getTime())
+
+        next[idx] = chat
+        return next
+      })
+
+      // ハイライト（newMatchChats）も即反映
+      setNewMatchChats((prevSet) => {
+        const next = new Set(prevSet)
+        const key = data.chatId ?? chats.find((c) => c.matchedUser.id === data.matchedUserId)?.chatId
+        if (key) {
+          next.add(key)
+          if (userId) localStorage.setItem(`new-match-chats-${userId}`, JSON.stringify(Array.from(next)))
+        }
+        return next
+      })
     }
 
-    socket.on('matchEstablished', handleMatchEstablished)
+    const onMatchEstablished = (data: MatchEvent) => applyMatchToList(data)
+    const onNewMatch = (data: MatchEvent) => applyMatchToList(data)
+
+    socket.on('matchEstablished', onMatchEstablished)
+    socket.on('newMatch', onNewMatch) // 旧名も購読（サーバは両方投げる想定）
+
     return () => {
-      socket.off('matchEstablished', handleMatchEstablished)
+      socket.off('matchEstablished', onMatchEstablished)
+      socket.off('newMatch', onNewMatch)
     }
   }, [userId, chats])
 
-  // WebSocketで新着メッセージ → リスト更新
+  // ===== 新着メッセージでリストを更新（既存仕様のまま） =====
   useEffect(() => {
     const handleNewMessage = () => fetchChats()
     socket.on('newMessage', handleNewMessage)
@@ -346,7 +392,7 @@ export default function ChatList() {
       {/* スクロール可能リスト */}
       <div className="flex-1 overflow-y-auto px-4 py-6">
         {!isOpenedMatchStateLoaded || (isLoading && chats.length === 0) ? (
-          <div className="flex flex-col items中心 justify-center py-12">
+          <div className="flex flex-col items-center justify-center py-12">
             <div className="w-8 h-8 border-4 border-gray-300 border-t-blue-500 rounded-full animate-spin mb-4"></div>
             <p className="text-gray-500 font-medium">読み込み中…</p>
           </div>
@@ -362,8 +408,7 @@ export default function ChatList() {
           <ul className="space-y-2 pb-20">
             {sortedChats.map((chat) => {
               const isLatestFromMe = chat.latestMessageSenderId === userId
-              const isMatched =
-                chat.matchMessage !== '（マッチメッセージなし）'
+              const isMatched = chat.matchMessage !== '（マッチメッセージなし）'
               const hasOpenedMatch = openedMatchChats.has(chat.chatId)
               const isNewMatch = newMatchChats.has(chat.chatId)
               const shouldShowMatchHighlight = (isMatched && !hasOpenedMatch) || isNewMatch

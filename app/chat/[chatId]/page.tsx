@@ -32,11 +32,13 @@ function isNear(aIso: string, bIso: string, ms = 7000) {
   return Math.abs(a - b) <= ms
 }
 
-type NewMatchPayload = {
-  chatId: string
-  message: string
-  matchedAt: string
-  // 他のプロパティが来ても無視してOK
+type MatchEvent = {
+  chatId?: string
+  message?: string
+  matchedAt?: string
+  targetUserId?: string
+  matchedUserId?: string
+  // 他が来ても無視でOK
 }
 
 export default function Chat() {
@@ -169,21 +171,23 @@ export default function Chat() {
     return () => { socket.off('newMessage', handleNewMessage) }
   }, [id, setChatData, setChatList])
 
-  // ===== マッチ成立のリアルタイム反映（newMatch を購読） =====
+  // ===== マッチ成立のリアルタイム反映（matchEstablished / newMatch を購読） =====
   useEffect(() => {
     if (!id || id.startsWith('dummy-')) return
 
-    const handleNewMatch = (data: NewMatchPayload) => {
+    const applyMatch = (data: MatchEvent) => {
       if (data.chatId !== id) return
+      const msg = data.message ?? '（マッチメッセージなし）'
+      const at = data.matchedAt ?? new Date().toISOString()
 
       // ヘッダー表示更新
-      setMatchMessage(data.message)
-      setMatchMessageMatchedAt(data.matchedAt)
+      setMatchMessage(msg)
+      setMatchMessageMatchedAt(at)
 
       // タイムライン用履歴（重複防止 & 昇順）
       setMatchHistory((prev) => {
-        if (prev.some((m) => m.matchedAt === data.matchedAt && m.message === data.message)) return prev
-        const next = [...prev, { message: data.message, matchedAt: data.matchedAt }]
+        if (prev.some((m) => m.matchedAt === at && m.message === msg)) return prev
+        const next = [...prev, { message: msg, matchedAt: at }]
         next.sort((a, b) => new Date(a.matchedAt).getTime() - new Date(b.matchedAt).getTime())
         return next
       })
@@ -195,11 +199,11 @@ export default function Chat() {
           c.chatId === id
             ? {
                 ...c,
-                matchMessage: data.message,
-                matchMessageMatchedAt: data.matchedAt,
+                matchMessage: msg,
+                matchMessageMatchedAt: at,
                 matchHistory: [
                   ...(c.matchHistory || []),
-                  { message: data.message, matchedAt: data.matchedAt },
+                  { message: msg, matchedAt: at },
                 ].sort((a, b) => new Date(a.matchedAt).getTime() - new Date(b.matchedAt).getTime()),
               }
             : c
@@ -207,9 +211,16 @@ export default function Chat() {
       })
     }
 
-    // サーバは io.to(chatId).emit('newMatch', data) を送る
-    socket.on('newMatch', handleNewMatch)
-    return () => { socket.off('newMatch', handleNewMatch) }
+    const onMatchEstablished = (data: MatchEvent) => applyMatch(data)
+    const onNewMatch = (data: MatchEvent) => applyMatch(data)
+
+    socket.on('matchEstablished', onMatchEstablished)
+    socket.on('newMatch', onNewMatch) // 旧名も購読
+
+    return () => {
+      socket.off('matchEstablished', onMatchEstablished)
+      socket.off('newMatch', onNewMatch)
+    }
   }, [id, setChatList])
 
   // ===== 初回＆id変化時はサーバから最新を取得（必ず） =====
@@ -406,7 +417,7 @@ export default function Chat() {
               {getInitials(msg.sender.name)}
             </div>
           )}
-          <div className="flex flex-col items-end max-w=[70%]">
+          <div className="flex flex-col items-end max-w-[70%]">
             <div
               className={`relative px-4 py-2 text-sm rounded-2xl shadow-md ${
                 isMe ? 'bg-green-400 text-white rounded-br-md bubble-right'
@@ -439,7 +450,7 @@ export default function Chat() {
 
   if (isPreloading && messages.length === 0) {
     return (
-      <div className="flex flex-col bg白 h-screen">
+      <div className="flex flex-col bg-white h-screen">
         <header className="sticky top-0 z-10 bg-white px-4 py-2 flex flex-col items-center">
           <button onClick={() => router.push('/chat-list')} className="absolute left-4 top-2 focus:outline-none">
             <Image src="/icons/back.png" alt="Back" width={20} height={20} />
@@ -489,7 +500,7 @@ export default function Chat() {
           value={newMessage}
           onChange={(e) => setNewMessage(e.target.value)}
           placeholder="メッセージを入力"
-          className="flex-1 border border-gray-200 rounded-full px-4 py-2 focus:outline-none bg-gray-50 text-base影"
+          className="flex-1 border border-gray-200 rounded-full px-4 py-2 focus:outline-none bg-gray-50 text-base"
         />
         <button
           onClick={handleSend}
