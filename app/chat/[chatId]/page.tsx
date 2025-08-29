@@ -32,13 +32,10 @@ function isNear(aIso: string, bIso: string, ms = 7000) {
   return Math.abs(a - b) <= ms
 }
 
-type MatchEvent = {
-  chatId?: string
-  message?: string
-  matchedAt?: string
-  targetUserId?: string
-  matchedUserId?: string
-  // 他が来ても無視でOK
+type NewMatchPayload = {
+  chatId: string
+  message: string
+  matchedAt: string
 }
 
 export default function Chat() {
@@ -171,23 +168,21 @@ export default function Chat() {
     return () => { socket.off('newMessage', handleNewMessage) }
   }, [id, setChatData, setChatList])
 
-  // ===== マッチ成立のリアルタイム反映（matchEstablished / newMatch を購読） =====
+  // ===== マッチ成立のリアルタイム反映（newMatch を購読） =====
   useEffect(() => {
     if (!id || id.startsWith('dummy-')) return
 
-    const applyMatch = (data: MatchEvent) => {
+    const handleNewMatch = (data: NewMatchPayload) => {
       if (data.chatId !== id) return
-      const msg = data.message ?? '（マッチメッセージなし）'
-      const at = data.matchedAt ?? new Date().toISOString()
 
       // ヘッダー表示更新
-      setMatchMessage(msg)
-      setMatchMessageMatchedAt(at)
+      setMatchMessage(data.message)
+      setMatchMessageMatchedAt(data.matchedAt)
 
       // タイムライン用履歴（重複防止 & 昇順）
       setMatchHistory((prev) => {
-        if (prev.some((m) => m.matchedAt === at && m.message === msg)) return prev
-        const next = [...prev, { message: msg, matchedAt: at }]
+        if (prev.some((m) => m.matchedAt === data.matchedAt && m.message === data.message)) return prev
+        const next = [...prev, { message: data.message, matchedAt: data.matchedAt }]
         next.sort((a, b) => new Date(a.matchedAt).getTime() - new Date(b.matchedAt).getTime())
         return next
       })
@@ -199,11 +194,11 @@ export default function Chat() {
           c.chatId === id
             ? {
                 ...c,
-                matchMessage: msg,
-                matchMessageMatchedAt: at,
+                matchMessage: data.message,
+                matchMessageMatchedAt: data.matchedAt,
                 matchHistory: [
                   ...(c.matchHistory || []),
-                  { message: msg, matchedAt: at },
+                  { message: data.message, matchedAt: data.matchedAt },
                 ].sort((a, b) => new Date(a.matchedAt).getTime() - new Date(b.matchedAt).getTime()),
               }
             : c
@@ -211,16 +206,9 @@ export default function Chat() {
       })
     }
 
-    const onMatchEstablished = (data: MatchEvent) => applyMatch(data)
-    const onNewMatch = (data: MatchEvent) => applyMatch(data)
-
-    socket.on('matchEstablished', onMatchEstablished)
-    socket.on('newMatch', onNewMatch) // 旧名も購読
-
-    return () => {
-      socket.off('matchEstablished', onMatchEstablished)
-      socket.off('newMatch', onNewMatch)
-    }
+    // サーバは io.to(chatId).emit('newMatch', data) を送る
+    socket.on('newMatch', handleNewMatch)
+    return () => { socket.off('newMatch', handleNewMatch) }
   }, [id, setChatList])
 
   // ===== 初回＆id変化時はサーバから最新を取得（必ず） =====
@@ -347,7 +335,7 @@ export default function Chat() {
     }
   }
 
-  // ====== ヘッダーの相手表示 ======
+  // ====== ヘッダーの相手表示（計算は一度だけにして JSX で使用）======
   const headerName =
     chatInList?.matchedUser.name ||
     messages.find((m) => m.sender.id !== currentUserId)?.sender.name ||
@@ -472,7 +460,10 @@ export default function Chat() {
         </button>
         <div className="flex flex-col">
           <div className="flex items-center">
-            <div className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-lg mr-2 shadow" style={{ backgroundColor: headerColor }}>
+            <div
+              className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-lg mr-2 shadow"
+              style={{ backgroundColor: headerColor }}
+            >
               {headerInitials}
             </div>
             <span className="text-base font-bold text-black">{headerName}</span>
@@ -500,7 +491,7 @@ export default function Chat() {
           value={newMessage}
           onChange={(e) => setNewMessage(e.target.value)}
           placeholder="メッセージを入力"
-          className="flex-1 border border-gray-200 rounded-full px-4 py-2 focus:outline-none bg-gray-50 text-base"
+          className="flex-1 border border-gray-200 rounded-full px-4 py-2 focus:outline-none bg-gray-50 text-base shadow-sm"
         />
         <button
           onClick={handleSend}
