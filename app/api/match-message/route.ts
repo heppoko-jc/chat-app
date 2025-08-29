@@ -9,7 +9,7 @@ const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL!
 
 // VAPID 鍵の設定
 webpush.setVapidDetails(
-  'https://chat-app-beta-amber-91.vercel.app',
+  'https://happy-ice-cream.vercel.app',
   process.env.VAPID_PUBLIC_KEY!,
   process.env.VAPID_PRIVATE_KEY!
 )
