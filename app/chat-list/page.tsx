@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import axios from 'axios'
 import FixedTabBar from '../components/FixedTabBar'
 import Image from 'next/image'
-import socket from '../socket'
+import socket, { setSocketUserId } from '../socket' // ← 変更
 
 // チャットリストアイテムの型定義
 export interface ChatItem {
@@ -31,6 +31,7 @@ function getBgColor(name: string) {
   const h = hash % 360
   return `hsl(${h}, 70%, 80%)`
 }
+
 function formatChatDate(dateString: string | null): string {
   if (!dateString) return ''
   const now = new Date()
@@ -45,8 +46,7 @@ function formatChatDate(dateString: string | null): string {
   for (let i = 2; i <= 5; i++) {
     const prev = new Date(now); prev.setDate(now.getDate() - i)
     if (prev.toDateString() === date.toDateString()) {
-      const week = ['日','月','火','水','木','金','土']
-      return week[date.getDay()]
+      const week = ['日','月','火','水','木','金','土']; return week[date.getDay()]
     }
   }
   return `${date.getMonth() + 1}/${date.getDate()}`
@@ -62,32 +62,30 @@ export default function ChatList() {
   const [isOpenedMatchStateLoaded, setIsOpenedMatchStateLoaded] = useState(false)
   const [newMatchChats, setNewMatchChats] = useState<Set<string>>(new Set())
 
-  // 初期化
+  // 開いたマッチチャット状態のロード
   useEffect(() => {
-    setUserId(localStorage.getItem('userId'))
+    const uid = typeof window !== 'undefined' ? localStorage.getItem('userId') : null
+    setUserId(uid)
   }, [])
-
-  // ローカル状態ロード
   useEffect(() => {
     if (!userId) return
-    if (typeof window !== 'undefined') {
-      const opened = localStorage.getItem(`opened-match-chats-${userId}`)
-      if (opened) {
-        try { setOpenedMatchChats(new Set(JSON.parse(opened))) } catch {}
-      }
-      const nm = localStorage.getItem(`new-match-chats-${userId}`)
-      if (nm) {
-        try { setNewMatchChats(new Set(JSON.parse(nm))) } catch {}
-      }
-      setIsOpenedMatchStateLoaded(true)
-    } else {
-      setIsOpenedMatchStateLoaded(true)
+    setSocketUserId(userId) // ← 接続/再接続時に確実にユーザールームへ
+
+    const openedMatchData = localStorage.getItem(`opened-match-chats-${userId}`)
+    if (openedMatchData) {
+      try { setOpenedMatchChats(new Set(JSON.parse(openedMatchData))) } catch {}
+    }
+    setIsOpenedMatchStateLoaded(true)
+
+    const newMatchData = localStorage.getItem(`new-match-chats-${userId}`)
+    if (newMatchData) {
+      try { setNewMatchChats(new Set(JSON.parse(newMatchData))) } catch {}
     }
   }, [userId])
 
-  // 取得→各チャット部屋に join
+  // 一覧取得
   const fetchChats = async () => {
-    const uid = localStorage.getItem('userId')
+    const uid = typeof window !== 'undefined' ? localStorage.getItem('userId') : null
     if (!uid) return
     setIsLoading(true)
     try {
@@ -97,7 +95,9 @@ export default function ChatList() {
           ...c,
           latestMessageAtRaw: c.latestMessageAt,
           latestMessageAt: c.latestMessageAt
-            ? new Date(c.latestMessageAt).toLocaleString('ja-JP', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+            ? new Date(c.latestMessageAt).toLocaleString('ja-JP', {
+                month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'
+              })
             : ''
         }))
         .sort((a, b) =>
@@ -106,10 +106,10 @@ export default function ChatList() {
         )
       setChats(formatted)
 
-      // すべての実チャットに参加
+      // 取得した実チャットは全て join（マッチ直後の newMessage も拾えるように）
       formatted.filter(c => !c.chatId.startsWith('dummy-')).forEach(c => socket.emit('joinChat', c.chatId))
 
-      // 未読数
+      // 未読件数
       const unread: { [chatId: string]: number } = {}
       for (const chat of res.data) {
         if (!chat.latestMessageAt || chat.latestMessage === 'メッセージなし') continue
@@ -128,29 +128,28 @@ export default function ChatList() {
     }
   }
 
+  // 初回ロード
   useEffect(() => {
     if (isOpenedMatchStateLoaded) fetchChats()
   }, [isOpenedMatchStateLoaded])
 
-  // 前回のマッチメッセージと比較して “新規マッチ” をマーキング
+  // matchMessageの変化検知（ローカル保存）
   useEffect(() => {
     if (!isOpenedMatchStateLoaded || chats.length === 0 || !userId) return
     const prevRaw = localStorage.getItem(`prev-match-messages-${userId}`)
-    let prev: Record<string, string> = {}
-    if (prevRaw) { try { prev = JSON.parse(prevRaw) } catch {} }
+    let prevMap: Record<string, string> = {}
+    if (prevRaw) { try { prevMap = JSON.parse(prevRaw) } catch {} }
 
-    const nmRaw = localStorage.getItem(`new-match-chats-${userId}`)
-    let newSet = new Set<string>()
-    if (nmRaw) { try { newSet = new Set(JSON.parse(nmRaw)) } catch {} }
+    const newRaw = localStorage.getItem(`new-match-chats-${userId}`)
+    let newSet = new Set<string>(); if (newRaw) { try { newSet = new Set(JSON.parse(newRaw)) } catch {} }
 
     let changed = false
     for (const chat of chats) {
-      const before = prev[chat.chatId]
-      const now = chat.matchMessage
-      if (before !== undefined && before !== now && !newSet.has(chat.chatId)) {
+      const prev = prevMap[chat.chatId]
+      if (prev !== undefined && prev !== chat.matchMessage && !newSet.has(chat.chatId)) {
         newSet.add(chat.chatId); changed = true
       }
-      if (before === undefined && now && now !== '（マッチメッセージなし）' && !newSet.has(chat.chatId)) {
+      if (prev === undefined && chat.matchMessage && chat.matchMessage !== '（マッチメッセージなし）' && !newSet.has(chat.chatId)) {
         newSet.add(chat.chatId); changed = true
       }
     }
@@ -159,67 +158,88 @@ export default function ChatList() {
       localStorage.setItem(`new-match-chats-${userId}`, JSON.stringify([...newSet]))
     }
 
-    const snap: Record<string, string> = {}
-    chats.forEach(c => { snap[c.chatId] = c.matchMessage })
-    localStorage.setItem(`prev-match-messages-${userId}`, JSON.stringify(snap))
+    const nextMap: Record<string, string> = {}
+    chats.forEach((c) => { nextMap[c.chatId] = c.matchMessage })
+    localStorage.setItem(`prev-match-messages-${userId}`, JSON.stringify(nextMap))
   }, [chats, isOpenedMatchStateLoaded, userId])
 
-  // ユーザールームへ
+  // WebSocket: マッチ成立（ユーザールーム経由）
   useEffect(() => {
     if (!userId) return
-    socket.emit('setUserId', userId)
-
-    const onMatch = (data: {
+    const handleMatchEstablished = (data: {
       chatId?: string
-      message?: string
-      matchedAt?: string
+      message: string
+      matchedAt: string
       matchedUserId?: string
       targetUserId?: string
     }) => {
-      // user room 経由 or chat room 経由どちらでも来る
-      // とりあえずリスト再取得（簡単で確実）
-      fetchChats()
+      // 自分宛以外はスキップ
+      if (data.targetUserId && data.targetUserId !== userId) return
 
-      // ハイライト（chatId が分かるときだけ即時マーク）
-      if (data.chatId) {
+      const realChatId = data.chatId // ← 重要：実チャットID
+      if (realChatId) {
+        // 実チャットルームにも join（この後の newMessage も拾える）
+        socket.emit('joinChat', realChatId)
+
+        // ダミー → 実ID の置換をローカルで即時反映
+        setChats((prev) => {
+          // 対象ユーザーの項目を探す
+          const idx = prev.findIndex(c => c.matchedUser.id === data.matchedUserId || c.chatId === realChatId)
+          if (idx === -1) return prev
+          const next = [...prev]
+          const item = { ...next[idx] }
+
+          // ID 置換（dummy のままなら）
+          if (item.chatId.startsWith('dummy-')) item.chatId = realChatId
+
+          // マッチ文言を即時反映（fetch を待たずにリッチ化）
+          item.matchMessage = data.message
+          item.matchMessageMatchedAt = data.matchedAt
+          item.matchHistory = [...(item.matchHistory || []), { message: data.message, matchedAt: data.matchedAt }]
+
+          next[idx] = item
+          return next
+        })
+
+        // ハイライト用の集合は「実ID」を追加（dummy は入れない）
         setNewMatchChats((prev) => {
-          const ns = new Set(prev); ns.add(data.chatId!)
-          if (userId) localStorage.setItem(`new-match-chats-${userId}`, JSON.stringify([...ns]))
-          return ns
+          const next = new Set(prev); next.add(realChatId)
+          if (userId) localStorage.setItem(`new-match-chats-${userId}`, JSON.stringify([...next]))
+          return next
         })
       }
+
+      // 最終的にサーバー状態で再同期
+      fetchChats()
     }
 
-    // 新旧イベント名の両方を購読
-    socket.on('matchEstablished', onMatch)
-    socket.on('newMatch', onMatch)
-    return () => {
-      socket.off('matchEstablished', onMatch)
-      socket.off('newMatch', onMatch)
-    }
+    socket.on('matchEstablished', handleMatchEstablished)
+    return () => { socket.off('matchEstablished', handleMatchEstablished) }
   }, [userId])
 
-  // 新着メッセージ → リスト更新
+  // WebSocket: 新着メッセージで再取得
   useEffect(() => {
     const handleNewMessage = () => fetchChats()
     socket.on('newMessage', handleNewMessage)
     return () => { socket.off('newMessage', handleNewMessage) }
   }, [])
 
+  // クリックで既読＆ハイライト解除
   const handleOpenChat = async (item: ChatItem) => {
     const uid = localStorage.getItem('userId'); if (!uid) return
+
     const goto = async (realId: string) => {
       localStorage.setItem(`chat-last-read-${realId}`, new Date().toISOString())
       setUnreadCounts((prev) => ({ ...prev, [realId]: 0 }))
       setOpenedMatchChats((prev) => {
-        const ns = new Set(prev); ns.add(realId)
-        if (userId) localStorage.setItem(`opened-match-chats-${userId}`, JSON.stringify([...ns]))
-        return ns
+        const next = new Set(prev); next.add(realId)
+        if (userId) localStorage.setItem(`opened-match-chats-${userId}`, JSON.stringify([...next]))
+        return next
       })
       setNewMatchChats((prev) => {
-        const ns = new Set(prev); ns.delete(realId)
-        if (userId) localStorage.setItem(`new-match-chats-${userId}`, JSON.stringify([...ns]))
-        return ns
+        const next = new Set(prev); next.delete(realId)
+        if (userId) localStorage.setItem(`new-match-chats-${userId}`, JSON.stringify([...next]))
+        return next
       })
       router.push(`/chat/${realId}`)
     }
@@ -261,7 +281,7 @@ export default function ChatList() {
       <div className="flex-1 overflow-y-auto px-4 py-6">
         {!isOpenedMatchStateLoaded || (isLoading && chats.length === 0) ? (
           <div className="flex flex-col items-center justify-center py-12">
-            <div className="w-8 h-8 border-4 border-gray-300 border-t-blue-500 rounded-full animate-spin mb-4" />
+            <div className="w-8 h-8 border-4 border-gray-300 border-t-blue-500 rounded-full animate-spin mb-4"></div>
             <p className="text-gray-500 font-medium">読み込み中…</p>
           </div>
         ) : chats.length === 0 ? (

@@ -32,8 +32,8 @@ function isNear(aIso: string, bIso: string, ms = 7000) {
   return Math.abs(a - b) <= ms
 }
 
-type NewMatchPayload = {
-  chatId: string
+type MatchPayload = {
+  chatId?: string
   message: string
   matchedAt: string
 }
@@ -57,104 +57,89 @@ export default function Chat() {
 
   const mainRef = useRef<HTMLDivElement | null>(null)
 
-  // 受信済みID（broadcast重複防止）
+  // 受信済みID
   const seenIdsRef = useRef<Set<string>>(new Set())
   useEffect(() => {
     if (!id) return
     const set = seenIdsRef.current
-    set.clear() // 別チャットに移動したら前のIDを捨てる
+    set.clear()
     ;(initialMessages ?? []).forEach((m) => set.add(m.id))
   }, [id, initialMessages])
 
   useEffect(() => { setCurrentUserId(localStorage.getItem('userId')) }, [])
-
-  // ダミーチャットなら一覧へ戻す
   useEffect(() => { if (id?.startsWith('dummy-')) router.replace('/chat-list') }, [id, router])
 
-  // 一覧の情報からヘッダー表示・マッチ履歴
   const chatInList = chatList?.find((c) => c.chatId === id)
   useEffect(() => {
     if (!chatInList) return
     setMatchMessage(chatInList.matchMessage || '')
     setMatchMessageMatchedAt(chatInList.matchMessageMatchedAt || null)
     setMatchHistory(
-      (chatInList.matchHistory || [])
-        .slice()
-        .sort((a, b) => new Date(a.matchedAt).getTime() - new Date(b.matchedAt).getTime())
+      (chatInList.matchHistory || []).slice().sort((a, b) =>
+        new Date(a.matchedAt).getTime() - new Date(b.matchedAt).getTime()
+      )
     )
   }, [chatInList])
 
-  // ===== ルーム参加 & 受信購読（newMessage） =====
+  // メッセージ購読
   useEffect(() => {
     if (!id || id.startsWith('dummy-')) return
     socket.emit('joinChat', id)
 
     const upsertFromServer = (msg: Message) => {
-      // 既に追加済みならスキップ
       if (seenIdsRef.current.has(msg.id)) return
       seenIdsRef.current.add(msg.id)
 
       setMessages((prev) => {
-        // temp を置換（同sender・同content・近い時刻）
         const idx = prev.findIndex(
-          (m) =>
-            m.id.startsWith('temp-') &&
-            m.sender.id === msg.sender.id &&
-            m.content === msg.content &&
-            isNear(m.createdAt, msg.createdAt)
+          (m) => m.id.startsWith('temp-') &&
+                 m.sender.id === msg.sender.id &&
+                 m.content === msg.content &&
+                 isNear(m.createdAt, msg.createdAt)
         )
-        const next = [...prev]
         const formatted: Message = {
           ...msg,
-          formattedDate: new Date(msg.createdAt).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }),
+          formattedDate: new Date(msg.createdAt).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'})
         }
-        if (idx !== -1) next[idx] = formatted
-        else next.push(formatted)
-        return next
+        if (idx !== -1) { const next=[...prev]; next[idx]=formatted; return next }
+        return [...prev, formatted]
       })
 
-      // chatData も同期
       setChatData((prev) => {
         const list = prev[id] || []
         const idx = list.findIndex(
-          (m) =>
-            m.id.startsWith('temp-') &&
-            m.sender.id === msg.sender.id &&
-            m.content === msg.content &&
-            isNear(m.createdAt, msg.createdAt)
+          (m) => m.id.startsWith('temp-') &&
+                 m.sender.id === msg.sender.id &&
+                 m.content === msg.content &&
+                 isNear(m.createdAt, msg.createdAt)
         )
         const formatted: Message = {
           ...msg,
-          formattedDate: new Date(msg.createdAt).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }),
+          formattedDate: new Date(msg.createdAt).toLocaleTimeString('ja-JP',{hour:'2-digit',minute:'2-digit'})
         }
-        const next = [...list]
-        if (idx !== -1) next[idx] = formatted
-        else next.push(formatted)
+        const next = [...list]; if (idx !== -1) next[idx]=formatted; else next.push(formatted)
         return { ...prev, [id]: next }
       })
 
-      // リストの最新更新
       setChatList((prev) => {
         if (!prev) return prev
-        const updated = prev
-          .map((c) =>
-            c.chatId === id
-              ? {
-                  ...c,
-                  latestMessage: msg.content,
-                  latestMessageAt: msg.createdAt,
-                  latestMessageSenderId: msg.sender.id,
-                  latestMessageAtDisplay: new Date(msg.createdAt).toLocaleString('ja-JP', {
-                    month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
-                  }),
-                }
-              : c
-          )
-          .sort((a, b) => {
-            const ta = a.latestMessageAt ? new Date(a.latestMessageAt).getTime() : 0
-            const tb = b.latestMessageAt ? new Date(b.latestMessageAt).getTime() : 0
-            return tb - ta
-          })
+        const updated = prev.map((c) =>
+          c.chatId === id
+            ? {
+                ...c,
+                latestMessage: msg.content,
+                latestMessageAt: msg.createdAt,
+                latestMessageSenderId: msg.sender.id,
+                latestMessageAtDisplay: new Date(msg.createdAt).toLocaleString('ja-JP',{
+                  month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'
+                }),
+              }
+            : c
+        ).sort((a,b)=>{
+          const ta = a.latestMessageAt ? new Date(a.latestMessageAt).getTime() : 0
+          const tb = b.latestMessageAt ? new Date(b.latestMessageAt).getTime() : 0
+          return tb - ta
+        })
         return updated
       })
     }
@@ -168,18 +153,15 @@ export default function Chat() {
     return () => { socket.off('newMessage', handleNewMessage) }
   }, [id, setChatData, setChatList])
 
-  // ===== マッチ成立のリアルタイム反映（newMatch を購読） =====
+  // マッチ成立の購読（チャットルーム→newMatch、ユーザールーム→matchEstablished）
   useEffect(() => {
     if (!id || id.startsWith('dummy-')) return
 
-    const handleNewMatch = (data: NewMatchPayload) => {
-      if (data.chatId !== id) return
+    const applyMatch = (data: MatchPayload) => {
+      if (data.chatId && data.chatId !== id) return
 
-      // ヘッダー表示更新
       setMatchMessage(data.message)
       setMatchMessageMatchedAt(data.matchedAt)
-
-      // タイムライン用履歴（重複防止 & 昇順）
       setMatchHistory((prev) => {
         if (prev.some((m) => m.matchedAt === data.matchedAt && m.message === data.message)) return prev
         const next = [...prev, { message: data.message, matchedAt: data.matchedAt }]
@@ -187,7 +169,7 @@ export default function Chat() {
         return next
       })
 
-      // チャットリスト側も同期（ハイライト・上位表示のため）
+      // リスト側も即時同期（ハイライト用途）
       setChatList((prev) => {
         if (!prev) return prev
         return prev.map((c) =>
@@ -198,20 +180,26 @@ export default function Chat() {
                 matchMessageMatchedAt: data.matchedAt,
                 matchHistory: [
                   ...(c.matchHistory || []),
-                  { message: data.message, matchedAt: data.matchedAt },
-                ].sort((a, b) => new Date(a.matchedAt).getTime() - new Date(b.matchedAt).getTime()),
+                  { message: data.message, matchedAt: data.matchedAt }
+                ].sort((a,b)=>new Date(a.matchedAt).getTime()-new Date(b.matchedAt).getTime()),
               }
             : c
         )
       })
     }
 
-    // サーバは io.to(chatId).emit('newMatch', data) を送る
-    socket.on('newMatch', handleNewMatch)
-    return () => { socket.off('newMatch', handleNewMatch) }
+    const onNewMatch = (data: MatchPayload) => applyMatch(data)
+    const onMatchEstablished = (data: MatchPayload) => applyMatch(data)
+
+    socket.on('newMatch', onNewMatch)               // チャットルーム経由
+    socket.on('matchEstablished', onMatchEstablished) // ユーザールーム経由
+    return () => {
+      socket.off('newMatch', onNewMatch)
+      socket.off('matchEstablished', onMatchEstablished)
+    }
   }, [id, setChatList])
 
-  // ===== 初回＆id変化時はサーバから最新を取得（必ず） =====
+  // サーバからの初期取得
   useEffect(() => {
     if (!id || id.startsWith('dummy-')) return
     let aborted = false
@@ -222,7 +210,7 @@ export default function Chat() {
         const formatted = res.data.map((msg) => ({
           ...msg,
           formattedDate: new Date(msg.createdAt).toLocaleString('ja-JP', {
-            month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
+            month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'
           }),
         }))
         formatted.forEach((m) => seenIdsRef.current.add(m.id))
@@ -235,17 +223,14 @@ export default function Chat() {
     return () => { aborted = true }
   }, [id, setChatData])
 
-  // ===== 既読書き込み（一覧の未読バッジを正しく下げる） =====
+  // 既読
   useEffect(() => {
     if (!id || id.startsWith('dummy-')) return
     const write = () => localStorage.setItem(`chat-last-read-${id}`, new Date().toISOString())
     write()
     const onVis = () => { if (document.visibilityState === 'visible') write() }
     document.addEventListener('visibilitychange', onVis)
-    return () => {
-      write()
-      document.removeEventListener('visibilitychange', onVis)
-    }
+    return () => { write(); document.removeEventListener('visibilitychange', onVis) }
   }, [id, messages.length])
 
   // 自動スクロール
@@ -253,7 +238,6 @@ export default function Chat() {
     if (mainRef.current) mainRef.current.scrollTop = mainRef.current.scrollHeight
   }, [messages])
 
-  // 送信（savedは置換／追加だけ。emitはAPI側に任せる）
   const handleSend = async () => {
     if (!id || id.startsWith('dummy-') || !newMessage.trim() || isSending) return
     const senderId = localStorage.getItem('userId')
@@ -268,7 +252,7 @@ export default function Chat() {
       sender: { id: senderId, name: '自分' },
       content: contentToSend,
       createdAt: new Date().toISOString(),
-      formattedDate: new Date().toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }),
+      formattedDate: new Date().toLocaleTimeString('ja-JP', { hour:'2-digit', minute:'2-digit' }),
     }
     setMessages((prev) => [...prev, temp])
     setChatData((prev) => ({ ...prev, [id]: [...(prev[id] || []), temp] }))
@@ -276,58 +260,36 @@ export default function Chat() {
     try {
       const res = await axios.post<Message>(`/api/chat/${id}`, { senderId, content: contentToSend })
       const saved = res.data
-
-      // ★二重反映の最終ガード：broadcast が先に来ていれば既に反映済み
-      if (seenIdsRef.current.has(saved.id)) {
-        setIsSending(false)
-        return
-      }
-
-      // ここで初めて自前反映（temp 置換 or 追加）
+      if (seenIdsRef.current.has(saved.id)) { setIsSending(false); return }
       seenIdsRef.current.add(saved.id)
 
+      const formatted: Message = {
+        ...saved,
+        formattedDate: new Date(saved.createdAt).toLocaleString('ja-JP', {
+          month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'
+        }),
+      }
       setMessages((prev) => {
         const idx = prev.findIndex(
-          (m) =>
-            m.id.startsWith('temp-') &&
-            m.sender.id === senderId &&
-            m.content === contentToSend &&
-            isNear(m.createdAt, saved.createdAt)
+          (m) => m.id.startsWith('temp-') &&
+                 m.sender.id === senderId &&
+                 m.content === contentToSend &&
+                 isNear(m.createdAt, saved.createdAt)
         )
-        const formatted: Message = {
-          ...saved,
-          formattedDate: new Date(saved.createdAt).toLocaleString('ja-JP', {
-            month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
-          }),
-        }
-        if (idx !== -1) {
-          const next = [...prev]; next[idx] = formatted; return next
-        }
+        if (idx !== -1) { const next=[...prev]; next[idx]=formatted; return next }
         return [...prev, formatted]
       })
-
       setChatData((prev) => {
         const list = prev[id] || []
         const idx = list.findIndex(
-          (m) =>
-            m.id.startsWith('temp-') &&
-            m.sender.id === senderId &&
-            m.content === contentToSend &&
-            isNear(m.createdAt, saved.createdAt)
+          (m) => m.id.startsWith('temp-') &&
+                 m.sender.id === senderId &&
+                 m.content === contentToSend &&
+                 isNear(m.createdAt, saved.createdAt)
         )
-        const formatted: Message = {
-          ...saved,
-          formattedDate: new Date(saved.createdAt).toLocaleString('ja-JP', {
-            month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
-          }),
-        }
-        const next = [...list]
-        if (idx !== -1) next[idx] = formatted
-        else next.push(formatted)
+        const next=[...list]; if (idx!==-1) next[idx]=formatted; else next.push(formatted)
         return { ...prev, [id]: next }
       })
-
-      // socket.emit は不要（API で emit 済み）
     } catch (e) {
       console.error('🚨 送信エラー:', e)
     } finally {
@@ -335,7 +297,6 @@ export default function Chat() {
     }
   }
 
-  // ====== ヘッダーの相手表示（計算は一度だけにして JSX で使用）======
   const headerName =
     chatInList?.matchedUser.name ||
     messages.find((m) => m.sender.id !== currentUserId)?.sender.name ||
@@ -343,7 +304,6 @@ export default function Chat() {
   const headerInitials = getInitials(headerName)
   const headerColor = getBgColor(headerName)
 
-  // ====== タイムライン描画（メッセージとマッチを時系列マージ）======
   function renderMessagesWithDate(msgs: Message[]) {
     const result: React.ReactElement[] = []
     let lastDate = ''
@@ -360,6 +320,7 @@ export default function Chat() {
         lastDate = key
       }
     }
+
     const matches = (matchHistory || []).slice().sort(
       (a, b) => new Date(a.matchedAt).getTime() - new Date(b.matchedAt).getTime()
     )
@@ -399,7 +360,7 @@ export default function Chat() {
         <div key={msg.id} className={`flex items-end ${isMe ? 'justify-end' : 'justify-start'} w-full`}>
           {!isMe && (
             <div
-              className="w-9 h-9 rounded-full flex items-center justify-center text-white font-bold text-base mr-2 shadow"
+              className="w-9 h-9 rounded-full flex items-center justify中心 text-white font-bold text-base mr-2 shadow"
               style={{ backgroundColor: getBgColor(msg.sender.name) }}
             >
               {getInitials(msg.sender.name)}
@@ -460,10 +421,7 @@ export default function Chat() {
         </button>
         <div className="flex flex-col">
           <div className="flex items-center">
-            <div
-              className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-lg mr-2 shadow"
-              style={{ backgroundColor: headerColor }}
-            >
+            <div className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-lg mr-2 shadow" style={{ backgroundColor: headerColor }}>
               {headerInitials}
             </div>
             <span className="text-base font-bold text-black">{headerName}</span>
@@ -491,7 +449,7 @@ export default function Chat() {
           value={newMessage}
           onChange={(e) => setNewMessage(e.target.value)}
           placeholder="メッセージを入力"
-          className="flex-1 border border-gray-200 rounded-full px-4 py-2 focus:outline-none bg-gray-50 text-base shadow-sm"
+          className="flex-1 border border-gray-200 rounded-full px-4 py-2 focus:outline-none bg-gray-50 text-base"
         />
         <button
           onClick={handleSend}
