@@ -99,10 +99,10 @@ export async function POST(req: NextRequest) {
         data: { user1Id: senderId, user2Id: matchedUserId, message }
       })
 
-      // ★ ここが超重要：2人のチャットIDを確保しておく（無ければ作成）
+      // ★ 2人のチャットIDを確保（無ければ作成）
       const chatId = await ensureChatBetween(senderId, matchedUserId)
 
-      // Web Push 通知
+      // Web Push 通知（両者）
       const subs = await prisma.pushSubscription.findMany({
         where: {
           OR: [
@@ -121,7 +121,7 @@ export async function POST(req: NextRequest) {
             body: `あなたは ${other.name} さんと「${message}」でマッチしました！`,
             matchedUserId: other.id,
             matchedUserName: other.name,
-            chatId, // ← 通知側でも持たせておくとSW遷移時に便利
+            chatId, // SW からの遷移にも使える
           })
           return webpush.sendNotification(
             s.subscription as unknown as WebPushSubscription,
@@ -130,31 +130,36 @@ export async function POST(req: NextRequest) {
         })
       )
 
-      // WebSocket でリアルタイム通知
+      // WebSocket でリアルタイム通知（接続完了を待ってから emit）
       const socket = ioClient(SOCKET_URL, { transports: ['websocket'] })
       try {
-        // 送信者向け（ユーザールーム）
-        socket.emit('matchEstablished', {
+        await new Promise<void>((resolve) => socket.on('connect', () => resolve()))
+
+        const payload = {
           matchId: newMatchPair.id,
+          chatId, // ★ 部屋宛ブロードキャストのため必須
           message,
           matchedAt: newMatchPair.matchedAt.toISOString(),
+        }
+
+        // 送信者向け（ユーザールーム）
+        socket.emit('matchEstablished', {
+          ...payload,
           matchedUserId: matchedUser.id,
           matchedUserName: matchedUser.name,
           targetUserId: senderId, // ユーザールーム宛
-          chatId,                 // ★ 部屋宛ブロードキャストのため必須
         })
+
         // 受信者向け（ユーザールーム）
         socket.emit('matchEstablished', {
-          matchId: newMatchPair.id,
-          message,
-          matchedAt: newMatchPair.matchedAt.toISOString(),
+          ...payload,
           matchedUserId: senderUser.id,
           matchedUserName: senderUser.name,
           targetUserId: matchedUserId, // ユーザールーム宛
-          chatId,                      // ★ 部屋宛ブロードキャストのため必須
         })
       } finally {
-        socket.disconnect()
+        // 少し待ってから切断（送信バッファ flush 保険）
+        setTimeout(() => socket.disconnect(), 50)
       }
 
       return NextResponse.json({

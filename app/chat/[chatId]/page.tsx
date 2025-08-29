@@ -70,8 +70,13 @@ export default function Chat() {
     ;(initialMessages ?? []).forEach((m) => set.add(m.id))
   }, [id, initialMessages])
 
+  // ★ 修正点：ユーザー固有ルームに join（先に送った側でも matchEstablished を確実に受け取る）
   useEffect(() => {
-    setCurrentUserId(localStorage.getItem('userId'))
+    const uid = localStorage.getItem('userId')
+    setCurrentUserId(uid)
+    if (uid) {
+      socket.emit('setUserId', uid)
+    }
   }, [])
 
   // ダミーIDなら一覧へ戻す
@@ -231,7 +236,7 @@ export default function Chat() {
 
     // 部屋宛（WSサーバが io.to(chatId).emit('newMatch', ...)）
     socket.on('newMatch', onNewMatch)
-    // ユーザールーム宛の保険（API が matchEstablished を emit）
+    // ユーザールーム宛（API が matchEstablished を emit）
     socket.on('matchEstablished', onMatchEstablished)
 
     return () => {
