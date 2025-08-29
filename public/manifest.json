@@ -1,7 +1,7 @@
 {
-    "name": "Glance",
-    "short_name": "Glance",
-    "description": "Glance",
+    "name": "Happy Ice Cream",
+    "short_name": "Happy Ice Cream",
+    "description": "Happy Ice Cream",
     "start_url": "/",
     "display": "standalone",
     "theme_color": "#808080",

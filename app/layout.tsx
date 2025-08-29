@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import PushRegistrar from "./components/PushRegistrar";
-import Providers from "./providers"; // ← 追加
+import Providers from "./providers";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Glance",
+  title: "Happy Ice Cream",
   description: "matching chat App",
   icons: {
     icon: "/icons/icon-192x192.png",
