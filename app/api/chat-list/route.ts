@@ -1,3 +1,4 @@
+// app/api/chat-list/route.ts
 import { NextRequest, NextResponse } from 'next/server'
 import { PrismaClient } from '@prisma/client'
 
@@ -6,90 +7,111 @@ const prisma = new PrismaClient()
 export async function GET(req: NextRequest) {
   try {
     const userId = req.headers.get('userId')
-
     if (!userId) {
       return NextResponse.json({ error: 'userId is required' }, { status: 400 })
     }
+    const me = userId as string
 
-    // 全ユーザー取得（自分以外）
+    // 自分以外の全ユーザー
     const users = await prisma.user.findMany({
-      where: { id: { not: userId } },
-      select: { id: true, name: true }
+      where: { id: { not: me } },
+      select: { id: true, name: true },
     })
 
-    // 既存チャット取得
+    // 自分が属するチャットを全部取得
     const chats = await prisma.chat.findMany({
       where: {
-        OR: [{ user1Id: userId }, { user2Id: userId }]
+        OR: [{ user1Id: me }, { user2Id: me }],
       },
       include: {
         user1: { select: { id: true, name: true } },
         user2: { select: { id: true, name: true } },
         messages: {
-          orderBy: { createdAt: 'desc' }
-          // take: 1 ← 削除（全件取得）
-        }
-      }
+          orderBy: { createdAt: 'desc' }, // 最新が先頭
+        },
+      },
     })
 
-    // ユーザーごとにチャット情報を作成
+    // ユーザーごとにチャット情報を組み立て
     const chatList = await Promise.all(
       users.map(async (u) => {
-        // 既存チャットがあるか
-        const chat = chats.find((c) => c.user1Id === u.id || c.user2Id === u.id)
+        // 「自分とこのユーザー」のチャットを探す
+        const chat = chats.find(
+          (c) =>
+            (c.user1Id === me && c.user2Id === u.id) ||
+            (c.user2Id === me && c.user1Id === u.id)
+        )
+
         if (chat) {
-          const matchedUser = chat.user1Id === userId ? chat.user2 : chat.user1
-          const latestMessage = chat.messages.length > 0 ? chat.messages[0].content : 'メッセージなし'
-          const latestMessageAt = chat.messages.length > 0 ? chat.messages[0].createdAt : chat.createdAt
-          const latestMessageSenderId = chat.messages.length > 0 ? chat.messages[0].senderId : null
-          // MatchPair テーブルから全てのマッチ履歴を取得
+          const matchedUser = chat.user1Id === me ? chat.user2 : chat.user1
+
+          const hasMsg = chat.messages.length > 0
+          const latest = hasMsg ? chat.messages[0] : null
+          const latestMessage = hasMsg ? latest!.content : 'メッセージなし'
+          const latestMessageAtDate = hasMsg ? latest!.createdAt : chat.createdAt
+          const latestMessageAt = latestMessageAtDate.toISOString()
+          const latestMessageSenderId = hasMsg ? latest!.senderId : null
+
+          // 2人の組合せで MatchPair をすべて取得（古い→新しい）
           const matchHistory = await prisma.matchPair.findMany({
             where: {
               OR: [
                 { user1Id: chat.user1Id, user2Id: chat.user2Id },
-                { user1Id: chat.user2Id, user2Id: chat.user1Id }
-              ]
+                { user1Id: chat.user2Id, user2Id: chat.user1Id },
+              ],
             },
             orderBy: { matchedAt: 'asc' },
-            select: { message: true, matchedAt: true }
+            select: { message: true, matchedAt: true },
           })
-          // 最新のマッチだけ従来通り
-          const matchPair = matchHistory.length > 0 ? matchHistory[matchHistory.length - 1] : null
+
+          const latestMatch = matchHistory.length
+            ? matchHistory[matchHistory.length - 1]
+            : null
+
           return {
             chatId: chat.id,
-            matchedUser: {
-              id: matchedUser.id,
-              name: matchedUser.name
-            },
-            matchMessage: matchPair?.message || '（マッチメッセージなし）',
-            matchMessageMatchedAt: matchPair?.matchedAt || null,
-            matchHistory,
+            matchedUser: { id: matchedUser.id, name: matchedUser.name },
+            matchMessage: latestMatch?.message ?? '（マッチメッセージなし）',
+            matchMessageMatchedAt: latestMatch ? latestMatch.matchedAt.toISOString() : null,
+            matchHistory: matchHistory.map((m) => ({
+              message: m.message,
+              matchedAt: m.matchedAt.toISOString(),
+            })),
             latestMessage,
-            latestMessageAt,
+            latestMessageAt, // ISO 文字列
             latestMessageSenderId,
-            messages: chat.messages.map((m) => ({
-              id: m.id,
-              senderId: m.senderId,
-              content: m.content,
-              createdAt: m.createdAt
-            }))
+            messages: chat.messages
+              .slice() // 念のためコピー（descのまま。未読数計算には順序不問）
+              .map((m) => ({
+                id: m.id,
+                senderId: m.senderId,
+                content: m.content,
+                createdAt: m.createdAt.toISOString(),
+              })),
           }
-        } else {
-          // チャットが未作成の場合のダミー
-          return {
-            chatId: `dummy-${u.id}`,
-            matchedUser: { id: u.id, name: u.name },
-            matchMessage: '（マッチメッセージなし）',
-            latestMessage: 'メッセージなし',
-            latestMessageAt: null,
-            latestMessageSenderId: null,
-            messages: []
-          }
+        }
+
+        // チャット未作成のダミー
+        return {
+          chatId: `dummy-${u.id}`,
+          matchedUser: { id: u.id, name: u.name },
+          matchMessage: '（マッチメッセージなし）',
+          matchMessageMatchedAt: null,
+          matchHistory: [],
+          latestMessage: 'メッセージなし',
+          latestMessageAt: null,
+          latestMessageSenderId: null,
+          messages: [] as Array<{
+            id: string
+            senderId: string
+            content: string
+            createdAt: string
+          }>,
         }
       })
     )
 
-    // 最新メッセージ日時で降順ソート（nullは一番下）
+    // 最新メッセージ日時で降順（null は下へ）
     chatList.sort((a, b) => {
       if (!a.latestMessageAt) return 1
       if (!b.latestMessageAt) return -1
