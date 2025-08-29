@@ -4,6 +4,7 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import PushRegistrar from "./components/PushRegistrar";
 import Providers from "./providers";
+import RegisterSW from "./register-sw"; // ← 追加
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -38,6 +39,10 @@ export default function RootLayout({
         <meta name="color-scheme" content="light" />
       </head>
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+        {/* 先にSWを登録してから… */}
+        <RegisterSW />
+
+        {/* プッシュ購読などアプリ本体 */}
         <Providers>
           {children}
           <PushRegistrar />
