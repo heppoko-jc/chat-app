@@ -2,18 +2,21 @@
 import withPWA from "next-pwa";
 import type { NextConfig } from "next";
 
-
 const pwaOptions = {
   dest: "public",
   register: true,
   skipWaiting: true,
-  disable: false,
-  // ← InjectManifest モードを有効化
+
+  // ★ 開発では無効 / 本番のみ有効
+  disable: process.env.NODE_ENV !== "production",
+
+  // ★ InjectManifest モード（手書きの service-worker.js を使う）
   swSrc: "service-worker.js",
+
   buildExcludes: [
-    /app-build-manifest\.json$/,      // App Router の古い manifest
+    /app-build-manifest\.json$/,
     /middleware-build-manifest\.json$/,
-    /\.js\.map$/,                     // ソースマップも除外
+    /\.js\.map$/,
   ],
 
   fallbacks: {
@@ -25,7 +28,6 @@ const withPWAMiddleware = withPWA(pwaOptions);
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
-  // …他に必要な Next.js の設定 …
 };
 
 export default withPWAMiddleware(nextConfig);
