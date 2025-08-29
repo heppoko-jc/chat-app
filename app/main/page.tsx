@@ -1,7 +1,7 @@
 // app/main/page.tsx
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import axios from 'axios'
 import Image from 'next/image'
 import FixedTabBar from '../components/FixedTabBar'
@@ -9,7 +9,7 @@ import { useRouter } from 'next/navigation'
 import { useChatData, PresetMessage } from '../contexts/ChatDataContext'
 import MatchNotification from '../components/MatchNotification'
 import socket from '../socket'
-import type { ChatItem } from '../chat-list/page' // ← 追加: 型を使って any を排除
+import type { ChatItem } from '../chat-list/page' // 型流用
 
 interface User {
   id: string
@@ -62,6 +62,18 @@ export default function Main() {
     message: string
   } | null>(null)
 
+  // ===== ことば一覧の最新化関数（メイン遷移時・フォーカス時・マッチ通知時に使う）=====
+  const fetchPresetMessages = useCallback(async () => {
+    try {
+      // ※ GET /api/preset-message が一覧を返す想定
+      const res = await axios.get<PresetMessage[]>('/api/preset-message')
+      const sorted = [...res.data].sort((a, b) => (b.count ?? 0) - (a.count ?? 0))
+      setPresetMessages(sorted)
+    } catch (e) {
+      console.error('プリセット取得エラー:', e)
+    }
+  }, [setPresetMessages])
+
   // 受信件数
   useEffect(() => {
     const uid = localStorage.getItem('userId')
@@ -87,7 +99,20 @@ export default function Main() {
       .catch((e) => console.error('ユーザー取得エラー:', e))
   }, [])
 
-  // WebSocket: マッチ通知
+  // メイン画面に「遷移・再表示」したら必ずことば一覧を更新（リロード不要）
+  useEffect(() => {
+    fetchPresetMessages() // 初回マウント
+    const onVis = () => { if (document.visibilityState === 'visible') fetchPresetMessages() }
+    const onFocus = () => fetchPresetMessages()
+    document.addEventListener('visibilitychange', onVis)
+    window.addEventListener('focus', onFocus)
+    return () => {
+      document.removeEventListener('visibilitychange', onVis)
+      window.removeEventListener('focus', onFocus)
+    }
+  }, [fetchPresetMessages])
+
+  // WebSocket: マッチ通知（ことば一覧もリアルタイム更新）
   useEffect(() => {
     if (!currentUserId) return
 
@@ -111,7 +136,7 @@ export default function Main() {
         })
         setShowMatchNotification(true)
 
-        // チャットリストを再取得（any 排除）
+        // チャットリストを再取得
         const updateChatList = async () => {
           try {
             const chatListResponse = await axios.get<ChatListApiItem[]>('/api/chat-list', {
@@ -141,6 +166,9 @@ export default function Main() {
           }
         }
         updateChatList()
+
+        // ことば一覧も最新化（他人のマッチでカウントが上がるため）
+        fetchPresetMessages()
       }
     }
 
@@ -148,7 +176,7 @@ export default function Main() {
     return () => {
       socket.off('matchEstablished', handleMatchEstablished)
     }
-  }, [currentUserId, setChatList])
+  }, [currentUserId, setChatList, fetchPresetMessages])
 
   // スワイプ切替
   const handleTouchStart = (e: React.TouchEvent) => {
@@ -177,21 +205,33 @@ export default function Main() {
   }
 
   // メッセージ選択肢（カウント>0 のみ）
-  const messageOptions = presetMessages.filter((msg) => msg.count > 0)
+  const messageOptions = presetMessages.filter((msg) => (msg.count ?? 0) > 0)
 
-  // 待機バーの右ボタン
+  // 待機バーの右ボタン（送信/次へ）
   const handleMessageIconClick = () => {
+    // 入力モードで文字がある → ことば確定して宛先選択へ
     if (isInputMode && inputMessage.trim()) {
       setSelectedMessage(inputMessage.trim())
       setIsInputMode(false)
       setStep('select-recipients')
-    } else if (selectedMessage) {
-      setStep('select-recipients')
+      return
     }
+    // 既存のことばを選んだが宛先未選択 → 宛先タブへ切替
+    if (selectedMessage && selectedRecipientIds.length === 0) {
+      setStep('select-recipients')
+      return
+    }
+    // どちらも未選択なら何もしない（UIはそのまま）
   }
 
   // 送信
   const handleSend = async () => {
+    // 送信ボタン押下時に宛先が無ければ宛先タブへ誘導
+    if (selectedMessage && selectedRecipientIds.length === 0) {
+      setStep('select-recipients')
+      return
+    }
+
     if (!selectedMessage || selectedRecipientIds.length === 0 || !currentUserId || isSending) return
     setIsSending(true)
 
@@ -211,7 +251,7 @@ export default function Main() {
 
     try {
       // プリセットのカウント更新 or 追加
-      const isPreset = presetMessages.some((m) => m.content === messageToSend && m.count > 0)
+      const isPreset = presetMessages.some((m) => m.content === messageToSend && (m.count ?? 0) > 0)
       if (!isPreset) {
         const res = await fetch('/api/preset-message', {
           method: 'POST',
@@ -238,7 +278,7 @@ export default function Main() {
           return
         }
       } else {
-        setPresetMessages((prev) => prev.map((m) => (m.content === messageToSend ? { ...m, count: m.count + 1 } : m)))
+        setPresetMessages((prev) => prev.map((m) => (m.content === messageToSend ? { ...m, count: (m.count ?? 0) + 1 } : m)))
       }
 
       // マッチ API
@@ -248,7 +288,7 @@ export default function Main() {
         message: messageToSend,
       })
 
-      // マッチ成立時はチャットリストを更新（any 排除）
+      // マッチ成立時はチャットリストを更新
       if (matchResponse.data.message === 'Match created!') {
         const chatListResponse = await axios.get<ChatListApiItem[]>('/api/chat-list', {
           headers: { userId: currentUserId },
@@ -272,6 +312,9 @@ export default function Main() {
             return tb - ta
           })
         setChatList(formattedChatList)
+
+        // 念のためことば一覧も最新化（他端末との整合）
+        fetchPresetMessages()
 
         // 画面内ポップアップも表示（相手特定できれば）
         const matchedUserId = recipientsToSend.find((id) => matchResponse.data.matchedUserId === id)
@@ -332,7 +375,7 @@ export default function Main() {
       <div
         className={`fixed top-[100px] left-6 right-6 z-30 py-2 flex items-center h-16 px-3 shadow-lg rounded-2xl border border-orange-200 transition-all duration-200
           ${
-            selectedMessage && selectedRecipientIds.length > 0
+            canSend
               ? 'bg-gradient-to-r from-orange-400 to-orange-300'
               : selectedMessage || selectedRecipientIds.length > 0
                 ? 'bg-gradient-to-r from-orange-200 to-orange-100'
@@ -362,6 +405,7 @@ export default function Main() {
                   setStep('select-recipients')
                 }
               }}
+              onFocus={() => setIsInputMode(true)}
             />
           ) : (
             <span
@@ -403,7 +447,7 @@ export default function Main() {
         <button
           onClick={canSend ? handleSend : handleMessageIconClick}
           className="flex-none px-1 py-1 transition-transform duration-200 ease-out active:scale-125 focus:outline-none rounded-full bg-white/80 hover:bg-orange-100 shadow border border-orange-200"
-          disabled={!canSend || isSending}
+          disabled={isSending} // ← canSend が false でも押せるように（宛先未選択→ともだちリストへ）
           style={{ minWidth: 36, minHeight: 36 }}
         >
           <Image src={canSend ? '/icons/send.png' : '/icons/message.png'} alt="send" width={28} height={28} />
@@ -437,7 +481,7 @@ export default function Main() {
                   }}
                 >
                   <span>{msg.content}</span>
-                  <span className="text-xs text-gray-500 ml-2 whitespace-nowrap">{msg.count}回シェアされました</span>
+                  <span className="text-xs text-gray-500 ml-2 whitespace-nowrap">{msg.count ?? 0}回シェアされました</span>
                 </button>
               ))}
             </div>
