@@ -70,13 +70,11 @@ export default function Chat() {
     ;(initialMessages ?? []).forEach((m) => set.add(m.id))
   }, [id, initialMessages])
 
-  // ★ 修正点：ユーザー固有ルームに join（先に送った側でも matchEstablished を確実に受け取る）
+  // ユーザー固有ルームへ join
   useEffect(() => {
     const uid = localStorage.getItem('userId')
     setCurrentUserId(uid)
-    if (uid) {
-      socket.emit('setUserId', uid)
-    }
+    if (uid) socket.emit('setUserId', uid)
   }, [])
 
   // ダミーIDなら一覧へ戻す
@@ -212,7 +210,7 @@ export default function Chat() {
         return next
       })
 
-      // チャットリスト側も同期（ハイライト・上位表示のため）
+      // チャットリスト側も同期
       setChatList((prev) => {
         if (!prev) return prev
         return prev.map((c) =>
@@ -234,9 +232,9 @@ export default function Chat() {
     const onNewMatch = (data: MatchPayload) => apply(data)
     const onMatchEstablished = (data: MatchPayload) => apply(data)
 
-    // 部屋宛（WSサーバが io.to(chatId).emit('newMatch', ...)）
+    // 部屋宛
     socket.on('newMatch', onNewMatch)
-    // ユーザールーム宛（API が matchEstablished を emit）
+    // ユーザールーム宛
     socket.on('matchEstablished', onMatchEstablished)
 
     return () => {
@@ -274,14 +272,12 @@ export default function Chat() {
     }
   }, [id, setChatData])
 
-  // ===== 既読書き込み（一覧の未読バッジを正しく下げる） =====
+  // ===== 既読書き込み =====
   useEffect(() => {
     if (!id || id.startsWith('dummy-')) return
     const write = () => localStorage.setItem(`chat-last-read-${id}`, new Date().toISOString())
     write()
-    const onVis = () => {
-      if (document.visibilityState === 'visible') write()
-    }
+    const onVis = () => { if (document.visibilityState === 'visible') write() }
     document.addEventListener('visibilitychange', onVis)
     return () => {
       write()
@@ -294,7 +290,7 @@ export default function Chat() {
     if (mainRef.current) mainRef.current.scrollTop = mainRef.current.scrollHeight
   }, [messages])
 
-  // 送信（savedは置換／追加だけ。emitはAPI側に任せる）
+  // 送信
   const handleSend = async () => {
     if (!id || id.startsWith('dummy-') || !newMessage.trim() || isSending) return
     const senderId = localStorage.getItem('userId')
@@ -321,13 +317,12 @@ export default function Chat() {
       const res = await axios.post<Message>(`/api/chat/${id}`, { senderId, content: contentToSend })
       const saved = res.data
 
-      // 二重反映の最終ガード：broadcast が先に来ていれば既に反映済み
+      // 二重反映の最終ガード
       if (seenIdsRef.current.has(saved.id)) {
         setIsSending(false)
         return
       }
 
-      // ここで自前反映（temp 置換 or 追加）
       seenIdsRef.current.add(saved.id)
 
       setMessages((prev) => {
@@ -378,8 +373,6 @@ export default function Chat() {
         else next.push(formatted)
         return { ...prev, [id]: next }
       })
-
-      // socket.emit は不要（API で emit 済み）
     } catch (e) {
       console.error('🚨 送信エラー:', e)
     } finally {
@@ -392,8 +385,6 @@ export default function Chat() {
     chatInList?.matchedUser.name ||
     messages.find((m) => m.sender.id !== currentUserId)?.sender.name ||
     'チャット'
-  const headerInitials = getInitials(headerName)
-  const headerColor = getBgColor(headerName)
 
   // ====== タイムライン描画（メッセージとマッチを時系列マージ）======
   function renderMessagesWithDate(msgs: Message[]) {
@@ -516,9 +507,9 @@ export default function Chat() {
           <div className="flex items-center">
             <div
               className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-lg mr-2 shadow"
-              style={{ backgroundColor: headerColor }}
+              style={{ backgroundColor: getBgColor(headerName) }}
             >
-              {headerInitials}
+              {getInitials(headerName)}
             </div>
             <span className="text-base font-bold text-black">{headerName}</span>
           </div>

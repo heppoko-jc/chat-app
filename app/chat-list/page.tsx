@@ -5,9 +5,8 @@ import { useRouter } from 'next/navigation'
 import axios from 'axios'
 import FixedTabBar from '../components/FixedTabBar'
 import Image from 'next/image'
-import socket, { setSocketUserId } from '../socket' // ← 変更
+import socket, { setSocketUserId } from '../socket' // ← そのまま使用
 
-// チャットリストアイテムの型定義
 export interface ChatItem {
   chatId: string
   matchedUser: { id: string; name: string }
@@ -163,6 +162,22 @@ export default function ChatList() {
     localStorage.setItem(`prev-match-messages-${userId}`, JSON.stringify(nextMap))
   }, [chats, isOpenedMatchStateLoaded, userId])
 
+  // ★ チャット画面からの強調解除通知を受け取って即反映
+  useEffect(() => {
+    const onOpened = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { chatId?: string }
+      const cid = detail?.chatId
+      if (!cid) return
+      setNewMatchChats((prev) => {
+        const next = new Set(prev); next.delete(cid)
+        if (userId) localStorage.setItem(`new-match-chats-${userId}`, JSON.stringify([...next]))
+        return next
+      })
+    }
+    window.addEventListener('match-opened', onOpened as EventListener)
+    return () => window.removeEventListener('match-opened', onOpened as EventListener)
+  }, [userId])
+
   // WebSocket: マッチ成立（ユーザールーム経由）
   useEffect(() => {
     if (!userId) return
@@ -176,32 +191,31 @@ export default function ChatList() {
       // 自分宛以外はスキップ
       if (data.targetUserId && data.targetUserId !== userId) return
 
-      const realChatId = data.chatId // ← 重要：実チャットID
+      const realChatId = data.chatId
       if (realChatId) {
-        // 実チャットルームにも join（この後の newMessage も拾える）
         socket.emit('joinChat', realChatId)
 
-        // ダミー → 実ID の置換をローカルで即時反映
+        // ダミー → 実ID の置換 + マッチ即時反映（重複はMapで抑止）
         setChats((prev) => {
-          // 対象ユーザーの項目を探す
           const idx = prev.findIndex(c => c.matchedUser.id === data.matchedUserId || c.chatId === realChatId)
           if (idx === -1) return prev
           const next = [...prev]
           const item = { ...next[idx] }
 
-          // ID 置換（dummy のままなら）
           if (item.chatId.startsWith('dummy-')) item.chatId = realChatId
 
-          // マッチ文言を即時反映（fetch を待たずにリッチ化）
+          const list = [...(item.matchHistory || []), { message: data.message, matchedAt: data.matchedAt }]
+          const map = new Map(list.map(m => [`${m.matchedAt}|${m.message}`, m]))
+          item.matchHistory = Array.from(map.values())
+            .sort((a, b) => new Date(a.matchedAt).getTime() - new Date(b.matchedAt).getTime())
           item.matchMessage = data.message
           item.matchMessageMatchedAt = data.matchedAt
-          item.matchHistory = [...(item.matchHistory || []), { message: data.message, matchedAt: data.matchedAt }]
 
           next[idx] = item
           return next
         })
 
-        // ハイライト用の集合は「実ID」を追加（dummy は入れない）
+        // ハイライト集合に実IDを追加
         setNewMatchChats((prev) => {
           const next = new Set(prev); next.add(realChatId)
           if (userId) localStorage.setItem(`new-match-chats-${userId}`, JSON.stringify([...next]))
@@ -209,7 +223,7 @@ export default function ChatList() {
         })
       }
 
-      // 最終的にサーバー状態で再同期
+      // 最終的にサーバー状態で再同期（ズレの保険）
       fetchChats()
     }
 
