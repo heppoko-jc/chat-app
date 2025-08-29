@@ -9,7 +9,7 @@ import { useRouter } from 'next/navigation'
 import { useChatData, PresetMessage } from '../contexts/ChatDataContext'
 import MatchNotification from '../components/MatchNotification'
 import socket from '../socket'
-import type { ChatItem } from '../chat-list/page' // 型流用
+import type { ChatItem } from '../chat-list/page'
 
 interface User {
   id: string
@@ -17,27 +17,23 @@ interface User {
   bio: string
 }
 
-// /api/chat-list のレスポンス用に生の latestMessageAt を許容
 type ChatListApiItem = Omit<ChatItem, 'latestMessageAtDisplay' | 'latestMessageAtRaw'> & {
   latestMessageAt: string | null
 }
 
 function getInitials(name: string) {
-  return name
-    .split(' ')
-    .map((w) => w[0])
-    .join('')
-    .toUpperCase()
+  return name.split(' ').map((w) => w[0]).join('').toUpperCase()
 }
-
 function getBgColor(name: string) {
   let hash = 0
-  for (let i = 0; i < name.length; i++) {
-    hash = name.charCodeAt(i) + ((hash << 5) - hash)
-  }
+  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash)
   const h = hash % 360
   return `hsl(${h}, 70%, 80%)`
 }
+
+// 新着順（createdAt降順）で統一
+const sortByCreatedAtDesc = (arr: PresetMessage[]) =>
+  [...arr].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
 
 export default function Main() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
@@ -55,243 +51,29 @@ export default function Main() {
   const { presetMessages, setPresetMessages, setChatList } = useChatData()
   const [isSending, setIsSending] = useState(false)
 
-  // マッチ通知
+  // マッチ通知ポップアップ
   const [showMatchNotification, setShowMatchNotification] = useState(false)
   const [matchNotificationData, setMatchNotificationData] = useState<{
-    matchedUser: { id: string; name: string }
-    message: string
-  } | null>(null)
+    matchedUser: { id: string; name: string } | null
+    message: string | null
+  }>({ matchedUser: null, message: null })
 
-  // ===== ことば一覧の最新化関数（メイン遷移時・フォーカス時・マッチ通知時に使う）=====
+  // プリセットことば（新着順）
   const fetchPresetMessages = useCallback(async () => {
     try {
-      // ※ GET /api/preset-message が一覧を返す想定
       const res = await axios.get<PresetMessage[]>('/api/preset-message')
-      const sorted = [...res.data].sort((a, b) => (b.count ?? 0) - (a.count ?? 0))
-      setPresetMessages(sorted)
+      setPresetMessages(sortByCreatedAtDesc(res.data))
     } catch (e) {
-      console.error('プリセット取得エラー:', e)
+      console.error('preset取得エラー:', e)
     }
   }, [setPresetMessages])
 
-  // 受信件数
-  useEffect(() => {
-    const uid = localStorage.getItem('userId')
-    if (!uid) return
-    axios
-      .get<{ count: number }>('/api/match-message/count', { headers: { userId: uid } })
-      .then((res) => setMatchCount(res.data.count))
-      .catch((e) => console.error('件数取得エラー:', e))
-  }, [])
-
-  // 自分のID
-  useEffect(() => {
-    setCurrentUserId(localStorage.getItem('userId'))
-    setSelectedMessage(null)
-    setSelectedRecipientIds([])
-  }, [])
-
-  // ユーザー一覧
-  useEffect(() => {
-    axios
-      .get<User[]>('/api/users')
-      .then((res) => setUsers(res.data))
-      .catch((e) => console.error('ユーザー取得エラー:', e))
-  }, [])
-
-  // メイン画面に「遷移・再表示」したら必ずことば一覧を更新（リロード不要）
-  useEffect(() => {
-    fetchPresetMessages() // 初回マウント
-    const onVis = () => { if (document.visibilityState === 'visible') fetchPresetMessages() }
-    const onFocus = () => fetchPresetMessages()
-    document.addEventListener('visibilitychange', onVis)
-    window.addEventListener('focus', onFocus)
-    return () => {
-      document.removeEventListener('visibilitychange', onVis)
-      window.removeEventListener('focus', onFocus)
-    }
-  }, [fetchPresetMessages])
-
-  // WebSocket: マッチ通知（ことば一覧もリアルタイム更新）
-  useEffect(() => {
-    if (!currentUserId) return
-
-    socket.emit('setUserId', currentUserId)
-
-    const handleMatchEstablished = (data: {
-      matchId: string
-      message: string
-      matchedAt: string
-      matchedUserId?: string
-      matchedUserName?: string
-      targetUserId?: string
-    }) => {
-      // 自分宛てのみ
-      if (data.targetUserId && data.targetUserId !== currentUserId) return
-
-      if (data.matchedUserId && data.matchedUserName) {
-        setMatchNotificationData({
-          matchedUser: { id: data.matchedUserId, name: data.matchedUserName },
-          message: data.message,
-        })
-        setShowMatchNotification(true)
-
-        // チャットリストを再取得
-        const updateChatList = async () => {
-          try {
-            const chatListResponse = await axios.get<ChatListApiItem[]>('/api/chat-list', {
-              headers: { userId: currentUserId },
-            })
-            const formattedChatList: ChatItem[] = chatListResponse.data
-              .map((c): ChatItem => ({
-                ...c,
-                latestMessageAtRaw: c.latestMessageAt ?? '',
-                latestMessageAt: c.latestMessageAt
-                  ? new Date(c.latestMessageAt).toLocaleString('ja-JP', {
-                      month: '2-digit',
-                      day: '2-digit',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })
-                  : '',
-              }))
-              .sort((a, b) => {
-                const ta = a.latestMessageAtRaw ? new Date(a.latestMessageAtRaw).getTime() : 0
-                const tb = b.latestMessageAtRaw ? new Date(b.latestMessageAtRaw).getTime() : 0
-                return tb - ta
-              })
-            setChatList(formattedChatList)
-          } catch (error) {
-            console.error('WebSocket通知時のチャットリスト更新エラー:', error)
-          }
-        }
-        updateChatList()
-
-        // ことば一覧も最新化（他人のマッチでカウントが上がるため）
-        fetchPresetMessages()
-      }
-    }
-
-    socket.on('matchEstablished', handleMatchEstablished)
-    return () => {
-      socket.off('matchEstablished', handleMatchEstablished)
-    }
-  }, [currentUserId, setChatList, fetchPresetMessages])
-
-  // スワイプ切替
-  const handleTouchStart = (e: React.TouchEvent) => {
-    setTouchStartX(e.touches[0].clientX)
-  }
-  const handleTouchEnd = (e: React.TouchEvent) => {
-    if (touchStartX === null) return
-    const deltaX = e.changedTouches[0].clientX - touchStartX
-    const SWIPE_THRESHOLD = 100
-    if (deltaX < -SWIPE_THRESHOLD && step === 'select-message') setStep('select-recipients')
-    else if (deltaX > SWIPE_THRESHOLD && step === 'select-recipients') setStep('select-message')
-    setTouchStartX(null)
-  }
-
-  const handleHistoryNavigation = () => {
-    router.push('/notifications')
-  }
-
-  const handleSelectMessage = (msg: string) => {
-    setSelectedMessage((prev) => (prev === msg ? null : msg))
-    setInputMessage('')
-  }
-
-  const toggleRecipient = (id: string) => {
-    setSelectedRecipientIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
-  }
-
-  // メッセージ選択肢（カウント>0 のみ）
-  const messageOptions = presetMessages.filter((msg) => (msg.count ?? 0) > 0)
-
-  // 待機バーの右ボタン（送信/次へ）
-  const handleMessageIconClick = () => {
-    // 入力モードで文字がある → ことば確定して宛先選択へ
-    if (isInputMode && inputMessage.trim()) {
-      setSelectedMessage(inputMessage.trim())
-      setIsInputMode(false)
-      setStep('select-recipients')
-      return
-    }
-    // 既存のことばを選んだが宛先未選択 → 宛先タブへ切替
-    if (selectedMessage && selectedRecipientIds.length === 0) {
-      setStep('select-recipients')
-      return
-    }
-    // どちらも未選択なら何もしない（UIはそのまま）
-  }
-
-  // 送信
-  const handleSend = async () => {
-    // 送信ボタン押下時に宛先が無ければ宛先タブへ誘導
-    if (selectedMessage && selectedRecipientIds.length === 0) {
-      setStep('select-recipients')
-      return
-    }
-
-    if (!selectedMessage || selectedRecipientIds.length === 0 || !currentUserId || isSending) return
-    setIsSending(true)
-
-    // 先にトースト表示
-    setSentMessageInfo({ message: selectedMessage, recipients: [...selectedRecipientIds] })
-    setIsSent(true)
-
-    const messageToSend = selectedMessage
-    const recipientsToSend = [...selectedRecipientIds]
-
-    // UI リセット
-    setSelectedMessage(null)
-    setSelectedRecipientIds([])
-    setStep('select-message')
-    setIsInputMode(false)
-    setInputMessage('')
-
-    try {
-      // プリセットのカウント更新 or 追加
-      const isPreset = presetMessages.some((m) => m.content === messageToSend && (m.count ?? 0) > 0)
-      if (!isPreset) {
-        const res = await fetch('/api/preset-message', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ content: messageToSend, createdBy: currentUserId }),
-        })
-        if (res.ok) {
-          const created: PresetMessage = await res.json()
-          setPresetMessages((prev) => [
-            {
-              id: created.id,
-              content: created.content,
-              createdBy: created.createdBy,
-              createdAt: created.createdAt,
-              count: created.count ?? 1,
-            },
-            ...prev,
-          ])
-        } else {
-          alert('ことばの登録に失敗しました')
-          setIsSending(false)
-          setIsSent(false)
-          setSentMessageInfo(null)
-          return
-        }
-      } else {
-        setPresetMessages((prev) => prev.map((m) => (m.content === messageToSend ? { ...m, count: (m.count ?? 0) + 1 } : m)))
-      }
-
-      // マッチ API
-      const matchResponse = await axios.post('/api/match-message', {
-        senderId: currentUserId,
-        receiverIds: recipientsToSend,
-        message: messageToSend,
-      })
-
-      // マッチ成立時はチャットリストを更新
-      if (matchResponse.data.message === 'Match created!') {
+  // チャットリスト
+  const fetchChatList = useCallback(
+    async (uid: string) => {
+      try {
         const chatListResponse = await axios.get<ChatListApiItem[]>('/api/chat-list', {
-          headers: { userId: currentUserId },
+          headers: { userId: uid },
         })
         const formattedChatList: ChatItem[] = chatListResponse.data
           .map((c): ChatItem => ({
@@ -312,16 +94,186 @@ export default function Main() {
             return tb - ta
           })
         setChatList(formattedChatList)
+      } catch (error) {
+        console.error('チャットリスト更新エラー:', error)
+      }
+    },
+    [setChatList]
+  )
 
-        // 念のためことば一覧も最新化（他端末との整合）
+  // 初期ロード
+  useEffect(() => {
+    const uid = localStorage.getItem('userId')
+    setCurrentUserId(uid)
+
+    if (uid) {
+      axios
+        .get<{ count: number }>('/api/match-message/count', { headers: { userId: uid } })
+        .then((res) => setMatchCount(res.data.count))
+        .catch((e) => console.error('件数取得エラー:', e))
+    }
+
+    axios
+      .get<User[]>('/api/users')
+      .then((res) => setUsers(res.data))
+      .catch((e) => console.error('ユーザー取得エラー:', e))
+
+    fetchPresetMessages()
+    if (uid) fetchChatList(uid)
+  }, [fetchPresetMessages, fetchChatList])
+
+  // 可視化時に再取得（リロード不要で最新化）
+  useEffect(() => {
+    const onVis = () => {
+      if (document.visibilityState === 'visible') {
         fetchPresetMessages()
+        const uid = localStorage.getItem('userId')
+        if (uid) fetchChatList(uid)
+      }
+    }
+    document.addEventListener('visibilitychange', onVis)
+    return () => {
+      document.removeEventListener('visibilitychange', onVis)
+    }
+  }, [fetchPresetMessages, fetchChatList])
 
-        // 画面内ポップアップも表示（相手特定できれば）
+  // WebSocket: マッチ通知
+  useEffect(() => {
+    if (!currentUserId) return
+    socket.emit('setUserId', currentUserId)
+
+    const handleMatchEstablished = (data: {
+      matchId: string
+      message: string
+      matchedAt: string
+      matchedUserId?: string
+      matchedUserName?: string
+      targetUserId?: string
+    }) => {
+      if (data.targetUserId && data.targetUserId !== currentUserId) return
+      if (data.matchedUserId && data.matchedUserName) {
+        setMatchNotificationData({
+          matchedUser: { id: data.matchedUserId, name: data.matchedUserName },
+          message: data.message,
+        })
+        setShowMatchNotification(true)
+      }
+      fetchPresetMessages()
+      fetchChatList(currentUserId)
+    }
+
+    socket.on('matchEstablished', handleMatchEstablished)
+    // ★ ここを修正：ブロックで包んで戻り値を返さない
+    return () => {
+      socket.off('matchEstablished', handleMatchEstablished)
+    }
+  }, [currentUserId, fetchPresetMessages, fetchChatList])
+
+  // スワイプ
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    setTouchStartX(e.touches[0].clientX)
+  }, [])
+  const handleTouchEnd = useCallback(
+    (e: React.TouchEvent) => {
+      if (touchStartX === null) return
+      const deltaX = e.changedTouches[0].clientX - touchStartX
+      const SWIPE_THRESHOLD = 100
+      if (deltaX < -SWIPE_THRESHOLD && step === 'select-message') setStep('select-recipients')
+      else if (deltaX > SWIPE_THRESHOLD && step === 'select-recipients') setStep('select-message')
+      setTouchStartX(null)
+    },
+    [touchStartX, step]
+  )
+
+  const handleHistoryNavigation = () => router.push('/notifications')
+
+  const handleSelectMessage = (msg: string) => {
+    setSelectedMessage((prev) => (prev === msg ? null : msg))
+    setInputMessage('')
+  }
+  const toggleRecipient = (id: string) => {
+    setSelectedRecipientIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
+  }
+
+  // 表示用：count>0 & 新着順
+  const messageOptions = presetMessages
+    .filter((m) => m.count > 0)
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+
+  const handleMessageIconClick = () => {
+    if (isInputMode && inputMessage.trim()) {
+      setSelectedMessage(inputMessage.trim())
+      setIsInputMode(false)
+      setStep('select-recipients')
+    } else if (selectedMessage) {
+      setStep('select-recipients')
+    }
+  }
+
+  // 送信：受信者未選択なら“ともだちリスト”へ切替
+  const handleSend = async () => {
+    if (!selectedMessage) return
+    if (selectedRecipientIds.length === 0) {
+      setStep('select-recipients')
+      return
+    }
+    if (!currentUserId || isSending) return
+
+    setIsSending(true)
+    setSentMessageInfo({ message: selectedMessage, recipients: [...selectedRecipientIds] })
+    setIsSent(true)
+
+    const messageToSend = selectedMessage
+    const recipientsToSend = [...selectedRecipientIds]
+
+    // UI リセット
+    setSelectedMessage(null)
+    setSelectedRecipientIds([])
+    setStep('select-message')
+    setIsInputMode(false)
+    setInputMessage('')
+
+    try {
+      const isPreset = presetMessages.some((m) => m.content === messageToSend && m.count > 0)
+      if (!isPreset) {
+        const res = await fetch('/api/preset-message', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ content: messageToSend, createdBy: currentUserId }),
+        })
+        if (res.ok) {
+          const created: PresetMessage = await res.json()
+          setPresetMessages((prev) => sortByCreatedAtDesc([created, ...prev]))
+        } else {
+          alert('ことばの登録に失敗しました')
+          setIsSending(false)
+          setIsSent(false)
+          setSentMessageInfo(null)
+          return
+        }
+      } else {
+        setPresetMessages((prev) =>
+          prev.map((m) => (m.content === messageToSend ? { ...m, count: (m.count ?? 0) + 1 } : m))
+        )
+      }
+
+      const matchResponse = await axios.post('/api/match-message', {
+        senderId: currentUserId,
+        receiverIds: recipientsToSend,
+        message: messageToSend,
+      })
+
+      if (matchResponse.data.message === 'Match created!') {
+        await Promise.all([fetchPresetMessages(), fetchChatList(currentUserId)])
+
         const matchedUserId = recipientsToSend.find((id) => matchResponse.data.matchedUserId === id)
         if (matchedUserId) {
           const matchedUser = users.find((u) => u.id === matchedUserId)
           if (matchedUser) {
-            setMatchNotificationData({ matchedUser: { id: matchedUser.id, name: matchedUser.name }, message: messageToSend })
+            setMatchNotificationData({
+              matchedUser: { id: matchedUser.id, name: matchedUser.name },
+              message: messageToSend,
+            })
             setShowMatchNotification(true)
           }
         }
@@ -375,7 +327,7 @@ export default function Main() {
       <div
         className={`fixed top-[100px] left-6 right-6 z-30 py-2 flex items-center h-16 px-3 shadow-lg rounded-2xl border border-orange-200 transition-all duration-200
           ${
-            canSend
+            selectedMessage && selectedRecipientIds.length > 0
               ? 'bg-gradient-to-r from-orange-400 to-orange-300'
               : selectedMessage || selectedRecipientIds.length > 0
                 ? 'bg-gradient-to-r from-orange-200 to-orange-100'
@@ -405,13 +357,10 @@ export default function Main() {
                   setStep('select-recipients')
                 }
               }}
-              onFocus={() => setIsInputMode(true)}
             />
           ) : (
             <span
-              onClick={() => {
-                setSelectedMessage(null)
-              }}
+              onClick={() => setSelectedMessage(null)}
               className="px-3 py-2 rounded-xl font-bold cursor-pointer bg-white/80 text-orange-600 shadow border border-orange-200 hover:bg-orange-100 transition"
             >
               {selectedMessage}
@@ -447,7 +396,7 @@ export default function Main() {
         <button
           onClick={canSend ? handleSend : handleMessageIconClick}
           className="flex-none px-1 py-1 transition-transform duration-200 ease-out active:scale-125 focus:outline-none rounded-full bg-white/80 hover:bg-orange-100 shadow border border-orange-200"
-          disabled={isSending} // ← canSend が false でも押せるように（宛先未選択→ともだちリストへ）
+          disabled={isSending}
           style={{ minWidth: 36, minHeight: 36 }}
         >
           <Image src={canSend ? '/icons/send.png' : '/icons/message.png'} alt="send" width={28} height={28} />
@@ -465,8 +414,11 @@ export default function Main() {
           className="flex h-full transition-transform duration-450"
           style={{ transform: step === 'select-message' ? 'translateX(0%)' : 'translateX(-100%)' }}
         >
-          {/* メッセージ選択 */}
-          <div className="min-w-full flex-shrink-0 text-lg overflow-y-auto px-5 pt-[180px] pb-[40px]" style={{ maxHeight: 'calc(100vh - 140px)' }}>
+          {/* メッセージ選択（新着順） */}
+          <div
+            className="min-w-full flex-shrink-0 text-lg overflow-y-auto px-5 pt-[180px] pb-[40px]"
+            style={{ maxHeight: 'calc(100vh - 140px)' }}
+          >
             <div className="flex flex-col gap-3">
               {messageOptions.map((msg) => (
                 <button
@@ -481,14 +433,17 @@ export default function Main() {
                   }}
                 >
                   <span>{msg.content}</span>
-                  <span className="text-xs text-gray-500 ml-2 whitespace-nowrap">{msg.count ?? 0}回シェアされました</span>
+                  <span className="text-xs text-gray-500 ml-2 whitespace-nowrap">{msg.count}回シェアされました</span>
                 </button>
               ))}
             </div>
           </div>
 
           {/* 送信先選択 */}
-          <div className="min-w-full flex-shrink-0 text-lg overflow-y-auto px-5 pt-[180px] pb-[40px]" style={{ maxHeight: 'calc(100vh - 140px)' }}>
+          <div
+            className="min-w-full flex-shrink-0 text-lg overflow-y-auto px-5 pt-[180px] pb-[40px]"
+            style={{ maxHeight: 'calc(100vh - 140px)' }}
+          >
             <div className="flex flex-col gap-2">
               {users
                 .filter((u) => u.id !== currentUserId)
@@ -553,13 +508,12 @@ export default function Main() {
         isVisible={showMatchNotification}
         onClose={() => {
           setShowMatchNotification(false)
-          setMatchNotificationData(null)
+          setMatchNotificationData({ matchedUser: null, message: null })
         }}
-        matchedUser={matchNotificationData?.matchedUser}
-        message={matchNotificationData?.message}
+        matchedUser={matchNotificationData.matchedUser ?? undefined}
+        message={matchNotificationData.message ?? undefined}
       />
 
-      {/* 下部タブバー */}
       <FixedTabBar />
     </>
   )
