@@ -32,6 +32,13 @@ function isNear(aIso: string, bIso: string, ms = 7000) {
   return Math.abs(a - b) <= ms
 }
 
+type NewMatchPayload = {
+  chatId: string
+  message: string
+  matchedAt: string
+  // 他のプロパティが来ても無視してOK
+}
+
 export default function Chat() {
   const router = useRouter()
   const params = useParams()
@@ -78,7 +85,7 @@ export default function Chat() {
     )
   }, [chatInList])
 
-  // ===== ルーム参加 & 受信購読（常に） =====
+  // ===== ルーム参加 & 受信購読（newMessage） =====
   useEffect(() => {
     if (!id || id.startsWith('dummy-')) return
     socket.emit('joinChat', id)
@@ -128,8 +135,9 @@ export default function Chat() {
       })
 
       // リストの最新更新
-      if (chatList) {
-        const updated = chatList
+      setChatList((prev) => {
+        if (!prev) return prev
+        const updated = prev
           .map((c) =>
             c.chatId === id
               ? {
@@ -148,8 +156,8 @@ export default function Chat() {
             const tb = b.latestMessageAt ? new Date(b.latestMessageAt).getTime() : 0
             return tb - ta
           })
-        setChatList(updated)
-      }
+        return updated
+      })
     }
 
     const handleNewMessage = (payload: { chatId: string; message: Message }) => {
@@ -159,7 +167,50 @@ export default function Chat() {
 
     socket.on('newMessage', handleNewMessage)
     return () => { socket.off('newMessage', handleNewMessage) }
-  }, [id, setChatData, chatList, setChatList])
+  }, [id, setChatData, setChatList])
+
+  // ===== マッチ成立のリアルタイム反映（newMatch を購読） =====
+  useEffect(() => {
+    if (!id || id.startsWith('dummy-')) return
+
+    const handleNewMatch = (data: NewMatchPayload) => {
+      if (data.chatId !== id) return
+
+      // ヘッダー表示更新
+      setMatchMessage(data.message)
+      setMatchMessageMatchedAt(data.matchedAt)
+
+      // タイムライン用履歴（重複防止 & 昇順）
+      setMatchHistory((prev) => {
+        if (prev.some((m) => m.matchedAt === data.matchedAt && m.message === data.message)) return prev
+        const next = [...prev, { message: data.message, matchedAt: data.matchedAt }]
+        next.sort((a, b) => new Date(a.matchedAt).getTime() - new Date(b.matchedAt).getTime())
+        return next
+      })
+
+      // チャットリスト側も同期（ハイライト・上位表示のため）
+      setChatList((prev) => {
+        if (!prev) return prev
+        return prev.map((c) =>
+          c.chatId === id
+            ? {
+                ...c,
+                matchMessage: data.message,
+                matchMessageMatchedAt: data.matchedAt,
+                matchHistory: [
+                  ...(c.matchHistory || []),
+                  { message: data.message, matchedAt: data.matchedAt },
+                ].sort((a, b) => new Date(a.matchedAt).getTime() - new Date(b.matchedAt).getTime()),
+              }
+            : c
+        )
+      })
+    }
+
+    // サーバは io.to(chatId).emit('newMatch', data) を送る
+    socket.on('newMatch', handleNewMatch)
+    return () => { socket.off('newMatch', handleNewMatch) }
+  }, [id, setChatList])
 
   // ===== 初回＆id変化時はサーバから最新を取得（必ず） =====
   useEffect(() => {
@@ -355,7 +406,7 @@ export default function Chat() {
               {getInitials(msg.sender.name)}
             </div>
           )}
-          <div className="flex flex-col items-end max-w-[70%]">
+          <div className="flex flex-col items-end max-w=[70%]">
             <div
               className={`relative px-4 py-2 text-sm rounded-2xl shadow-md ${
                 isMe ? 'bg-green-400 text-white rounded-br-md bubble-right'
@@ -388,7 +439,7 @@ export default function Chat() {
 
   if (isPreloading && messages.length === 0) {
     return (
-      <div className="flex flex-col bg-white h-screen">
+      <div className="flex flex-col bg白 h-screen">
         <header className="sticky top-0 z-10 bg-white px-4 py-2 flex flex-col items-center">
           <button onClick={() => router.push('/chat-list')} className="absolute left-4 top-2 focus:outline-none">
             <Image src="/icons/back.png" alt="Back" width={20} height={20} />
@@ -438,7 +489,7 @@ export default function Chat() {
           value={newMessage}
           onChange={(e) => setNewMessage(e.target.value)}
           placeholder="メッセージを入力"
-          className="flex-1 border border-gray-200 rounded-full px-4 py-2 focus:outline-none bg-gray-50 text-base shadow-sm"
+          className="flex-1 border border-gray-200 rounded-full px-4 py-2 focus:outline-none bg-gray-50 text-base影"
         />
         <button
           onClick={handleSend}
