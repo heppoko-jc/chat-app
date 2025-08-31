@@ -55,31 +55,31 @@ self.addEventListener('push', (event) => {
 
   event.waitUntil(
     (async () => {
-      // まずは従来の可視クライアント検出（Safariで取れない場合がある）
+      // まずは可視クライアント検出（Safariで取れない場合がある）
       const wins = await clients.matchAll({ type: 'window', includeUncontrolled: true });
       const visibleClients = wins
-        .map((c) => ({ c, path: normalizePath(c.url), visible: 'visibilityState' in c ? c.visibilityState === 'visible' : false }))
+        .map((c) => ({
+          c,
+          path: normalizePath(c.url),
+          visible: 'visibilityState' in c ? c.visibilityState === 'visible' : false
+        }))
         .filter((w) => w.visible);
 
-      const anyVisibleChat   = typeof chatId === 'string' && chatId && visibleClients.some(({ path }) => path === `/chat/${chatId}`);
-      const anyVisibleList   = visibleClients.some(({ path }) => path === '/chat-list');
-      const anyVisibleNotifs = visibleClients.some(({ path }) => path === '/notifications');
+      const anyVisibleChat = typeof chatId === 'string' && chatId && visibleClients.some(({ path }) => path === `/chat/${chatId}`);
+      const anyVisibleList = visibleClients.some(({ path }) => path === '/chat-list');
 
       // 次に、ページからの“ハートビート状態”で補完（iOS PWA の主目的）
       const stateVisible = isStateFresh() && foregroundState.visible;
       const stateIsChat  = stateVisible && (typeof chatId === 'string' && chatId) && (foregroundState.path === `/chat/${chatId}`);
       const stateIsList  = stateVisible && (foregroundState.path === '/chat-list');
-      const stateIsNotifs= stateVisible && (foregroundState.path === '/notifications');
 
       let suppress = false;
+
       if (type === 'message') {
         // 対象チャット or チャットリストが見えていれば抑制
         suppress = anyVisibleChat || anyVisibleList || stateIsChat || stateIsList;
-      } else if (type === 'match') {
-        // 対象チャット / チャットリスト / 通知一覧 いずれか可視なら抑制
-        // （通知を必ず見せたいなら stateIsNotifs/anyVisibleNotifs は外す）
-        suppress = anyVisibleChat || anyVisibleList || anyVisibleNotifs || stateIsChat || stateIsList || stateIsNotifs;
       } else {
+        // ★ 要件：マッチ成立などはどの画面でも通知OK → 抑制しない
         suppress = false;
       }
 
