@@ -18,14 +18,13 @@ const normalizePath = (urlString) => {
   }
 };
 
-// iOS PWA で matchAll/visibility が取れないことがあるため、
-// ページ側から送ってもらうフロントの状態を SW 内にキャッシュする。
+// iOS/Android PWA 向け：ページ側から送ってもらう状態をキャッシュ
 let foregroundState = {
   path: '/',      // 例: '/chat/xxx', '/chat-list', '/notifications'
-  visible: false, // true: 画面が可視
+  visible: false, // 参考値（iOS PWA では不正確なことがある）
   ts: 0,          // 最終更新時刻
 };
-const STATE_TTL = 30 * 1000; // 30秒を新鮮とみなす
+const STATE_TTL = 120 * 1000; // 120秒を新鮮とみなす
 
 const isStateFresh = () => Date.now() - foregroundState.ts < STATE_TTL;
 
@@ -55,31 +54,35 @@ self.addEventListener('push', (event) => {
 
   event.waitUntil(
     (async () => {
-      // まずは可視クライアント検出（Safariで取れない場合がある）
+      // 従来の可視クライアント検出（Chrome などでは信頼できる）
       const wins = await clients.matchAll({ type: 'window', includeUncontrolled: true });
       const visibleClients = wins
         .map((c) => ({
           c,
           path: normalizePath(c.url),
-          visible: 'visibilityState' in c ? c.visibilityState === 'visible' : false
+          visible: 'visibilityState' in c ? c.visibilityState === 'visible' : false,
         }))
         .filter((w) => w.visible);
 
-      const anyVisibleChat = typeof chatId === 'string' && chatId && visibleClients.some(({ path }) => path === `/chat/${chatId}`);
+      const anyVisibleChat = (typeof chatId === 'string' && chatId)
+        ? visibleClients.some(({ path }) => path === `/chat/${chatId}`)
+        : false;
       const anyVisibleList = visibleClients.some(({ path }) => path === '/chat-list');
 
-      // 次に、ページからの“ハートビート状態”で補完（iOS PWA の主目的）
-      const stateVisible = isStateFresh() && foregroundState.visible;
-      const stateIsChat  = stateVisible && (typeof chatId === 'string' && chatId) && (foregroundState.path === `/chat/${chatId}`);
-      const stateIsList  = stateVisible && (foregroundState.path === '/chat-list');
+      // iOS/Android PWA のフォールバック（visible は信用しないで path だけ見る）
+      const stateFresh  = isStateFresh();
+      const stateIsChat = stateFresh && (typeof chatId === 'string' && chatId) && (foregroundState.path === `/chat/${chatId}`);
+      const stateIsList = stateFresh && (foregroundState.path === '/chat-list');
 
       let suppress = false;
 
       if (type === 'message') {
-        // 対象チャット or チャットリストが見えていれば抑制
+        // 対象チャット or チャットリストが “表示中 or 直近で前面” なら抑制
         suppress = anyVisibleChat || anyVisibleList || stateIsChat || stateIsList;
+      } else if (type === 'match') {
+        // マッチは常に通知（抑制したいなら上と同様の条件を足す）
+        suppress = false;
       } else {
-        // ★ 要件：マッチ成立などはどの画面でも通知OK → 抑制しない
         suppress = false;
       }
 

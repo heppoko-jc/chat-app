@@ -1,12 +1,9 @@
-// app/components/SWVisibilityPinger.tsx
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
 
-/**
- * 現在のパスから画面種別と chatId を推定
- */
+/** 現在のパスから画面種別と chatId を推定 */
 function parseScreen(path: string): { screen: "chat" | "chat-list" | "notifications" | "other"; chatId?: string } {
   if (path === "/chat-list") return { screen: "chat-list" };
   if (path === "/notifications") return { screen: "notifications" };
@@ -15,14 +12,11 @@ function parseScreen(path: string): { screen: "chat" | "chat-list" | "notificati
   return { screen: "other" };
 }
 
-/**
- * SWへポスト（ready.active or controller のどちらかへ）
- */
+/** SWへポスト（ready.active or controller のどちらかへ） */
 async function postToSW(msg: unknown) {
   try {
     if (!("serviceWorker" in navigator)) return;
-    // ready.active を優先（Safari PWA だと controller が null の時がある）
-    const reg = await navigator.serviceWorker.ready;
+    const reg = await navigator.serviceWorker.ready; // active になるまで待つ
     if (reg?.active) {
       reg.active.postMessage(msg);
       return;
@@ -31,7 +25,7 @@ async function postToSW(msg: unknown) {
       navigator.serviceWorker.controller.postMessage(msg);
     }
   } catch {
-    // noop（失敗してもアプリ動作には影響なし）
+    // noop
   }
 }
 
@@ -39,12 +33,12 @@ export default function SWVisibilityPinger() {
   const pathname = usePathname() || "/";
   const heartbeatRef = useRef<number | null>(null);
 
-  // 1) ルート変更時：即送信
-  useEffect(() => {
+  const send = useCallback(() => {
     const { screen, chatId } = parseScreen(pathname);
     postToSW({
       type: "FOREGROUND_STATE",
       at: Date.now(),
+      // iOS PWA は visible が常に hidden なことがあるので、SW 側は path を主に見る
       visible: document.visibilityState === "visible",
       focused: typeof document.hasFocus === "function" ? document.hasFocus() : false,
       path: pathname,
@@ -53,66 +47,45 @@ export default function SWVisibilityPinger() {
     });
   }, [pathname]);
 
+  // 1) ルート変更時：即送信
+  useEffect(() => {
+    send();
+  }, [send]);
+
   // 2) 可視状態/フォーカスの変化：即送信
   useEffect(() => {
-    const send = () => {
-      const { screen, chatId } = parseScreen(pathname);
-      postToSW({
-        type: "FOREGROUND_STATE",
-        at: Date.now(),
-        visible: document.visibilityState === "visible",
-        focused: typeof document.hasFocus === "function" ? document.hasFocus() : false,
-        path: pathname,
-        screen,
-        chatId,
-      });
-    };
-
     const onVisibility = () => send();
     const onFocus = () => send();
     const onBlur = () => send();
+    const onPageShow = () => send();
     const onPageHide = () => send(); // iOS Safari PWA 対策
 
     document.addEventListener("visibilitychange", onVisibility);
     window.addEventListener("focus", onFocus);
     window.addEventListener("blur", onBlur);
+    window.addEventListener("pageshow", onPageShow);
     window.addEventListener("pagehide", onPageHide);
 
     return () => {
       document.removeEventListener("visibilitychange", onVisibility);
       window.removeEventListener("focus", onFocus);
       window.removeEventListener("blur", onBlur);
+      window.removeEventListener("pageshow", onPageShow);
       window.removeEventListener("pagehide", onPageHide);
     };
-  }, [pathname]);
+  }, [send]);
 
-  // 3) ハートビート（15 秒ごと）
+  // 3) ハートビート（5 秒ごと）
   useEffect(() => {
-    const tick = () => {
-      const { screen, chatId } = parseScreen(pathname);
-      postToSW({
-        type: "FOREGROUND_STATE",
-        at: Date.now(),
-        visible: document.visibilityState === "visible",
-        focused: typeof document.hasFocus === "function" ? document.hasFocus() : false,
-        path: pathname,
-        screen,
-        chatId,
-      });
-    };
-
-    // すぐに一発
-    tick();
-
-    // 15秒ごと
-    heartbeatRef.current = window.setInterval(tick, 15000);
+    send(); // すぐに一発
+    heartbeatRef.current = window.setInterval(send, 5000);
     return () => {
       if (heartbeatRef.current) {
         clearInterval(heartbeatRef.current);
         heartbeatRef.current = null;
       }
     };
-  }, [pathname]);
+  }, [send]);
 
   return null;
 }
