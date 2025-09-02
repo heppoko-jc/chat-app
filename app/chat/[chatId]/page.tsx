@@ -1,7 +1,7 @@
 // app/chat/[chatId]/page.tsx
 'use client'
 
-import React, { useEffect, useState, useRef } from 'react'
+import React, { useEffect, useState, useRef, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import axios from 'axios'
 import socket from '@/app/socket'
@@ -59,10 +59,19 @@ export default function Chat() {
   const [isSending, setIsSending] = useState(false)
   const [matchHistory, setMatchHistory] = useState<{ message: string; matchedAt: string }[]>([])
 
+  // 画面／フッター参照
   const mainRef = useRef<HTMLDivElement | null>(null)
+  const footerRef = useRef<HTMLElement | null>(null)
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null)
 
   // 受信済みID（broadcast重複防止）
   const seenIdsRef = useRef<Set<string>>(new Set())
+
+  // キーボード対応：visualViewport の高さ差分で「キーボード分だけ」フッターを持ち上げる
+  const [keyboardOffset, setKeyboardOffset] = useState<number>(0) // px
+  const [footerHeight, setFooterHeight] = useState<number>(0) // px
+
+  // ----- 初期：seenIds 初期化 -----
   useEffect(() => {
     if (!id) return
     const set = seenIdsRef.current
@@ -70,7 +79,7 @@ export default function Chat() {
     ;(initialMessages ?? []).forEach((m) => set.add(m.id))
   }, [id, initialMessages])
 
-  // ユーザー固有ルームへ join
+  // ----- 自分のユーザーID & ユーザールーム join -----
   useEffect(() => {
     const uid = localStorage.getItem('userId')
     setCurrentUserId(uid)
@@ -193,16 +202,12 @@ export default function Chat() {
       null
 
     const apply = (data: MatchPayload) => {
-      // chatId が付いていれば厳密一致
       if (data.chatId && data.chatId !== id) return
-      // chatId が無い古い/ユーザールーム経由の保険
       if (!data.chatId && partnerId && data.matchedUserId && data.matchedUserId !== partnerId) return
 
-      // ヘッダー
       setMatchMessage(data.message)
       setMatchMessageMatchedAt(data.matchedAt)
 
-      // タイムライン用履歴（重複防止 & 昇順）
       setMatchHistory((prev) => {
         if (prev.some((m) => m.matchedAt === data.matchedAt && m.message === data.message)) return prev
         const next = [...prev, { message: data.message, matchedAt: data.matchedAt }]
@@ -210,7 +215,6 @@ export default function Chat() {
         return next
       })
 
-      // チャットリスト側も同期
       setChatList((prev) => {
         if (!prev) return prev
         return prev.map((c) =>
@@ -232,9 +236,7 @@ export default function Chat() {
     const onNewMatch = (data: MatchPayload) => apply(data)
     const onMatchEstablished = (data: MatchPayload) => apply(data)
 
-    // 部屋宛
     socket.on('newMatch', onNewMatch)
-    // ユーザールーム宛
     socket.on('matchEstablished', onMatchEstablished)
 
     return () => {
@@ -285,10 +287,47 @@ export default function Chat() {
     }
   }, [id, messages.length])
 
-  // 自動スクロール
+  // ===== キーボード（visualViewport）でフッターを持ち上げ、メインの下余白を調整 =====
   useEffect(() => {
-    if (mainRef.current) mainRef.current.scrollTop = mainRef.current.scrollHeight
-  }, [messages])
+    // フッター実高さを記録
+    const measure = () => {
+      if (footerRef.current) setFooterHeight(footerRef.current.offsetHeight)
+    }
+    measure()
+    window.addEventListener('resize', measure)
+    const idTimer = window.setInterval(measure, 500) // 端末回転や行数変化にも追従
+    return () => {
+      window.removeEventListener('resize', measure)
+      clearInterval(idTimer)
+    }
+  }, [])
+
+  useEffect(() => {
+    const vv = 'visualViewport' in window ? window.visualViewport : null
+    if (!vv) return
+
+    const update = () => {
+      // キーボード出現時、viewport.height が小さくなる。その差分をオフセットとして使う
+      const offset = Math.max(0, window.innerHeight - vv.height)
+      setKeyboardOffset(Math.round(offset))
+    }
+
+    vv.addEventListener('resize', update)
+    vv.addEventListener('scroll', update) // Android 一部で必要
+    update()
+
+    return () => {
+      vv.removeEventListener('resize', update)
+      vv.removeEventListener('scroll', update)
+    }
+  }, [])
+
+  // 自動スクロール（新着 or 入力欄高さ/キーボード変化）
+  useEffect(() => {
+    if (mainRef.current) {
+      mainRef.current.scrollTop = mainRef.current.scrollHeight
+    }
+  }, [messages, keyboardOffset, footerHeight])
 
   // 送信
   const handleSend = async () => {
@@ -302,6 +341,11 @@ export default function Chat() {
     setIsSending(true)
     const contentToSend = newMessage
     setNewMessage('')
+
+    // テキストエリア高さをリセット（次の入力を1行から）
+    if (textareaRef.current) {
+      textareaRef.current.style.height = '40px'
+    }
 
     const temp: Message = {
       id: `temp-${Date.now()}`,
@@ -380,6 +424,18 @@ export default function Chat() {
     }
   }
 
+  // テキストエリアのオートリサイズ
+  const handleTextareaChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const el = e.currentTarget
+    setNewMessage(el.value)
+    // オートリサイズ（最大 5行程度）
+    const min = 40 // px
+    const max = 120 // px（約 5 行）
+    el.style.height = 'auto'
+    const h = Math.max(min, Math.min(max, el.scrollHeight))
+    el.style.height = `${h}px`
+  }, [])
+
   // ====== ヘッダーの相手表示 ======
   const headerName =
     chatInList?.matchedUser.name ||
@@ -455,7 +511,7 @@ export default function Chat() {
                   ? 'bg-green-400 text-white rounded-br-md bubble-right'
                   : 'bg-white text-black rounded-bl-md bubble-left border border-gray-200'
               }`}
-              style={{ wordBreak: 'break-word' }}
+              style={{ wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}
             >
               {msg.content}
             </div>
@@ -496,9 +552,15 @@ export default function Chat() {
     )
   }
 
+  // ---- メイン領域の下余白（= フッター高さ + キーボード分 + 16px 余白）を動的に確保 ----
+  const dynamicBottomPad = footerHeight + keyboardOffset + 16
+
   return (
-    <div className="flex flex-col bg-[#f6f8fa] h-screen overflow-x-hidden">
-      {/* ヘッダー */}
+    <div
+      className="flex flex-col bg-[#f6f8fa] overflow-x-hidden"
+      style={{ height: '100svh' }} // iOS/Android でキーボードに追従する動的vh
+    >
+      {/* ヘッダー（固定） */}
       <header className="fixed top-0 left-0 right-0 z-10 bg-white px-4 py-3 flex items-center border-b">
         <button onClick={() => router.push('/chat-list')} className="mr-3 focus:outline-none">
           <Image src="/icons/back.png" alt="Back" width={24} height={24} />
@@ -529,24 +591,38 @@ export default function Chat() {
         </div>
       </header>
 
-      {/* メッセージ一覧 */}
-      <main ref={mainRef} className="flex-1 px-2 pt-20 overflow-y-auto overflow-x-hidden pb-32 scrollbar-hide">
+      {/* メッセージ一覧（ヘッダー固定の下に配置。下余白はダイナミック） */}
+      <main
+        ref={mainRef}
+        className="flex-1 px-2 pt-20 overflow-y-auto overflow-x-hidden scrollbar-hide"
+        style={{ paddingBottom: `${dynamicBottomPad}px` }}
+      >
         <div className="flex flex-col gap-1 py-2">{renderMessagesWithDate(messages)}</div>
       </main>
 
-      {/* 入力欄 */}
-      <footer className="fixed bottom-0 left-0 right-0 bg-white px-4 py-3 shadow-[0_-2px_10px_rgba(0,0,0,0.04)] flex items-center gap-2">
-        <input
-          type="text"
-          value={newMessage}
-          onChange={(e) => setNewMessage(e.target.value)}
-          placeholder="メッセージを入力"
-          className="flex-1 border border-gray-200 rounded-full px-4 py-2 focus:outline-none bg-gray-50 text-base shadow-sm"
-        />
+      {/* 入力欄（キーボードに合わせて持ち上がる） */}
+      <footer
+        ref={footerRef}
+        className="fixed left-0 right-0 bg-white px-4 pt-3 pb-4 shadow-[0_-2px_10px_rgba(0,0,0,0.04)] flex items-end gap-2"
+        style={{ bottom: `${keyboardOffset}px` }}
+      >
+        <div className="flex-1 border border-gray-200 rounded-2xl px-3 py-2 bg-gray-50 text-base shadow-sm">
+          <textarea
+            ref={textareaRef}
+            value={newMessage}
+            onChange={handleTextareaChange}
+            placeholder="メッセージを入力（改行できます）"
+            rows={1}
+            className="w-full resize-none bg-transparent outline-none leading-6"
+            style={{ height: 40, maxHeight: 120 }}
+          />
+        </div>
+
         <button
           onClick={handleSend}
-          className="ml-2 p-2 rounded-full bg-green-400 hover:bg-green-500 transition shadow-lg"
+          className="p-3 rounded-full bg-green-400 hover:bg-green-500 transition shadow-lg self-end"
           style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}
+          aria-label="送信"
         >
           <Image src={newMessage.trim() ? '/icons/send.png' : '/icons/message.png'} alt="Send" width={28} height={28} />
         </button>
