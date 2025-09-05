@@ -1,4 +1,5 @@
 // app/components/PushRegistrar.tsx
+
 "use client";
 
 import { useEffect } from "react";

@@ -1,4 +1,5 @@
 // app/api/push/subscribe/route.ts
+
 import { NextRequest, NextResponse } from "next/server";
 import webpush from "web-push";
 import { PrismaClient } from "@prisma/client";

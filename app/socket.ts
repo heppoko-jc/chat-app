@@ -1,4 +1,5 @@
 // app/socket.ts
+
 import { io, Socket } from 'socket.io-client';
 
 // 環境変数が無ければローカルをフォールバック

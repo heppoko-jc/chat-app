@@ -1,4 +1,5 @@
 // app/providers.tsx
+
 "use client";
 
 import { ChatDataProvider } from "@/app/contexts/ChatDataContext";

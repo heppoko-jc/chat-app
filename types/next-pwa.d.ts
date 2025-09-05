@@ -1,4 +1,5 @@
 // types/next-pwa.d.ts
+
 import type { NextConfig } from "next";
 
 declare module "next-pwa" {

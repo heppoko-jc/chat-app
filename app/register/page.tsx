@@ -1,3 +1,5 @@
+// app/register/page.tsx
+
 "use client";
 import { useState } from "react";
 import axios, { AxiosError } from "axios";

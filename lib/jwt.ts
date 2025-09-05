@@ -1,4 +1,5 @@
 // lib/jwt.ts (サーバー専用で使うこと)
+
 import jwt, { JwtPayload } from "jsonwebtoken";
 
 export function verifyJwt(token: string): string {
