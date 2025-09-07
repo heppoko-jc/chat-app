@@ -174,21 +174,18 @@ export default function Main() {
     }
   }, [currentUserId, fetchPresetMessages, fetchChatList])
 
-  // スワイプ
+  // ── スワイプ（未使用エラー回避のため JSX に渡して使う） ──
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     setTouchStartX(e.touches[0].clientX)
   }, [])
-  const handleTouchEnd = useCallback(
-    (e: React.TouchEvent) => {
-      if (touchStartX === null) return
-      const deltaX = e.changedTouches[0].clientX - touchStartX
-      const SWIPE_THRESHOLD = 100
-      if (deltaX < -SWIPE_THRESHOLD && step === 'select-message') setStep('select-recipients')
-      else if (deltaX > SWIPE_THRESHOLD && step === 'select-recipients') setStep('select-message')
-      setTouchStartX(null)
-    },
-    [touchStartX, step]
-  )
+  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    if (touchStartX === null) return
+    const deltaX = e.changedTouches[0].clientX - touchStartX
+    const SWIPE_THRESHOLD = 100
+    if (deltaX < -SWIPE_THRESHOLD && step === 'select-message') setStep('select-recipients')
+    else if (deltaX > SWIPE_THRESHOLD && step === 'select-recipients') setStep('select-message')
+    setTouchStartX(null)
+  }, [touchStartX, step])
 
   const handleHistoryNavigation = () => router.push('/notifications')
 
@@ -253,7 +250,7 @@ export default function Main() {
         })
         if (res.ok) {
           const created: PresetMessage = await res.json()
-          // 新規作成は count 0 → 直後に送るので count を 1 として扱えるように整合する
+          // 新規作成は count 0 → 直後に送るので count を 1 として扱えるように整合
           setPresetMessages((prev) => sortBySharedThenNew([{ ...created, count: 1 }, ...prev]))
         } else {
           alert('ことばの登録に失敗しました')
@@ -263,7 +260,7 @@ export default function Main() {
           return
         }
       } else {
-        // 送信したので count を +1 して並び替え
+        // 送信したので count +1 して並び替え
         setPresetMessages((prev) =>
           sortBySharedThenNew(
             prev.map((m) => (m.content === messageToSend ? { ...m, count: (m.count ?? 0) + 1 } : m))
@@ -310,12 +307,19 @@ export default function Main() {
 
   const canSend = !!selectedMessage && selectedRecipientIds.length > 0
 
+  // ── レイアウト定数（ここを変えるだけで上下の余白を再調整できます） ──
+  const HEADER_H = 132
+  const GAP_AFTER_HEADER = 8
+  const SEND_BAR_TOTAL_H = 80
+  const SEND_BAR_TOP = HEADER_H + GAP_AFTER_HEADER // 140px
+  const LIST_PT = SEND_BAR_TOP + SEND_BAR_TOTAL_H + 20 // 240px
+
   return (
     <>
-      {/* ヘッダー */}
+      {/* ヘッダー（高さ拡張） */}
       <div
-        className="fixed top-0 left-0 w-full bg-gradient-to-b from-white via-orange-50 to-orange-100 z-20 px-6 pt-6 pb-3 flex flex-col items-center shadow-md rounded-b-3xl h-[100px]"
-        style={{ minHeight: 100 }}
+        className="fixed top-0 left-0 w-full bg-gradient-to-b from-white via-orange-50 to-orange-100 z-20 px-6 pt-6 pb-3 flex flex-col items-center shadow-md rounded-b-3xl"
+        style={{ minHeight: HEADER_H, height: HEADER_H }}
       >
         <div className="flex w-full justify-between items-center mb-2">
           <div className="w-20 flex items-center">
@@ -335,7 +339,6 @@ export default function Main() {
           <div className="w-20" />
         </div>
 
-        {/* ここを要望どおりの表示に修正 */}
         <p className="text-[15px] text-gray-700 text-center leading-snug mt-1 font-medium">
           同じことばをシェアし合えるかな？<br />
           今までにあなたは
@@ -344,9 +347,9 @@ export default function Main() {
         </p>
       </div>
 
-      {/* 送信待機バー */}
+      {/* 送信待機バー（ヘッダー直下“少し下”） */}
       <div
-        className={`fixed top-[100px] left-6 right-6 z-30 py-2 flex items-center h-16 px-3 shadow-lg rounded-2xl border border-orange-200 transition-all duration-200
+        className={`fixed left-6 right-6 z-30 py-2 flex items-center h-16 px-3 shadow-lg rounded-2xl border border-orange-200 transition-all duration-200
           ${
             selectedMessage && selectedRecipientIds.length > 0
               ? 'bg-gradient-to-r from-orange-400 to-orange-300'
@@ -355,6 +358,7 @@ export default function Main() {
                 : 'bg-orange-50'
           }
         `}
+        style={{ top: `${SEND_BAR_TOP}px` }}
       >
         <div className="flex-1 flex flex-col justify-between h-full overflow-x-auto pr-2">
           {!selectedMessage || !messageOptions.some((m) => m.content === selectedMessage) ? (
@@ -437,8 +441,8 @@ export default function Main() {
         >
           {/* メッセージ選択（シェアされた順） */}
           <div
-            className="basis-full flex-none box-border text-lg overflow-y-auto px-4 pt=[180px] pb-[40px] pt-[180px]"
-            style={{ maxHeight: 'calc(100dvh - 140px)' }}
+            className="basis-full flex-none box-border text-lg overflow-y-auto px-4 pb-[40px]"
+            style={{ maxHeight: 'calc(100dvh - 160px)', paddingTop: `${LIST_PT}px` }}
           >
             <div className="flex flex-col gap-3">
               {messageOptions.map((msg) => (
@@ -462,8 +466,8 @@ export default function Main() {
 
           {/* 送信先選択 */}
           <div
-            className="basis-full flex-none box-border text-lg overflow-y-auto px-4 pt-[180px] pb-[40px]"
-            style={{ maxHeight: 'calc(100dvh - 140px)' }}
+            className="basis-full flex-none box-border text-lg overflow-y-auto px-4 pb-[40px]"
+            style={{ maxHeight: 'calc(100dvh - 160px)', paddingTop: `${LIST_PT}px` }}
           >
             <div className="flex flex-col gap-2">
               {users
