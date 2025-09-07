@@ -5,7 +5,7 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import axios from 'axios'
-import socket, { setSocketUserId } from '@/app/socket'   // ★ setSocketUserId を併用
+import socket from '@/app/socket'
 import Image from 'next/image'
 import { useChatData } from '@/app/contexts/ChatDataContext'
 
@@ -56,7 +56,7 @@ function isStandalone(): boolean {
 }
 function getVisualViewport(): VisualViewport | undefined {
   if (typeof window === 'undefined') return undefined
-  return window.visualViewport ?? undefined
+  return window.visualViewport ?? undefined // null を undefined に正規化
 }
 
 export default function Chat() {
@@ -127,12 +127,11 @@ export default function Chat() {
     ;(initialMessages ?? []).forEach((m) => set.add(m.id))
   }, [id, initialMessages])
 
-  // ★ ユーザールームへ参加（再接続時も自動復帰）
+  // ユーザー固有ルームへ join
   useEffect(() => {
     const uid = localStorage.getItem('userId')
     setCurrentUserId(uid)
-    // ここを setSocketUserId に変更（内部で currentUserId を保持し、"connect" で再送）
-    setSocketUserId(uid ?? null)
+    if (uid) socket.emit('setUserId', uid)
   }, [])
 
   // ダミーIDなら一覧へ戻す
@@ -157,13 +156,6 @@ export default function Chat() {
   useEffect(() => {
     if (!id || id.startsWith('dummy-')) return
     socket.emit('joinChat', id)
-
-    // ★ 再接続時にこのチャットへ再 join（取りこぼし防止）
-    const rejoin = () => {
-      if (!id || id.startsWith('dummy-')) return
-      socket.emit('joinChat', id)
-    }
-    socket.on('connect', rejoin)
 
     const upsertFromServer = (msg: Message) => {
       if (seenIdsRef.current.has(msg.id)) return
@@ -252,7 +244,6 @@ export default function Chat() {
     socket.on('newMessage', handleNewMessage)
     return () => {
       socket.off('newMessage', handleNewMessage)
-      socket.off('connect', rejoin)
     }
   }, [id, setChatData, setChatList, scrollToBottom])
 
@@ -266,10 +257,6 @@ export default function Chat() {
       null
 
     const apply = (data: MatchPayload) => {
-      // 自分宛のみ（targetUserId が付くならチェック）
-      if (data.targetUserId && currentUserId && data.targetUserId !== currentUserId) return
-
-      // チャット特定：chatId が来ていればそれで、無い場合は相手IDで消極的に一致
       if (data.chatId && data.chatId !== id) return
       if (!data.chatId && partnerId && data.matchedUserId && data.matchedUserId !== partnerId) return
 
@@ -304,9 +291,6 @@ export default function Chat() {
     }
 
     const onMatchEstablished = (data: MatchPayload) => apply(data)
-
-    // ★ 再接続で取りこぼさないための再購読は socket 側で維持されるが、
-    //    念のためこの画面でも connect 後にチャット再 join（上の useEffect で実施済み）
     socket.on('matchEstablished', onMatchEstablished)
     return () => {
       socket.off('matchEstablished', onMatchEstablished)
@@ -363,15 +347,18 @@ export default function Chat() {
     const vvH = vv?.height ?? layoutH
     const top = vv?.offsetTop ?? 0
 
+    // 初回に基準値を記録
     if (baseVvHeightRef.current == null) {
       baseVvHeightRef.current = vvH
     }
 
-    const kb1 = Math.max(0, layoutH - (vvH + top))
+    // 生の KB 推定
+    const kb1 = Math.max(0, layoutH - (vvH + top)) // overlay 正常系
     const base = baseVvHeightRef.current ?? layoutH
-    const kb2 = Math.max(0, base - vvH)
+    const kb2 = Math.max(0, base - vvH)            // fallback
     let kbRaw = Math.round(Math.max(kb1, kb2))
 
+    // iOS PWA のスパイク平滑化
     const isIOSDevice = isIOS()
     const isIOSStandalone = isStandalone()
     if (isIOSDevice && isIOSStandalone) {
@@ -384,6 +371,7 @@ export default function Chat() {
       }
       const prev = currentKbRef.current
       if (Math.abs(kbRaw - prev) < HYSTERESIS_PX) {
+        // ほぼ変化なし → 早期 return してブレを抑制
         setVvTop(top)
         return
       }
@@ -406,7 +394,7 @@ export default function Chat() {
     const handler = () => recomputeViewport()
     vv.addEventListener('resize', handler)
     vv.addEventListener('scroll', handler)
-    recomputeViewport()
+    recomputeViewport() // 初期一発
     return () => {
       vv.removeEventListener('resize', handler)
       vv.removeEventListener('scroll', handler)
@@ -456,7 +444,7 @@ export default function Chat() {
 
       if (seenIdsRef.current.has(saved.id)) {
         setIsSending(false)
-        setTimeout(() => inputRef.current?.focus(), 0)
+        setTimeout(() => inputRef.current?.focus(), 0) // キーボードは閉じない
         return
       }
 
@@ -517,7 +505,7 @@ export default function Chat() {
     } finally {
       setIsSending(false)
       setTimeout(() => {
-        inputRef.current?.focus()
+        inputRef.current?.focus() // キーボード閉じさせない
         autoResizeTextarea()
         scrollToBottom()
       }, 0)
@@ -530,7 +518,7 @@ export default function Chat() {
     messages.find((m) => m.sender.id !== currentUserId)?.sender.name ||
     'チャット'
 
-  // ====== タイムライン描画（既存のまま） ======
+  // ====== タイムライン描画 ======
   function renderMessagesWithDate(msgs: Message[]) {
     const result: React.ReactElement[] = []
     let lastDate = ''
@@ -632,10 +620,13 @@ export default function Chat() {
   // 入力エリアの基準スペース（KB 非表示時の下余白）
   const BASE_INPUT_BAR_SPACE_PX = 136
 
-  // “二重持ち上げ” 回避の補正式
+  // ★ “二重持ち上げ” を避ける補正式
+  //  - RAW: キーボード高さ（CSS env or JS）
+  //  - CORR: max(0, RAW - vvTop) … UAのズレ分を差し引く
   const KB_RAW_EXPR = `max(env(keyboard-inset-height, 0px), var(--kb-js, 0px))`
   const KB_CORR_EXPR = `max(0px, calc(${KB_RAW_EXPR} - var(--vv-top, 0px)))`
 
+  // CSS 変数注入（any 使わず型安全に）
   const cssVars: React.CSSProperties & Record<'--kb-js' | '--vv-top', string> = {
     ['--kb-js']: `${keyboardHeight}px`,
     ['--vv-top']: `${vvTop}px`,
@@ -670,7 +661,7 @@ export default function Chat() {
         <div className="flex flex-col">
           <div className="flex items-center">
             <div
-              className="w-10 h-10 rounded-full flex items-center justify中心 text-white font-bold text-lg mr-2 shadow"
+              className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-lg mr-2 shadow"
               style={{ backgroundColor: getBgColor(headerName) }}
             >
               {getInitials(headerName)}
@@ -693,7 +684,7 @@ export default function Chat() {
         </div>
       </header>
 
-      {/* メッセージ一覧 */}
+      {/* メッセージ一覧：入力バー分 + “補正後KB” 分の下余白 */}
       <main
         ref={mainRef}
         className="flex-1 px-2 pt-20 overflow-y-auto overflow-x-hidden scrollbar-hide"
@@ -708,9 +699,9 @@ export default function Chat() {
         </div>
       </main>
 
-      {/* 入力欄 */}
+      {/* 入力欄：下端にぴったり（safe-area + 補正後KB） */}
       <footer
-        className="固定 left-0 right-0 bg-white px-4 py-4 shadow-[0_-2px_10px_rgba(0,0,0,0.04)] flex items-center gap-3"
+        className="fixed left-0 right-0 bg-white px-4 py-4 shadow-[0_-2px_10px_rgba(0,0,0,0.04)] flex items-center gap-3"
         style={{
           ...cssVars,
           bottom: `calc(env(safe-area-inset-bottom) + ${KB_CORR_EXPR})`,
@@ -728,7 +719,7 @@ export default function Chat() {
           style={{ height: 'auto', overflowY: 'hidden' }}
         />
         <button
-          onMouseDown={(e) => e.preventDefault()}
+          onMouseDown={(e) => e.preventDefault()}   // キーボードを閉じさせない
           onTouchStart={(e) => e.preventDefault()}
           onClick={handleSend}
           className="p-3 rounded-2xl bg-green-400 hover:bg-green-500 transition shadow-lg active:scale-95"
@@ -741,6 +732,7 @@ export default function Chat() {
         </button>
       </footer>
 
+      {/* 吹き出しのトゲ（LINE風） */}
       <style jsx global>{`
         .bubble-left::before {
           content: '';
