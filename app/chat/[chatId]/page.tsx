@@ -60,14 +60,32 @@ export default function Chat() {
   const [isSending, setIsSending] = useState(false)
   const [matchHistory, setMatchHistory] = useState<{ message: string; matchedAt: string }[]>([])
 
-  // ===== キーボード・レイアウト制御 =====
+  // ===== 参照 & レイアウト制御 =====
   const mainRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
-  const [keyboardOffset, setKeyboardOffset] = useState(0)
-  const [contentBottomInset, setContentBottomInset] = useState(0)
+
+  // 可視ビューポートの情報（iOS の offsetTop を考慮）
+  const [vvTop, setVvTop] = useState(0) // visualViewport.offsetTop
+  const [keyboardHeight, setKeyboardHeight] = useState(0) // 実効的なKB高さ
+  const [contentBottomInset, setContentBottomInset] = useState(0) // タイムラインの底余白
 
   // 受信済みID（broadcast重複防止）
   const seenIdsRef = useRef<Set<string>>(new Set())
+
+  // テキストエリア自動リサイズ（最大 ~3行）
+  const autoResizeTextarea = useCallback(() => {
+    const ta = inputRef.current
+    if (!ta) return
+    ta.style.height = 'auto'
+    const line = parseFloat(getComputedStyle(ta).lineHeight || '20')
+    const padding = parseFloat(getComputedStyle(ta).paddingTop || '0') + parseFloat(getComputedStyle(ta).paddingBottom || '0')
+    const maxH = line * 3 + padding // 約3行ぶん
+    const newH = Math.min(ta.scrollHeight, maxH)
+    ta.style.maxHeight = `${maxH}px`
+    ta.style.height = `${newH}px`
+    ta.style.overflowY = ta.scrollHeight > maxH ? 'auto' : 'hidden'
+  }, [])
+
   useEffect(() => {
     if (!id) return
     const set = seenIdsRef.current
@@ -187,7 +205,7 @@ export default function Chat() {
     }
   }, [id, setChatData, setChatList])
 
-  // ===== マッチ成立のリアルタイム反映（newMatch & matchEstablished） =====
+  // ===== マッチ成立のリアルタイム反映 =====
   useEffect(() => {
     if (!id || id.startsWith('dummy-')) return
 
@@ -228,14 +246,11 @@ export default function Chat() {
       })
     }
 
-    const onNewMatch = (data: MatchPayload) => apply(data)
     const onMatchEstablished = (data: MatchPayload) => apply(data)
 
-    socket.on('newMatch', onNewMatch)
     socket.on('matchEstablished', onMatchEstablished)
 
     return () => {
-      socket.off('newMatch', onNewMatch)
       socket.off('matchEstablished', onMatchEstablished)
     }
   }, [id, chatList, messages, currentUserId, setChatList])
@@ -282,59 +297,56 @@ export default function Chat() {
     }
   }, [id, messages.length])
 
-  // 自動スクロール（メッセージ更新時）
+  // メッセージ更新時は最下部へ
   useEffect(() => {
     if (mainRef.current) mainRef.current.scrollTop = mainRef.current.scrollHeight
   }, [messages])
 
-  // ===== キーボード検知（visualViewport）とインセット制御 =====
-  const recomputeBottomInset = useCallback(() => {
+  // ===== visualViewport でキーボード・オフセットを安定検知 =====
+  const recomputeInsets = useCallback(() => {
+    const vv = (typeof window !== 'undefined' ? window.visualViewport : undefined) as VisualViewport | undefined
+    const layoutH = window.innerHeight
+    const vvH = vv?.height ?? layoutH
+    const top = vv?.offsetTop ?? 0
+    // iOS Safari は offsetTop が上部UIで縮む。実効KB高さは「全高 - (vv高さ + offsetTop)」
+    const kb = Math.max(0, layoutH - (vvH + top))
+
+    setVvTop(top)
+    setKeyboardHeight(kb)
+
+    // --- タイムラインの底パディング：短いタイムラインなら“せり上げない” ---
     if (!mainRef.current) return
     const main = mainRef.current
-
-    // 最後のメッセージ行（バブル）を拾う
     const rows = main.querySelectorAll<HTMLElement>('[data-msg-row="1"]')
     const last = rows.length ? rows[rows.length - 1] : null
-
-    const vv = typeof window !== 'undefined' ? window.visualViewport : undefined
-    const vh = vv?.height ?? window.innerHeight
-    const half = vh / 2
-
-    // 「最後のメッセージの下端」が画面の半分より下にあるか？
+    const viewH = vvH
+    const half = viewH / 2
     const lastBottom = last ? last.getBoundingClientRect().bottom : 0
     const isShortTimeline = !last || lastBottom < half
 
-    // 短いタイムラインなら“せり上げ用のパディング”は 0
-    setContentBottomInset(isShortTimeline ? 0 : keyboardOffset)
-  }, [keyboardOffset])
+    // 短い場合: 0、通常: キーボード高さぶんだけ底余白を広げる
+    setContentBottomInset(isShortTimeline ? 0 : kb)
+  }, [])
 
   useEffect(() => {
-    const vv = typeof window !== 'undefined' ? window.visualViewport : undefined
+    const vv = (typeof window !== 'undefined' ? window.visualViewport : undefined) as VisualViewport | undefined
     if (!vv) return
-
-    const handler = () => {
-      const currentHeight = vv.height ?? window.innerHeight
-      const offset = Math.max(0, window.innerHeight - currentHeight) // 見かけ上のKB高さ
-      setKeyboardOffset(offset)
-    }
-
+    const handler = () => recomputeInsets()
     vv.addEventListener('resize', handler)
     vv.addEventListener('scroll', handler) // Android 対策
-    handler() // 初期計算
-
+    handler()
     return () => {
       vv.removeEventListener('resize', handler)
       vv.removeEventListener('scroll', handler)
     }
-  }, [])
+  }, [recomputeInsets])
 
-  // keyboardOffset / レイアウト変化時にボトムインセット再計算
+  // テキスト変更時は自動リサイズ
   useEffect(() => {
-    const r = requestAnimationFrame(recomputeBottomInset)
-    return () => cancelAnimationFrame(r)
-  }, [recomputeBottomInset, keyboardOffset, messages.length])
+    autoResizeTextarea()
+  }, [newMessage, autoResizeTextarea])
 
-  // 送信
+  // ===== 送信 =====
   const handleSend = async () => {
     if (!id || id.startsWith('dummy-') || !newMessage.trim() || isSending) return
     const senderId = localStorage.getItem('userId')
@@ -363,7 +375,7 @@ export default function Chat() {
 
       if (seenIdsRef.current.has(saved.id)) {
         setIsSending(false)
-        inputRef.current?.focus() // 送信後もキーボードは閉じない
+        setTimeout(() => inputRef.current?.focus(), 0) // 送信後も閉じない
         return
       }
 
@@ -421,7 +433,11 @@ export default function Chat() {
       console.error('🚨 送信エラー:', e)
     } finally {
       setIsSending(false)
-      inputRef.current?.focus() // 送信後もキーボードを閉じない
+      // ボタンがフォーカスを奪ってもキーボードを閉じない
+      setTimeout(() => {
+        inputRef.current?.focus()
+        autoResizeTextarea()
+      }, 0)
     }
   }
 
@@ -550,8 +566,11 @@ export default function Chat() {
 
   return (
     <div className="flex flex-col bg-[#f6f8fa] h-screen overflow-x-hidden">
-      {/* ヘッダー（常時固定） */}
-      <header className="fixed top-0 left-0 right-0 z-10 bg-white px-4 py-3 flex items-center border-b">
+      {/* ヘッダー：常に画面上部に固定（visualViewport.offsetTop に追従） */}
+      <header
+        className="fixed top-0 left-0 right-0 z-10 bg-white px-4 py-3 flex items-center border-b"
+        style={{ transform: `translateY(${vvTop}px)` }}
+      >
         <button onClick={() => router.push('/chat-list')} className="mr-3 focus:outline-none">
           <Image src="/icons/back.png" alt="Back" width={24} height={24} />
         </button>
@@ -581,7 +600,7 @@ export default function Chat() {
         </div>
       </header>
 
-      {/* メッセージ一覧（底の余白を動的に調整） */}
+      {/* メッセージ一覧：底余白は contentBottomInset を反映 */}
       <main
         ref={mainRef}
         className="flex-1 px-2 pt-20 overflow-y-auto overflow-x-hidden scrollbar-hide"
@@ -592,12 +611,12 @@ export default function Chat() {
         <div className="flex flex-col gap-1 py-2">{renderMessagesWithDate(messages)}</div>
       </main>
 
-      {/* 入力欄（上寄せ＋キーボード時は浮かせる） */}
+      {/* 入力欄：キーボード上に浮く。offsetTop にも追従。 */}
       <footer
         className="fixed left-0 right-0 bg-white px-4 py-4 shadow-[0_-2px_10px_rgba(0,0,0,0.04)] flex items-center gap-3"
         style={{
           bottom: 'calc(env(safe-area-inset-bottom) + 8px)',
-          transform: `translateY(-${keyboardOffset}px)`,
+          transform: `translateY(${vvTop - keyboardHeight}px)`,
         }}
       >
         <textarea
@@ -605,16 +624,23 @@ export default function Chat() {
           rows={1}
           value={newMessage}
           onChange={(e) => setNewMessage(e.target.value)}
+          onInput={autoResizeTextarea}
           placeholder="メッセージを入力（改行可）"
           className={`flex-1 border border-gray-200 rounded-2xl px-4 py-3
             focus:outline-none bg-gray-50 text-base shadow-sm
-            resize-none leading-5 h-12 max-h-24 overflow-auto`}
+            resize-none leading-6`}
+          style={{ height: 'auto', overflowY: 'hidden' }}
         />
         <button
+          // フォーカスを奪ってキーボードを閉じさせない
+          onMouseDown={(e) => e.preventDefault()}
+          onTouchStart={(e) => e.preventDefault()}
           onClick={handleSend}
           className="p-3 rounded-2xl bg-green-400 hover:bg-green-500 transition shadow-lg active:scale-95"
           style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}
           disabled={isSending || !newMessage.trim()}
+          tabIndex={-1}
+          aria-label="メッセージ送信"
         >
           <Image src={newMessage.trim() ? '/icons/send.png' : '/icons/message.png'} alt="Send" width={28} height={28} />
         </button>
