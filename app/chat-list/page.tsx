@@ -6,19 +6,19 @@ import { useRouter } from 'next/navigation'
 import axios from 'axios'
 import FixedTabBar from '../components/FixedTabBar'
 import Image from 'next/image'
-import socket, { setSocketUserId } from '../socket' // ← そのまま使用
+import socket, { setSocketUserId } from '../socket'
 
 export interface ChatItem {
   chatId: string
   matchedUser: { id: string; name: string }
   matchMessage: string
   latestMessage: string
-  latestMessageAt: string | null               // ← サーバから来る“生”の値はここに保持
-  latestMessageAtRaw: string | null            // ← 互換のため残すが、上と同じ“生”を入れる
+  latestMessageAt: string | null
+  latestMessageAtRaw: string | null
   latestMessageSenderId: string | null
-  latestMessageAtDisplay?: string              // 画面用にフォーマットした文字列
+  latestMessageAtDisplay?: string
   messages: { id: string; senderId: string; content: string; createdAt: string }[]
-  matchMessageMatchedAt?: string | null        // マッチ成立時刻（サーバから来る or WSで更新）
+  matchMessageMatchedAt?: string | null
   matchHistory?: { message: string; matchedAt: string }[]
 }
 
@@ -52,10 +52,7 @@ function formatChatDate(dateString: string | null): string {
   return `${date.getMonth() + 1}/${date.getDate()}`
 }
 
-/**
- * 並び順のキー：最新メッセージ時刻 or マッチ成立時刻の“新しい方”
- * どちらも無ければ 0（= 一番下の方に沈む）
- */
+/** 並び順キー：最新メッセージ時刻 or マッチ成立時刻の新しい方 */
 function sortTimestampOf(chat: ChatItem): number {
   const msgTs = chat.latestMessageAt ? new Date(chat.latestMessageAt).getTime() : 0
   const matchTs = chat.matchMessageMatchedAt ? new Date(chat.matchMessageMatchedAt).getTime() : 0
@@ -72,14 +69,16 @@ export default function ChatList() {
   const [isOpenedMatchStateLoaded, setIsOpenedMatchStateLoaded] = useState(false)
   const [newMatchChats, setNewMatchChats] = useState<Set<string>>(new Set())
 
-  // 開いたマッチチャット状態のロード
+  // userId ロード
   useEffect(() => {
     const uid = typeof window !== 'undefined' ? localStorage.getItem('userId') : null
     setUserId(uid)
   }, [])
+
+  // ローカル状態ロード & ソケットのユーザールーム参加
   useEffect(() => {
     if (!userId) return
-    setSocketUserId(userId) // ← 接続/再接続時に確実にユーザールームへ
+    setSocketUserId(userId)
 
     const openedMatchData = localStorage.getItem(`opened-match-chats-${userId}`)
     if (openedMatchData) {
@@ -100,24 +99,23 @@ export default function ChatList() {
     setIsLoading(true)
     try {
       const res = await axios.get<ChatItem[]>('/api/chat-list', { headers: { userId: uid } })
-
-      // ⚠️ ここではソートしない（開いただけで上に来る副作用を防ぐ）
       const formatted = res.data.map((c) => {
         const latestRaw = c.latestMessageAt ?? null
         return {
           ...c,
-          latestMessageAt: latestRaw,               // “生”のまま保持
-          latestMessageAtRaw: latestRaw,            // 互換
-          latestMessageAtDisplay: formatChatDate(latestRaw), // 表示用
+          latestMessageAt: latestRaw,
+          latestMessageAtRaw: latestRaw,
+          latestMessageAtDisplay: formatChatDate(latestRaw),
         }
       })
-
       setChats(formatted)
 
-      // 取得した実チャットは全て join（マッチ直後の newMessage も拾えるように）
-      formatted.filter(c => !c.chatId.startsWith('dummy-')).forEach(c => socket.emit('joinChat', c.chatId))
+      // 実チャットは join
+      formatted
+        .filter((c) => !c.chatId.startsWith('dummy-'))
+        .forEach((c) => socket.emit('joinChat', c.chatId))
 
-      // 未読件数
+      // 未読数
       const unread: { [chatId: string]: number } = {}
       for (const chat of res.data) {
         if (!chat.latestMessageAt || chat.latestMessage === 'メッセージなし') continue
@@ -141,7 +139,7 @@ export default function ChatList() {
     if (isOpenedMatchStateLoaded) fetchChats()
   }, [isOpenedMatchStateLoaded])
 
-  // matchMessageの変化検知（ローカル保存）
+  // matchMessage の変化検知（新規マッチ強調）
   useEffect(() => {
     if (!isOpenedMatchStateLoaded || chats.length === 0 || !userId) return
     const prevRaw = localStorage.getItem(`prev-match-messages-${userId}`)
@@ -171,7 +169,7 @@ export default function ChatList() {
     localStorage.setItem(`prev-match-messages-${userId}`, JSON.stringify(nextMap))
   }, [chats, isOpenedMatchStateLoaded, userId])
 
-  // ★ チャット画面からの強調解除通知を受け取って即反映
+  // チャット画面からの強調解除通知
   useEffect(() => {
     const onOpened = (e: Event) => {
       const detail = (e as CustomEvent).detail as { chatId?: string }
@@ -187,52 +185,86 @@ export default function ChatList() {
     return () => window.removeEventListener('match-opened', onOpened as EventListener)
   }, [userId])
 
-  // WebSocket: マッチ成立（ユーザールーム経由）
+  // ✅ WebSocket: マッチ成立 → 即時ローカル反映（ガードで型も安全）
   useEffect(() => {
     if (!userId) return
-    const handleMatchEstablished = (data: {
+
+    type MatchEstablishedPayload = {
       chatId?: string
       message: string
       matchedAt: string
       matchedUserId?: string
+      matchedUserName?: string
       targetUserId?: string
-    }) => {
-      // 自分宛以外はスキップ
+    }
+
+    const handleMatchEstablished = (data: MatchEstablishedPayload) => {
+      // 自分宛のみ
       if (data.targetUserId && data.targetUserId !== userId) return
 
       const realChatId = data.chatId
-      if (realChatId) {
-        socket.emit('joinChat', realChatId)
+      if (!realChatId) return
 
-        // ダミー → 実ID の置換 + マッチ即時反映（重複はMapで抑止）
-        setChats((prev) => {
-          const idx = prev.findIndex(c => c.matchedUser.id === data.matchedUserId || c.chatId === realChatId)
-          if (idx === -1) return prev
+      // 部屋 join（保険）
+      socket.emit('joinChat', realChatId)
+
+      setChats((prev) => {
+        // 既存：chatId または matchedUserId で検索
+        const idx = prev.findIndex(
+          (c) => c.chatId === realChatId || (data.matchedUserId ? c.matchedUser.id === data.matchedUserId : false)
+        )
+        if (idx !== -1) {
           const next = [...prev]
           const item = { ...next[idx] }
 
+          // dummy → real
           if (item.chatId.startsWith('dummy-')) item.chatId = realChatId
 
+          // マッチ履歴（重複排除して昇順）
           const list = [...(item.matchHistory || []), { message: data.message, matchedAt: data.matchedAt }]
-          const map = new Map(list.map(m => [`${m.matchedAt}|${m.message}`, m]))
-          item.matchHistory = Array.from(map.values())
-            .sort((a, b) => new Date(a.matchedAt).getTime() - new Date(b.matchedAt).getTime())
+          const map = new Map(list.map((m) => [`${m.matchedAt}|${m.message}`, m]))
+          item.matchHistory = Array.from(map.values()).sort(
+            (a, b) => new Date(a.matchedAt).getTime() - new Date(b.matchedAt).getTime()
+          )
+
+          // 直近マッチ
           item.matchMessage = data.message
           item.matchMessageMatchedAt = data.matchedAt
 
           next[idx] = item
           return next
-        })
+        }
 
-        // ハイライト集合に実IDを追加
-        setNewMatchChats((prev) => {
-          const next = new Set(prev); next.add(realChatId)
-          if (userId) localStorage.setItem(`new-match-chats-${userId}`, JSON.stringify([...next]))
-          return next
-        })
-      }
+        // 新規：matchedUserId と matchedUserName が両方あれば作成
+        if (data.matchedUserId && data.matchedUserName) {
+          const newItem: ChatItem = {
+            chatId: realChatId,
+            matchedUser: { id: data.matchedUserId, name: data.matchedUserName },
+            matchMessage: data.message,
+            latestMessage: 'メッセージなし',
+            latestMessageAt: null,
+            latestMessageAtRaw: null,
+            latestMessageSenderId: null,
+            latestMessageAtDisplay: '',
+            messages: [],
+            matchMessageMatchedAt: data.matchedAt,
+            matchHistory: [{ message: data.message, matchedAt: data.matchedAt }],
+          }
+          return [...prev, newItem]
+        }
 
-      // 最終的にサーバー状態で再同期（ズレの保険）
+        // 表示に必要な名前が無ければスキップ（サーバ同期で補完される）
+        return prev
+      })
+
+      // 新規マッチ強調フラグ
+      setNewMatchChats((prev) => {
+        const next = new Set(prev); next.add(realChatId)
+        if (userId) localStorage.setItem(`new-match-chats-${userId}`, JSON.stringify([...next]))
+        return next
+      })
+
+      // 最終的にサーバ状態で同期（ズレの保険）
       fetchChats()
     }
 
@@ -240,14 +272,14 @@ export default function ChatList() {
     return () => { socket.off('matchEstablished', handleMatchEstablished) }
   }, [userId])
 
-  // WebSocket: 新着メッセージで再取得
+  // WebSocket: 新着メッセージ → 再取得
   useEffect(() => {
     const handleNewMessage = () => fetchChats()
     socket.on('newMessage', handleNewMessage)
     return () => { socket.off('newMessage', handleNewMessage) }
   }, [])
 
-  // クリックで既読＆ハイライト解除
+  // クリックで既読 & 強調解除
   const handleOpenChat = async (item: ChatItem) => {
     const uid = localStorage.getItem('userId'); if (!uid) return
 
@@ -285,11 +317,7 @@ export default function ChatList() {
     }
   }
 
-  /**
-   * 表示用の最終ソート：
-   *  1) 「最新メッセージ時刻 or マッチ成立時刻」の新しい方の降順
-   *  2) どちらも無い（=0）のものは元の並び（安定ソート）を維持
-   */
+  // 表示用の最終ソート
   const sortedChats = useMemo(() => {
     return [...chats].sort((a, b) => {
       const at = sortTimestampOf(a)
@@ -348,7 +376,7 @@ export default function ChatList() {
                       {getInitials(chat.matchedUser.name)}
                     </div>
                     {shouldShowMatchHighlight && (
-                      <div className="absolute -top-1 -right-1 w-6 h-6 bg-gradient-to-r from-orange-400 to-orange-500 rounded-full flex items-center justify-center shadow-lg">
+                      <div className="absolute -top-1 -right-1 w-6 h-6 bg-gradient-to-r from-orange-400 to-orange-500 rounded-full flex items中心 justify-center shadow-lg">
                         <Image src="/icons/check2.png" alt="Match" width={12} height={12} />
                       </div>
                     )}
