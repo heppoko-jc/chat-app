@@ -1,5 +1,3 @@
-// app/chat/[chatId]/page.tsx
-
 'use client'
 
 import React, { useEffect, useState, useRef, useCallback } from 'react'
@@ -60,23 +58,18 @@ export default function Chat() {
   const [isSending, setIsSending] = useState(false)
   const [matchHistory, setMatchHistory] = useState<{ message: string; matchedAt: string }[]>([])
 
-  // ===== レイアウト参照 =====
+  // レイアウト参照
   const mainRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
-  const footerRef = useRef<HTMLDivElement | null>(null)
 
-  // iOS/Android 共通：キーボード高さ推定（px）
-  const [keyboardHeight, setKeyboardHeight] = useState(0)
-  // フッターの bottom 値（safe-area + 8px + kb）
-  const [footerBottom, setFooterBottom] = useState(8)
+  // 最下部へ寄せる
+  const scrollToBottom = useCallback(() => {
+    const el = mainRef.current
+    if (!el) return
+    el.scrollTop = el.scrollHeight
+  }, [])
 
-  // ベースライン（最初の layout 高さ）
-  const baseVvHeightRef = useRef<number | null>(null)
-
-  // 受信済みID（broadcast重複防止）
-  const seenIdsRef = useRef<Set<string>>(new Set())
-
-  // ===== テキストエリア：自動リサイズ（最大 3 行まで） =====
+  // テキストエリア自動リサイズ（最大3行）
   const autoResizeTextarea = useCallback(() => {
     const ta = inputRef.current
     if (!ta) return
@@ -85,30 +78,29 @@ export default function Chat() {
     const padding =
       parseFloat(getComputedStyle(ta).paddingTop || '0') +
       parseFloat(getComputedStyle(ta).paddingBottom || '0')
-    const maxH = line * 3 + padding // 3行分まで
+    const maxH = line * 3 + padding // 3行ぶん
     const newH = Math.min(ta.scrollHeight, maxH)
     ta.style.maxHeight = `${maxH}px`
     ta.style.height = `${newH}px`
     ta.style.overflowY = ta.scrollHeight > maxH ? 'auto' : 'hidden'
   }, [])
 
-  // ===== 最下行を確実に見せる（iOSのブレ対策でガッと下げる）=====
-  const scrollToBottom = useCallback(() => {
-    const main = mainRef.current
-    if (!main) return
-    // レイアウト反映後に実行
-    requestAnimationFrame(() => {
-      main.scrollTop = main.scrollHeight
-    })
-  }, [])
-
-  // 初期 seenID
+  // 受信済みID（broadcast重複防止）
+  const seenIdsRef = useRef<Set<string>>(new Set())
   useEffect(() => {
     if (!id) return
     const set = seenIdsRef.current
     set.clear()
     ;(initialMessages ?? []).forEach((m) => set.add(m.id))
   }, [id, initialMessages])
+
+  // iOS対策：この画面にいる間だけ body/html の overflow/height を解除（globals.css の hidden を上書き）
+  useEffect(() => {
+    document.body.setAttribute('data-chat', '1')
+    return () => {
+      document.body.removeAttribute('data-chat')
+    }
+  }, [])
 
   // ユーザー固有ルームへ join
   useEffect(() => {
@@ -155,10 +147,7 @@ export default function Chat() {
         const next = [...prev]
         const formatted: Message = {
           ...msg,
-          formattedDate: new Date(msg.createdAt).toLocaleTimeString('ja-JP', {
-            hour: '2-digit',
-            minute: '2-digit',
-          }),
+          formattedDate: new Date(msg.createdAt).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }),
         }
         if (idx !== -1) next[idx] = formatted
         else next.push(formatted)
@@ -177,10 +166,7 @@ export default function Chat() {
         )
         const formatted: Message = {
           ...msg,
-          formattedDate: new Date(msg.createdAt).toLocaleTimeString('ja-JP', {
-            hour: '2-digit',
-            minute: '2-digit',
-          }),
+          formattedDate: new Date(msg.createdAt).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }),
         }
         const next = [...list]
         if (idx !== -1) next[idx] = formatted
@@ -216,8 +202,8 @@ export default function Chat() {
         return updated
       })
 
-      // 新着を受けたら一番下へ
-      scrollToBottom()
+      // 新着受信後は最下部へ
+      setTimeout(scrollToBottom, 0)
     }
 
     const handleNewMessage = (payload: { chatId: string; message: Message }) => {
@@ -271,7 +257,7 @@ export default function Chat() {
         )
       })
 
-      scrollToBottom()
+      setTimeout(scrollToBottom, 0)
     }
 
     const onMatchEstablished = (data: MatchPayload) => apply(data)
@@ -301,7 +287,7 @@ export default function Chat() {
         formatted.forEach((m) => seenIdsRef.current.add(m.id))
         setMessages(formatted)
         setChatData((prev) => ({ ...prev, [id]: formatted }))
-        scrollToBottom()
+        setTimeout(scrollToBottom, 0)
       } catch (e) {
         console.error('🚨 メッセージ取得エラー:', e)
       }
@@ -311,68 +297,18 @@ export default function Chat() {
     }
   }, [id, setChatData, scrollToBottom])
 
-  // ===== 既読書き込み =====
-  useEffect(() => {
-    if (!id || id.startsWith('dummy-')) return
-    const write = () => localStorage.setItem(`chat-last-read-${id}`, new Date().toISOString())
-    write()
-    const onVis = () => { if (document.visibilityState === 'visible') write() }
-    document.addEventListener('visibilitychange', onVis)
-    return () => {
-      write()
-      document.removeEventListener('visibilitychange', onVis)
-    }
-  }, [id, messages.length])
-
-  // ===== visualViewport による OS 差吸収（transform を使わず bottom を直接増やす）=====
-  const recomputeViewport = useCallback(() => {
-    const vv = typeof window !== 'undefined' ? window.visualViewport : undefined
-    const layoutH = window.innerHeight
-    const vvH = vv?.height ?? layoutH
-    const top = vv?.offsetTop ?? 0
-
-    // 初回に基準値を記録
-    if (baseVvHeightRef.current == null) {
-      baseVvHeightRef.current = vvH
-    }
-
-    // 2パターンで推定し、大きい方を採用
-    const kb1 = Math.max(0, layoutH - (vvH + top)) // overlay モードで正確
-    const base = baseVvHeightRef.current ?? layoutH
-    const kb2 = Math.max(0, base - vvH)            // fallback
-    const kb = Math.round(Math.max(kb1, kb2))
-
-    setKeyboardHeight(kb)
-    setFooterBottom(8 + kb)
-
-    // レイアウト反映後に最下部まで
-    scrollToBottom()
-  }, [scrollToBottom])
-
-  useEffect(() => {
-    const vv = typeof window !== 'undefined' ? window.visualViewport : undefined
-    if (!vv) return
-    const handler = () => recomputeViewport()
-    vv.addEventListener('resize', handler)
-    vv.addEventListener('scroll', handler)
-    // 初期一発
-    recomputeViewport()
-    return () => {
-      vv.removeEventListener('resize', handler)
-      vv.removeEventListener('scroll', handler)
-    }
-  }, [recomputeViewport])
-
   // テキスト変更時は自動リサイズ
   useEffect(() => {
     autoResizeTextarea()
   }, [newMessage, autoResizeTextarea])
 
-  // ====== ヘッダーの相手表示 ======
-  const headerName =
-    chatInList?.matchedUser.name ||
-    messages.find((m) => m.sender.id !== currentUserId)?.sender.name ||
-    'チャット'
+  // 入力欄フォーカス時に最下部を確実に見せる
+  const handleFocus = () => {
+    setTimeout(() => {
+      autoResizeTextarea()
+      scrollToBottom()
+    }, 0)
+  }
 
   // ===== 送信 =====
   const handleSend = async () => {
@@ -396,7 +332,6 @@ export default function Chat() {
     }
     setMessages((prev) => [...prev, temp])
     setChatData((prev) => ({ ...prev, [id]: [...(prev[id] || []), temp] }))
-    scrollToBottom()
 
     try {
       const res = await axios.post<Message>(`/api/chat/${id}`, { senderId, content: contentToSend })
@@ -404,8 +339,7 @@ export default function Chat() {
 
       if (seenIdsRef.current.has(saved.id)) {
         setIsSending(false)
-        // iOS でキーボードを閉じさせない
-        setTimeout(() => inputRef.current?.focus(), 0)
+        setTimeout(() => inputRef.current?.focus(), 0) // キーボードは閉じない
         return
       }
 
@@ -459,13 +393,11 @@ export default function Chat() {
         else next.push(formatted)
         return { ...prev, [id]: next }
       })
-
-      scrollToBottom()
     } catch (e) {
       console.error('🚨 送信エラー:', e)
     } finally {
       setIsSending(false)
-      // フォーカス維持（キーボードを閉じない）
+      // キーボードを閉じさせない（フォーカス維持 & 下寄せ）
       setTimeout(() => {
         inputRef.current?.focus()
         autoResizeTextarea()
@@ -473,6 +405,12 @@ export default function Chat() {
       }, 0)
     }
   }
+
+  // ====== ヘッダーの相手表示 ======
+  const headerName =
+    chatInList?.matchedUser.name ||
+    messages.find((m) => m.sender.id !== currentUserId)?.sender.name ||
+    'チャット'
 
   // ====== タイムライン描画（メッセージとマッチを時系列マージ）======
   function renderMessagesWithDate(msgs: Message[]) {
@@ -575,8 +513,8 @@ export default function Chat() {
 
   if (isPreloading && messages.length === 0) {
     return (
-      <div className="flex flex-col bg-white h-screen">
-        <header className="sticky top-0 z-10 bg-white px-4 py-2 flex flex-col items-center">
+      <div className="flex flex-col bg-white min-h-[100dvh]">
+        <header className="sticky top-0 z-10 bg-white px-4 py-2 flex flex-col items-center border-b">
           <button onClick={() => router.push('/chat-list')} className="absolute left-4 top-2 focus:outline-none">
             <Image src="/icons/back.png" alt="Back" width={20} height={20} />
           </button>
@@ -589,14 +527,13 @@ export default function Chat() {
     )
   }
 
-  // 入力エリアの基準スペース（キーボード非表示時の main の下余白）
-  // ↓ 以前より少し大きめ：入力欄 + ボタンを“気持ち上”に
-  const BASE_INPUT_BAR_SPACE_PX = 136
+  // 入力バーの基準高さ（見た目を少し大きめに：変更要望反映）
+  const INPUT_BAR_BASE_PX = 112 // ~ 96〜120px 相当
 
   return (
-    <div className="flex flex-col bg-[#f6f8fa] h-screen overflow-x-hidden">
-      {/* ヘッダー（シンプル固定。iOS overlay でも押し上がらない） */}
-      <header className="fixed top-0 left-0 right-0 z-10 bg-white px-4 py-3 flex items-center border-b">
+    <div className="flex flex-col bg-[#f6f8fa] min-h-[100dvh]">
+      {/* ヘッダー：transform は使わない（iOS PWA バグ回避） */}
+      <header className="sticky top-0 z-10 bg-white px-4 py-3 flex items-center border-b">
         <button onClick={() => router.push('/chat-list')} className="mr-3 focus:outline-none">
           <Image src="/icons/back.png" alt="Back" width={24} height={24} />
         </button>
@@ -626,25 +563,23 @@ export default function Chat() {
         </div>
       </header>
 
-      {/* メッセージ一覧：常に「入力バー分 + キーボード分」の下余白を確保 */}
+      {/* メッセージ一覧：キーボード分+入力バー分の余白を CSS だけで確保 */}
       <main
         ref={mainRef}
-        className="flex-1 px-2 pt-20 overflow-y-auto overflow-x-hidden scrollbar-hide"
+        className="flex-1 px-2 overflow-y-auto overflow-x-hidden scrollbar-hide"
         style={{
-          // キーボード展開時に“埋もれない”ためのパディング
-          paddingBottom: `calc(${BASE_INPUT_BAR_SPACE_PX}px + ${keyboardHeight}px)`,
-          overscrollBehavior: 'contain',
+          paddingTop: '0.5rem', // ヘッダー下のちょい余白
+          paddingBottom: `calc(${INPUT_BAR_BASE_PX}px + env(keyboard-inset-height) + env(safe-area-inset-bottom))`,
         }}
       >
         <div className="flex flex-col gap-1 py-2">{renderMessagesWithDate(messages)}</div>
       </main>
 
-      {/* 入力欄：transform で動かさず、bottom を直接増やす */}
+      {/* 入力欄：固定。transform 不使用。iOS/Android ともに env() で回避 */}
       <footer
-        ref={footerRef}
         className="fixed left-0 right-0 bg-white px-4 py-4 shadow-[0_-2px_10px_rgba(0,0,0,0.04)] flex items-center gap-3"
         style={{
-          bottom: `calc(env(safe-area-inset-bottom) + ${footerBottom}px)`,
+          bottom: 'calc(env(safe-area-inset-bottom) + env(keyboard-inset-height) + 8px)',
         }}
       >
         <textarea
@@ -653,6 +588,7 @@ export default function Chat() {
           value={newMessage}
           onChange={(e) => setNewMessage(e.target.value)}
           onInput={autoResizeTextarea}
+          onFocus={handleFocus}
           placeholder="メッセージを入力（改行可）"
           className="flex-1 border border-gray-200 rounded-2xl px-4 py-3 focus:outline-none bg-gray-50 text-base shadow-sm resize-none leading-6"
           style={{ height: 'auto', overflowY: 'hidden' }}
@@ -661,7 +597,7 @@ export default function Chat() {
           onMouseDown={(e) => e.preventDefault()}   // ← フォーカスを奪わずキーボードを閉じさせない
           onTouchStart={(e) => e.preventDefault()}
           onClick={handleSend}
-          className="p-3 rounded-2xl bg-green-400 hover:bg-green-500 transition shadow-lg active:scale-95"
+          className="p-3 rounded-2xl bg-green-400 hover:bg-green-500 transition shadow-lg active:scale-95 disabled:opacity-50"
           style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}
           disabled={isSending || !newMessage.trim()}
           tabIndex={-1}
@@ -671,8 +607,12 @@ export default function Chat() {
         </button>
       </footer>
 
-      {/* 吹き出しのトゲ（LINE風） */}
+      {/* グローバル補正：この画面にいる間だけ、ルートスクロールを有効化 */}
       <style jsx global>{`
+        /* Chat ページ滞在時（body[data-chat="1"]）は、globals.css の hidden を打ち消す */
+        html { overflow: auto !important; height: auto !important; }
+        body[data-chat="1"] { overflow: auto !important; height: auto !important; }
+
         .bubble-left::before {
           content: '';
           position: absolute;
