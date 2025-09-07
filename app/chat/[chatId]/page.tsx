@@ -56,8 +56,7 @@ function isStandalone(): boolean {
 
 function getVisualViewport(): VisualViewport | undefined {
   if (typeof window === 'undefined') return undefined
-  const vv = window.visualViewport // VisualViewport | null
-  return vv ?? undefined
+  return window.visualViewport ?? undefined // null を undefined に正規化
 }
 
 export default function Chat() {
@@ -80,17 +79,14 @@ export default function Chat() {
   // ===== レイアウト参照 =====
   const mainRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
-  const footerRef = useRef<HTMLDivElement | null>(null)
 
-  // iOS/Android 共通：キーボード高さ推定（px）
+  // キーボード高さ推定（JSフォールバック用・px）
   const [keyboardHeight, setKeyboardHeight] = useState(0)
-  // フッターの bottom 値（safe-area + 8px + kb）
-  const [footerBottom, setFooterBottom] = useState(8)
 
   // ベースライン（最初の layout 高さ）
   const baseVvHeightRef = useRef<number | null>(null)
 
-  // iOS PWA のスパイク対策：直近の KB 値を保持して中央値を使う
+  // iOS PWA のスパイク対策
   const kbSamplesRef = useRef<number[]>([])
   const currentKbRef = useRef<number>(0)
 
@@ -113,7 +109,7 @@ export default function Chat() {
     ta.style.overflowY = ta.scrollHeight > maxH ? 'auto' : 'hidden'
   }, [])
 
-  // ===== 最下行を確実に見せる（iOSのブレ対策でガッと下げる）=====
+  // ===== 最下行を確実に見せる =====
   const scrollToBottom = useCallback(() => {
     const main = mainRef.current
     if (!main) return
@@ -344,7 +340,7 @@ export default function Chat() {
     }
   }, [id, messages.length])
 
-  // ===== visualViewport による OS 差吸収（iOS PWA の異常値をクランプ＆平滑化）=====
+  // ===== visualViewport で JS 側のキーボード高さを推定（CSS env のフォールバック用）=====
   const recomputeViewport = useCallback(() => {
     const vv = getVisualViewport()
     const layoutH = typeof window !== 'undefined' ? window.innerHeight : 0
@@ -362,19 +358,22 @@ export default function Chat() {
     const kb2 = Math.max(0, base - vvH)            // fallback
     let kbRaw = Math.round(Math.max(kb1, kb2))
 
-    // ---- iOS PWA 防御 ----
+    // 端末差の吸収ツマミ（iOS PWA のみ）
+    const MAX_KB_RATIO = 0.55
+    const MAX_KB_PX    = 420
+    const HYSTERESIS_PX = 8
+
     const isIOSDevice = isIOS()
     const isIOSStandalone = isStandalone()
     if (isIOSDevice && isIOSStandalone) {
-      if (vvH <= 0 || layoutH <= 0) {
-        return
-      }
-      const maxKb = Math.round(Math.min(layoutH * 0.55, 420)) // 画面の55% or 420px
+      if (vvH <= 0 || layoutH <= 0) return
+
+      const maxKb = Math.round(Math.min(layoutH * MAX_KB_RATIO, MAX_KB_PX))
       const minKb = 0
       kbRaw = Math.min(Math.max(kbRaw, minKb), maxKb)
 
       const prev = currentKbRef.current
-      if (Math.abs(kbRaw - prev) < 8) {
+      if (Math.abs(kbRaw - prev) < HYSTERESIS_PX) {
         return
       }
 
@@ -388,8 +387,6 @@ export default function Chat() {
 
     currentKbRef.current = kbRaw
     setKeyboardHeight(kbRaw)
-    setFooterBottom(8 + kbRaw)
-
     requestAnimationFrame(scrollToBottom)
   }, [scrollToBottom])
 
@@ -412,7 +409,7 @@ export default function Chat() {
     autoResizeTextarea()
   }, [newMessage, autoResizeTextarea])
 
-  // 入力欄フォーカス時に最下部を確実に見せる（未使用警告を避けつつ再利用可能に）
+  // 入力欄フォーカス時（iOS で高さ確定後にボトムへ）
   const handleFocus = () => {
     setTimeout(() => {
       autoResizeTextarea()
@@ -542,9 +539,9 @@ export default function Chat() {
         lastDate = key
       }
     }
-    const matches = (matchHistory || []).slice().sort(
-      (a, b) => new Date(a.matchedAt).getTime() - new Date(b.matchedAt).getTime()
-    )
+    const matches = (matchHistory || [])
+      .slice()
+      .sort((a, b) => new Date(a.matchedAt).getTime() - new Date(b.matchedAt).getTime())
 
     if (msgs.length === 0) {
       matches.forEach((m, idx) => {
@@ -624,6 +621,17 @@ export default function Chat() {
     return result
   }
 
+  // 入力エリアの基準スペース（キーボード非表示時の main の下余白）
+  const BASE_INPUT_BAR_SPACE_PX = 136
+
+  // CSS の env(keyboard-inset-height) を優先利用するための共通計算式
+  const KB_ENV_EXPR = `max(env(keyboard-inset-height, 0px), var(--kb-js, 0px))`
+
+  // CSS変数を型安全に注入
+  const kbVar: React.CSSProperties & Record<'--kb-js', string> = {
+    ['--kb-js']: `${keyboardHeight}px`,
+  }
+
   if (isPreloading && messages.length === 0) {
     return (
       <div className="flex flex-col bg-white h-screen">
@@ -640,13 +648,9 @@ export default function Chat() {
     )
   }
 
-  // 入力エリアの基準スペース（キーボード非表示時の main の下余白）
-  // ↓ 以前より少し大きめ：入力欄 + ボタンを“気持ち上”に
-  const BASE_INPUT_BAR_SPACE_PX = 136
-
   return (
     <div className="flex flex-col bg-[#f6f8fa] h-screen overflow-x-hidden">
-      {/* ヘッダー（シンプル固定。iOS overlay でも押し上がらない） */}
+      {/* ヘッダー（固定） */}
       <header className="fixed top-0 left-0 right-0 z-10 bg-white px-4 py-3 flex items-center border-b">
         <button onClick={() => router.push('/chat-list')} className="mr-3 focus:outline-none">
           <Image src="/icons/back.png" alt="Back" width={24} height={24} />
@@ -677,24 +681,27 @@ export default function Chat() {
         </div>
       </header>
 
-      {/* メッセージ一覧：常に「入力バー分 + キーボード分」の下余白を確保 */}
+      {/* メッセージ一覧：入力バー分 + 正確な KB 分の下余白 */}
       <main
         ref={mainRef}
         className="flex-1 px-2 pt-20 overflow-y-auto overflow-x-hidden scrollbar-hide"
         style={{
-          paddingBottom: `calc(${BASE_INPUT_BAR_SPACE_PX}px + ${keyboardHeight}px)`,
+          ...kbVar,
+          paddingBottom: `calc(${BASE_INPUT_BAR_SPACE_PX}px + ${KB_ENV_EXPR})`,
           overscrollBehavior: 'contain',
         }}
       >
-        <div className="flex flex-col gap-1 py-2">{renderMessagesWithDate(messages)}</div>
+        <div className="flex flex-col gap-1 py-2">
+          {renderMessagesWithDate(messages)}
+        </div>
       </main>
 
-      {/* 入力欄：transform で動かさず、bottom を直接増やす */}
+      {/* 入力欄：下端にぴったり。KB が出たらその分だけ上げる */}
       <footer
-        ref={footerRef}
         className="fixed left-0 right-0 bg-white px-4 py-4 shadow-[0_-2px_10px_rgba(0,0,0,0.04)] flex items-center gap-3"
         style={{
-          bottom: `calc(env(safe-area-inset-bottom) + ${footerBottom}px)`,
+          ...kbVar,
+          bottom: `calc(env(safe-area-inset-bottom) + ${KB_ENV_EXPR})`,
         }}
       >
         <textarea
@@ -709,7 +716,7 @@ export default function Chat() {
           style={{ height: 'auto', overflowY: 'hidden' }}
         />
         <button
-          onMouseDown={(e) => e.preventDefault()}   // ← フォーカスを奪わずキーボードを閉じさせない
+          onMouseDown={(e) => e.preventDefault()}   // キーボードを閉じさせない
           onTouchStart={(e) => e.preventDefault()}
           onClick={handleSend}
           className="p-3 rounded-2xl bg-green-400 hover:bg-green-500 transition shadow-lg active:scale-95"
