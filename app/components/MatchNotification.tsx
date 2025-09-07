@@ -1,10 +1,10 @@
 // app/components/MatchNotification.tsx
-
 'use client'
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import Image from 'next/image'
+import axios from 'axios'
 
 interface MatchNotificationProps {
   isVisible: boolean
@@ -16,44 +16,79 @@ interface MatchNotificationProps {
   message?: string
 }
 
-export default function MatchNotification({ isVisible, onClose, matchedUser, message }: MatchNotificationProps) {
+export default function MatchNotification({
+  isVisible,
+  onClose,
+  matchedUser,
+  message,
+}: MatchNotificationProps) {
   const router = useRouter()
   const [isAnimating, setIsAnimating] = useState(false)
 
+  // 表示切替で入退場アニメーションだけ行う（自動クローズは廃止）
   useEffect(() => {
-    if (isVisible) {
-      setIsAnimating(true)
-      // 4秒後に自動で閉じる
-      const timer = setTimeout(() => {
-        handleClose()
-      }, 4000)
-      return () => clearTimeout(timer)
-    }
+    if (isVisible) setIsAnimating(true)
+    else setIsAnimating(false)
   }, [isVisible])
 
   const handleClose = () => {
     setIsAnimating(false)
+    // 退場アニメーション分だけ待ってから本体を閉じる
     setTimeout(() => {
       onClose()
     }, 300)
   }
 
-  const handleHistoryButton = () => {
-    // 履歴ページに遷移
-    router.push('/notifications')
-    handleClose()
+  const handleOpenChat = async () => {
+    try {
+      const partnerId = matchedUser?.id
+      if (!partnerId) {
+        handleClose()
+        router.push('/chat-list')
+        return
+      }
+      const userId = typeof window !== 'undefined' ? localStorage.getItem('userId') : null
+      // userId が無い場合は一覧へフォールバック
+      if (!userId) {
+        handleClose()
+        router.push('/chat-list')
+        return
+      }
+      // チャット部屋を確実に用意して遷移
+      const res = await axios.post<{ chatId: string }>(
+        '/api/chat/ensure',
+        { partnerId },
+        { headers: { userId } }
+      )
+      const chatId = res.data.chatId
+      handleClose()
+      router.push(`/chat/${chatId}`)
+    } catch (e) {
+      console.error('[MatchNotification] open chat failed:', e)
+      // 失敗時は一覧へフォールバック
+      handleClose()
+      router.push('/chat-list')
+    }
   }
 
   if (!isVisible) return null
 
   return (
-    <div className="fixed inset-0 flex items-center justify-center bg-black/50 z-50">
+    // オーバーレイ自体のクリックで閉じる
+    <div
+      className="fixed inset-0 flex items-center justify-center bg-black/50 z-50"
+      onClick={handleClose}
+      role="dialog"
+      aria-modal="true"
+    >
       <div
         className={`
           bg-white p-6 rounded-3xl shadow-2xl w-11/12 max-w-sm mx-4
           transform transition-all duration-300 ease-out
           ${isAnimating ? 'scale-100 opacity-100' : 'scale-95 opacity-0'}
         `}
+        // 内側クリックは閉じない
+        onClick={(e) => e.stopPropagation()}
       >
         {/* ヘッダー */}
         <div className="text-center mb-4">
@@ -70,10 +105,10 @@ export default function MatchNotification({ isVisible, onClose, matchedUser, mes
             <div
               className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold text-lg"
               style={{
-                backgroundColor: `hsl(${((matchedUser?.name?.charCodeAt(0) ?? 71)* 137.5) % 360}, 70%, 60%)`
+                backgroundColor: `hsl(${(((matchedUser?.name?.charCodeAt(0) ?? 71) * 137.5) % 360)}, 70%, 60%)`,
               }}
             >
-              {matchedUser?.name.charAt(0) ?? 'G'}
+              {matchedUser?.name?.charAt(0) ?? 'G'}
             </div>
             <div>
               <p className="font-semibold text-gray-800">{matchedUser?.name ?? 'Guest'} さん</p>
@@ -89,10 +124,10 @@ export default function MatchNotification({ isVisible, onClose, matchedUser, mes
         {/* アクションボタン */}
         <div className="flex gap-3">
           <button
-            onClick={handleHistoryButton}
+            onClick={handleOpenChat}
             className="flex-1 bg-gradient-to-r from-orange-400 to-orange-500 text-white py-3 rounded-2xl font-semibold transition-transform duration-200 ease-out active:scale-95"
           >
-            履歴を見る
+            チャットを開く
           </button>
           <button
             onClick={handleClose}
