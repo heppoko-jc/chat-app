@@ -1,3 +1,5 @@
+// app/chat/[chatId]/page.tsx
+
 'use client'
 
 import React, { useEffect, useState, useRef, useCallback } from 'react'
@@ -59,23 +61,22 @@ export default function Chat() {
   const [matchHistory, setMatchHistory] = useState<{ message: string; matchedAt: string }[]>([])
 
   // ===== レイアウト参照 =====
-  const rootRef = useRef<HTMLDivElement | null>(null)
   const mainRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
   const footerRef = useRef<HTMLDivElement | null>(null)
-  const headerRef = useRef<HTMLElement | null>(null)
 
-  // iOS: keyboard-inset-height が使えるか（PWA でも可）
-  const [supportsKbEnv, setSupportsKbEnv] = useState(false)
-
-  // visualViewport 関連（ヘッダー固定 / Android のフォールバック）
-  const [vvTop, setVvTop] = useState(0)
+  // iOS/Android 共通：キーボード高さ推定（px）
   const [keyboardHeight, setKeyboardHeight] = useState(0)
+  // フッターの bottom 値（safe-area + 8px + kb）
+  const [footerBottom, setFooterBottom] = useState(8)
+
+  // ベースライン（最初の layout 高さ）
+  const baseVvHeightRef = useRef<number | null>(null)
 
   // 受信済みID（broadcast重複防止）
   const seenIdsRef = useRef<Set<string>>(new Set())
 
-  // ======= テキストエリア：自動リサイズ（最大 3 行）=======
+  // ===== テキストエリア：自動リサイズ（最大 3 行まで） =====
   const autoResizeTextarea = useCallback(() => {
     const ta = inputRef.current
     if (!ta) return
@@ -91,81 +92,15 @@ export default function Chat() {
     ta.style.overflowY = ta.scrollHeight > maxH ? 'auto' : 'hidden'
   }, [])
 
-  // ======= 最新メッセージを確実に可視化（タイミングばらつきに多段で対応）=======
-  const nudgeLastMessageVisible = useCallback(() => {
+  // ===== 最下行を確実に見せる（iOSのブレ対策でガッと下げる）=====
+  const scrollToBottom = useCallback(() => {
     const main = mainRef.current
     if (!main) return
-    const rows = main.querySelectorAll<HTMLElement>('[data-msg-row="1"]')
-    const last = rows.length ? rows[rows.length - 1] : null
-    if (last) last.scrollIntoView({ block: 'nearest', inline: 'nearest' })
-    main.scrollTop = main.scrollHeight
-  }, [])
-
-  // テキスト変更時は自動リサイズ＆可視化
-  useEffect(() => {
-    autoResizeTextarea()
-    const t0 = setTimeout(nudgeLastMessageVisible, 0)
-    const t1 = setTimeout(nudgeLastMessageVisible, 60)
-    const t2 = setTimeout(nudgeLastMessageVisible, 180)
-    return () => { clearTimeout(t0); clearTimeout(t1); clearTimeout(t2) }
-  }, [newMessage, autoResizeTextarea, nudgeLastMessageVisible])
-
-  // 初期に一度
-  useEffect(() => { autoResizeTextarea() }, [autoResizeTextarea])
-
-  // iOS CSS 機能検出
-  useEffect(() => {
-    const ok = typeof CSS !== 'undefined' && CSS.supports('bottom: calc(1px + env(keyboard-inset-height))')
-    setSupportsKbEnv(ok)
-  }, [])
-
-  // フッター/ヘッダーの実高さを CSS 変数に流し込み（main の top/bottom 計算で使用）
-  const relayout = useCallback(() => {
-    const root = rootRef.current
-    const footer = footerRef.current
-    const header = headerRef.current
-    if (!root) return
-    if (footer) root.style.setProperty('--footerH', `${Math.round(footer.getBoundingClientRect().height)}px`)
-    if (header) root.style.setProperty('--headerH', `${Math.round(header.getBoundingClientRect().height)}px`)
-  }, [])
-
-  useEffect(() => {
-    if (!footerRef.current && !headerRef.current) return
-    const obs = new ResizeObserver(() => {
-      relayout()
-      nudgeLastMessageVisible()
+    // レイアウト反映後に実行
+    requestAnimationFrame(() => {
+      main.scrollTop = main.scrollHeight
     })
-    if (footerRef.current) obs.observe(footerRef.current)
-    if (headerRef.current) obs.observe(headerRef.current)
-    relayout()
-    return () => obs.disconnect()
-  }, [relayout, nudgeLastMessageVisible])
-
-  // visualViewport でヘッダーの top とフォールバック keyboardHeight を算出
-  const recomputeViewport = useCallback(() => {
-    const w = window as Window & { visualViewport?: VisualViewport }
-    const vv = w.visualViewport
-    const layoutH = window.innerHeight
-    const vvH = vv?.height ?? layoutH
-    const top = vv?.offsetTop ?? 0
-    const kb = Math.max(0, layoutH - (vvH + top)) // Android 寄りの計算
-    setVvTop(top)
-    setKeyboardHeight(kb)
   }, [])
-
-  useEffect(() => {
-    const w = window as Window & { visualViewport?: VisualViewport }
-    const vv = w.visualViewport
-    if (!vv) return
-    const handler = () => recomputeViewport()
-    vv.addEventListener('resize', handler)
-    vv.addEventListener('scroll', handler)
-    handler()
-    return () => {
-      vv.removeEventListener('resize', handler)
-      vv.removeEventListener('scroll', handler)
-    }
-  }, [recomputeViewport])
 
   // 初期 seenID
   useEffect(() => {
@@ -220,7 +155,10 @@ export default function Chat() {
         const next = [...prev]
         const formatted: Message = {
           ...msg,
-          formattedDate: new Date(msg.createdAt).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }),
+          formattedDate: new Date(msg.createdAt).toLocaleTimeString('ja-JP', {
+            hour: '2-digit',
+            minute: '2-digit',
+          }),
         }
         if (idx !== -1) next[idx] = formatted
         else next.push(formatted)
@@ -239,7 +177,10 @@ export default function Chat() {
         )
         const formatted: Message = {
           ...msg,
-          formattedDate: new Date(msg.createdAt).toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }),
+          formattedDate: new Date(msg.createdAt).toLocaleTimeString('ja-JP', {
+            hour: '2-digit',
+            minute: '2-digit',
+          }),
         }
         const next = [...list]
         if (idx !== -1) next[idx] = formatted
@@ -275,10 +216,8 @@ export default function Chat() {
         return updated
       })
 
-      // 新着を受けたら確実に最下部が見えるように
-      setTimeout(nudgeLastMessageVisible, 0)
-      setTimeout(nudgeLastMessageVisible, 60)
-      setTimeout(nudgeLastMessageVisible, 180)
+      // 新着を受けたら一番下へ
+      scrollToBottom()
     }
 
     const handleNewMessage = (payload: { chatId: string; message: Message }) => {
@@ -290,7 +229,7 @@ export default function Chat() {
     return () => {
       socket.off('newMessage', handleNewMessage)
     }
-  }, [id, setChatData, setChatList, nudgeLastMessageVisible])
+  }, [id, setChatData, setChatList, scrollToBottom])
 
   // ===== マッチ成立のリアルタイム反映 =====
   useEffect(() => {
@@ -332,9 +271,7 @@ export default function Chat() {
         )
       })
 
-      setTimeout(nudgeLastMessageVisible, 0)
-      setTimeout(nudgeLastMessageVisible, 60)
-      setTimeout(nudgeLastMessageVisible, 180)
+      scrollToBottom()
     }
 
     const onMatchEstablished = (data: MatchPayload) => apply(data)
@@ -342,7 +279,7 @@ export default function Chat() {
     return () => {
       socket.off('matchEstablished', onMatchEstablished)
     }
-  }, [id, chatList, messages, currentUserId, setChatList, nudgeLastMessageVisible])
+  }, [id, chatList, messages, currentUserId, setChatList, scrollToBottom])
 
   // ===== 初回＆id変化時はサーバから最新を取得 =====
   useEffect(() => {
@@ -364,9 +301,7 @@ export default function Chat() {
         formatted.forEach((m) => seenIdsRef.current.add(m.id))
         setMessages(formatted)
         setChatData((prev) => ({ ...prev, [id]: formatted }))
-        setTimeout(nudgeLastMessageVisible, 0)
-        setTimeout(nudgeLastMessageVisible, 60)
-        setTimeout(nudgeLastMessageVisible, 180)
+        scrollToBottom()
       } catch (e) {
         console.error('🚨 メッセージ取得エラー:', e)
       }
@@ -374,7 +309,7 @@ export default function Chat() {
     return () => {
       aborted = true
     }
-  }, [id, setChatData, nudgeLastMessageVisible])
+  }, [id, setChatData, scrollToBottom])
 
   // ===== 既読書き込み =====
   useEffect(() => {
@@ -389,12 +324,49 @@ export default function Chat() {
     }
   }, [id, messages.length])
 
-  // メッセージ・キーボード変化で下端可視を補強
+  // ===== visualViewport による OS 差吸収（transform を使わず bottom を直接増やす）=====
+  const recomputeViewport = useCallback(() => {
+    const vv = typeof window !== 'undefined' ? window.visualViewport : undefined
+    const layoutH = window.innerHeight
+    const vvH = vv?.height ?? layoutH
+    const top = vv?.offsetTop ?? 0
+
+    // 初回に基準値を記録
+    if (baseVvHeightRef.current == null) {
+      baseVvHeightRef.current = vvH
+    }
+
+    // 2パターンで推定し、大きい方を採用
+    const kb1 = Math.max(0, layoutH - (vvH + top)) // overlay モードで正確
+    const base = baseVvHeightRef.current ?? layoutH
+    const kb2 = Math.max(0, base - vvH)            // fallback
+    const kb = Math.round(Math.max(kb1, kb2))
+
+    setKeyboardHeight(kb)
+    setFooterBottom(8 + kb)
+
+    // レイアウト反映後に最下部まで
+    scrollToBottom()
+  }, [scrollToBottom])
+
   useEffect(() => {
-    setTimeout(nudgeLastMessageVisible, 0)
-    setTimeout(nudgeLastMessageVisible, 60)
-    setTimeout(nudgeLastMessageVisible, 180)
-  }, [messages, keyboardHeight, nudgeLastMessageVisible])
+    const vv = typeof window !== 'undefined' ? window.visualViewport : undefined
+    if (!vv) return
+    const handler = () => recomputeViewport()
+    vv.addEventListener('resize', handler)
+    vv.addEventListener('scroll', handler)
+    // 初期一発
+    recomputeViewport()
+    return () => {
+      vv.removeEventListener('resize', handler)
+      vv.removeEventListener('scroll', handler)
+    }
+  }, [recomputeViewport])
+
+  // テキスト変更時は自動リサイズ
+  useEffect(() => {
+    autoResizeTextarea()
+  }, [newMessage, autoResizeTextarea])
 
   // ====== ヘッダーの相手表示 ======
   const headerName =
@@ -424,6 +396,7 @@ export default function Chat() {
     }
     setMessages((prev) => [...prev, temp])
     setChatData((prev) => ({ ...prev, [id]: [...(prev[id] || []), temp] }))
+    scrollToBottom()
 
     try {
       const res = await axios.post<Message>(`/api/chat/${id}`, { senderId, content: contentToSend })
@@ -431,6 +404,7 @@ export default function Chat() {
 
       if (seenIdsRef.current.has(saved.id)) {
         setIsSending(false)
+        // iOS でキーボードを閉じさせない
         setTimeout(() => inputRef.current?.focus(), 0)
         return
       }
@@ -485,15 +459,17 @@ export default function Chat() {
         else next.push(formatted)
         return { ...prev, [id]: next }
       })
+
+      scrollToBottom()
     } catch (e) {
       console.error('🚨 送信エラー:', e)
     } finally {
       setIsSending(false)
-      // キーボードを閉じさせない（フォーカス維持）
+      // フォーカス維持（キーボードを閉じない）
       setTimeout(() => {
         inputRef.current?.focus()
         autoResizeTextarea()
-        nudgeLastMessageVisible()
+        scrollToBottom()
       }, 0)
     }
   }
@@ -597,9 +573,6 @@ export default function Chat() {
     return result
   }
 
-  // 入力エリアの基準スペース（main の下余白の最低値）
-  const BASE_INPUT_BAR_SPACE_PX = 128
-
   if (isPreloading && messages.length === 0) {
     return (
       <div className="flex flex-col bg-white h-screen">
@@ -616,17 +589,14 @@ export default function Chat() {
     )
   }
 
+  // 入力エリアの基準スペース（キーボード非表示時の main の下余白）
+  // ↓ 以前より少し大きめ：入力欄 + ボタンを“気持ち上”に
+  const BASE_INPUT_BAR_SPACE_PX = 136
+
   return (
-    <div
-      ref={rootRef}
-      className="relative flex flex-col bg-[#f6f8fa] h-screen overflow-x-hidden"
-    >
-      {/* ヘッダー：visualViewport.offsetTop に追従（固定で見切れない） */}
-      <header
-        ref={headerRef}
-        className="fixed left-0 right-0 z-10 bg-white px-4 py-3 flex items-center border-b will-change-transform"
-        style={{ top: vvTop }}
-      >
+    <div className="flex flex-col bg-[#f6f8fa] h-screen overflow-x-hidden">
+      {/* ヘッダー（シンプル固定。iOS overlay でも押し上がらない） */}
+      <header className="fixed top-0 left-0 right-0 z-10 bg-white px-4 py-3 flex items-center border-b">
         <button onClick={() => router.push('/chat-list')} className="mr-3 focus:outline-none">
           <Image src="/icons/back.png" alt="Back" width={24} height={24} />
         </button>
@@ -659,43 +629,23 @@ export default function Chat() {
       {/* メッセージ一覧：常に「入力バー分 + キーボード分」の下余白を確保 */}
       <main
         ref={mainRef}
-        className="px-2 overflow-y-auto overflow-x-hidden scrollbar-hide"
-        style={
-          supportsKbEnv
-            ? {
-                position: 'absolute',
-                top: 'var(--headerH, 56px)',
-                left: 0,
-                right: 0,
-                bottom: `calc(max(${BASE_INPUT_BAR_SPACE_PX}px, var(--footerH, 96px)) + env(keyboard-inset-height))`,
-                overscrollBehavior: 'contain',
-              }
-            : {
-                position: 'absolute',
-                top: 'var(--headerH, 56px)',
-                left: 0,
-                right: 0,
-                bottom: `calc(max(${BASE_INPUT_BAR_SPACE_PX}px, var(--footerH, 96px)) + ${keyboardHeight}px)`,
-                overscrollBehavior: 'contain',
-              }
-        }
+        className="flex-1 px-2 pt-20 overflow-y-auto overflow-x-hidden scrollbar-hide"
+        style={{
+          // キーボード展開時に“埋もれない”ためのパディング
+          paddingBottom: `calc(${BASE_INPUT_BAR_SPACE_PX}px + ${keyboardHeight}px)`,
+          overscrollBehavior: 'contain',
+        }}
       >
         <div className="flex flex-col gap-1 py-2">{renderMessagesWithDate(messages)}</div>
       </main>
 
-      {/* 入力欄：iOSはCSS、Android/非対応はJSでキーボード直上に固定 */}
+      {/* 入力欄：transform で動かさず、bottom を直接増やす */}
       <footer
         ref={footerRef}
         className="fixed left-0 right-0 bg-white px-4 py-4 shadow-[0_-2px_10px_rgba(0,0,0,0.04)] flex items-center gap-3"
-        style={
-          supportsKbEnv
-            ? {
-                bottom: 'calc(env(safe-area-inset-bottom) + env(keyboard-inset-height) + 8px)',
-              }
-            : {
-                bottom: `calc(env(safe-area-inset-bottom) + 8px + ${keyboardHeight}px)`,
-              }
-        }
+        style={{
+          bottom: `calc(env(safe-area-inset-bottom) + ${footerBottom}px)`,
+        }}
       >
         <textarea
           ref={inputRef}
