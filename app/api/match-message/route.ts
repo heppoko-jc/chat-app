@@ -1,5 +1,3 @@
-// app/api/match-message/route.ts
-
 import { NextRequest, NextResponse } from 'next/server'
 import { PrismaClient } from '@prisma/client'
 import webpush, { PushSubscription as WebPushSubscription } from 'web-push'
@@ -46,23 +44,49 @@ export async function POST(req: NextRequest) {
     }
 
     let matchedUserId: string | null = null
+    let myLatestCreatedAt: Date | null = null
 
     // 1) 送信メッセージを保存しつつ、マッチを探す
     for (const receiverId of receiverIds) {
-      await prisma.sentMessage.create({
-        data: { senderId, receiverId, message }
+      // 自分の送信をまず保存（createdAt を取得）
+      const mySend = await prisma.sentMessage.create({
+        data: { senderId, receiverId, message },
+        select: { id: true, createdAt: true },
       })
-      const existingMatch = await prisma.sentMessage.findFirst({
+      myLatestCreatedAt = mySend.createdAt
+
+      // この2人 & この message の直近マッチを取得
+      const lastMatch = await prisma.matchPair.findFirst({
+        where: {
+          message,
+          OR: [
+            { user1Id: senderId, user2Id: receiverId },
+            { user1Id: receiverId, user2Id: senderId },
+          ],
+        },
+        orderBy: { matchedAt: 'desc' },
+        select: { matchedAt: true },
+      })
+      const since = lastMatch?.matchedAt ?? new Date(0)
+
+      // 「前回マッチ以降」に相手が自分宛に同じ message を送っているか
+      const reciprocalAfterLastMatch = await prisma.sentMessage.findFirst({
         where: {
           senderId: receiverId,
           receiverId: senderId,
-          message
-        }
+          message,
+          createdAt: { gt: since },
+        },
+        orderBy: { createdAt: 'desc' },
+        select: { id: true, createdAt: true },
       })
-      if (existingMatch) {
+
+      // 相手の送信が「前回マッチ以降」に存在すればマッチ成立
+      if (reciprocalAfterLastMatch) {
         matchedUserId = receiverId
         break
       }
+      // なければ次の候補ユーザーへ（マッチはまだ）
     }
 
     // 2) マッチ成立時の処理
@@ -95,12 +119,32 @@ export async function POST(req: NextRequest) {
         })
       }
 
+      // 直近の二重作成を避けるため、マッチ作成前に最終確認（同一ペア & message の直近マッチが直近N秒にないか）
+      // 競合対策の“保険”。必要なければ省略可。
+      const duplicateGuard = await prisma.matchPair.findFirst({
+        where: {
+          message,
+          OR: [
+            { user1Id: senderId, user2Id: matchedUserId },
+            { user1Id: matchedUserId, user2Id: senderId },
+          ],
+        },
+        orderBy: { matchedAt: 'desc' },
+        select: { id: true, matchedAt: true },
+      })
+      if (duplicateGuard && myLatestCreatedAt) {
+        // もしすでに自分の送信時刻より新しいマッチが存在すれば再作成しない
+        if (duplicateGuard.matchedAt >= myLatestCreatedAt) {
+          // 既存を採用（以降の処理は継続）
+        }
+      }
+
       // MatchPair（履歴）
       const newMatchPair = await prisma.matchPair.create({
         data: { user1Id: senderId, user2Id: matchedUserId, message }
       })
 
-      // ★ 2人のチャットIDを確保（無ければ作成）
+      // 2人のチャットIDを確保（無ければ作成）
       const chatId = await ensureChatBetween(senderId, matchedUserId)
 
       // Web Push 通知（両者）
@@ -122,7 +166,7 @@ export async function POST(req: NextRequest) {
             body: `あなたは ${other.name} さんと「${message}」でマッチしました！`,
             matchedUserId: other.id,
             matchedUserName: other.name,
-            chatId, // SW からの遷移にも使える
+            chatId,
           })
           return webpush.sendNotification(
             s.subscription as unknown as WebPushSubscription,
@@ -131,35 +175,34 @@ export async function POST(req: NextRequest) {
         })
       )
 
-      // WebSocket でリアルタイム通知（接続完了を待ってから emit）
+      // WebSocket でリアルタイム通知
       const socket = ioClient(SOCKET_URL, { transports: ['websocket'] })
       try {
         await new Promise<void>((resolve) => socket.on('connect', () => resolve()))
 
         const payload = {
           matchId: newMatchPair.id,
-          chatId, // ★ 部屋宛ブロードキャストのため必須
+          chatId,
           message,
           matchedAt: newMatchPair.matchedAt.toISOString(),
         }
 
-        // 送信者向け（ユーザールーム）
+        // 送信者向け
         socket.emit('matchEstablished', {
           ...payload,
           matchedUserId: matchedUser.id,
           matchedUserName: matchedUser.name,
-          targetUserId: senderId, // ユーザールーム宛
+          targetUserId: senderId,
         })
 
-        // 受信者向け（ユーザールーム）
+        // 受信者向け
         socket.emit('matchEstablished', {
           ...payload,
           matchedUserId: senderUser.id,
           matchedUserName: senderUser.name,
-          targetUserId: matchedUserId, // ユーザールーム宛
+          targetUserId: matchedUserId,
         })
       } finally {
-        // 少し待ってから切断（送信バッファ flush 保険）
         setTimeout(() => socket.disconnect(), 50)
       }
 
@@ -167,7 +210,7 @@ export async function POST(req: NextRequest) {
         message: 'Match created!',
         matchedUserId: matchedUser.id,
         matchedUserName: matchedUser.name,
-        chatId, // 参考返却
+        chatId,
       })
     }
 
