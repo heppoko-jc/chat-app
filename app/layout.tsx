@@ -33,6 +33,17 @@ export default function RootLayout({
   return (
     <html lang="ja">
       <head>
+        {/* ←★ これが超重要。keyboard-inset-height と safe-area を正しく使うため */}
+        <meta
+          name="viewport"
+          content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=overlays-content"
+        />
+
+        {/* iOS PWA 安定化（任意だが推奨） */}
+        <meta name="apple-mobile-web-app-capable" content="yes" />
+        <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+        <meta name="format-detection" content="telephone=no" />
+
         <link rel="manifest" href="/manifest.json" />
         <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png" />
         <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192x192.png" />
