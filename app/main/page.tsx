@@ -32,9 +32,14 @@ function getBgColor(name: string) {
   return `hsl(${h}, 70%, 80%)`
 }
 
-// 新着順（createdAt降順）で統一
-const sortByCreatedAtDesc = (arr: PresetMessage[]) =>
-  [...arr].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+// ▼「シェアされた順」：count の多い順 → 同数は作成が新しい順
+const sortBySharedThenNew = (arr: PresetMessage[]) =>
+  [...arr].sort((a, b) => {
+    const ca = a.count ?? 0
+    const cb = b.count ?? 0
+    if (cb !== ca) return cb - ca
+    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  })
 
 export default function Main() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
@@ -59,11 +64,11 @@ export default function Main() {
     message: string | null
   }>({ matchedUser: null, message: null })
 
-  // プリセットことば（新着順）
+  // プリセットことば（シェアされた順）
   const fetchPresetMessages = useCallback(async () => {
     try {
       const res = await axios.get<PresetMessage[]>('/api/preset-message')
-      setPresetMessages(sortByCreatedAtDesc(res.data))
+      setPresetMessages(sortBySharedThenNew(res.data))
     } catch (e) {
       console.error('preset取得エラー:', e)
     }
@@ -195,10 +200,15 @@ export default function Main() {
     setSelectedRecipientIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
   }
 
-  // 表示用：count>0 & 新着順
+  // 表示用：count>0 & 「シェアされた順」
   const messageOptions = presetMessages
-    .filter((m) => m.count > 0)
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+    .filter((m) => (m.count ?? 0) > 0)
+    .sort((a, b) => {
+      const ca = a.count ?? 0
+      const cb = b.count ?? 0
+      if (cb !== ca) return cb - ca
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    })
 
   const handleMessageIconClick = () => {
     if (isInputMode && inputMessage.trim()) {
@@ -234,7 +244,7 @@ export default function Main() {
     setInputMessage('')
 
     try {
-      const isPreset = presetMessages.some((m) => m.content === messageToSend && m.count > 0)
+      const isPreset = presetMessages.some((m) => m.content === messageToSend && (m.count ?? 0) > 0)
       if (!isPreset) {
         const res = await fetch('/api/preset-message', {
           method: 'POST',
@@ -243,7 +253,8 @@ export default function Main() {
         })
         if (res.ok) {
           const created: PresetMessage = await res.json()
-          setPresetMessages((prev) => sortByCreatedAtDesc([created, ...prev]))
+          // 新規作成は count 0 → 直後に送るので count を 1 として扱えるように整合する
+          setPresetMessages((prev) => sortBySharedThenNew([{ ...created, count: 1 }, ...prev]))
         } else {
           alert('ことばの登録に失敗しました')
           setIsSending(false)
@@ -252,8 +263,11 @@ export default function Main() {
           return
         }
       } else {
+        // 送信したので count を +1 して並び替え
         setPresetMessages((prev) =>
-          prev.map((m) => (m.content === messageToSend ? { ...m, count: (m.count ?? 0) + 1 } : m))
+          sortBySharedThenNew(
+            prev.map((m) => (m.content === messageToSend ? { ...m, count: (m.count ?? 0) + 1 } : m))
+          )
         )
       }
 
@@ -312,14 +326,21 @@ export default function Main() {
               <Image src="/icons/history.png" alt="Notifications" width={28} height={28} className="cursor-pointer" />
             </button>
           </div>
-          <h1 className="text-xl font-extrabold text-orange-500 tracking-tight drop-shadow-sm whitespace-nowrap" style={{ fontFamily: "'Poppins', sans-serif" }}>
+          <h1
+            className="text-xl font-extrabold text-orange-500 tracking-tight drop-shadow-sm whitespace-nowrap"
+            style={{ fontFamily: "'Poppins', sans-serif" }}
+          >
             Happy Ice Cream
           </h1>
           <div className="w-20" />
         </div>
+
+        {/* ここを要望どおりの表示に修正 */}
         <p className="text-[15px] text-gray-700 text-center leading-snug mt-1 font-medium">
-          <span className="bg-orange-100 px-2 py-0.5 rounded-xl">同じことばをシェアし合えるかな？</span>
-          <span className="text-orange-500 font-bold">{matchCount}</span> 件受信済
+          同じことばをシェアし合えるかな？<br />
+          今までにあなたは
+          <span className="text-orange-500 font-bold mx-1">{matchCount}</span>
+          件受信しました
         </p>
       </div>
 
@@ -414,9 +435,9 @@ export default function Main() {
           className="flex w-full h-full transition-transform duration-300 will-change-transform"
           style={{ transform: step === 'select-message' ? 'translateX(0%)' : 'translateX(-100%)' }}
         >
-          {/* メッセージ選択（新着順） */}
+          {/* メッセージ選択（シェアされた順） */}
           <div
-            className="basis-full flex-none box-border text-lg overflow-y-auto px-4 pt-[180px] pb-[40px]"
+            className="basis-full flex-none box-border text-lg overflow-y-auto px-4 pt=[180px] pb-[40px] pt-[180px]"
             style={{ maxHeight: 'calc(100dvh - 140px)' }}
           >
             <div className="flex flex-col gap-3">
