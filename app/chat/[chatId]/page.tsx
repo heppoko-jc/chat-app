@@ -1,3 +1,5 @@
+// app/chat/[chatId]/page.tsx
+
 'use client'
 
 import React, { useEffect, useState, useRef, useCallback } from 'react'
@@ -712,7 +714,7 @@ export default function Chat() {
           onChange={(e) => setNewMessage(e.target.value)}
           onInput={autoResizeTextarea}
           onFocus={handleFocus}
-          placeholder="メッセージを入力（改行可）"
+          placeholder="メッセージを入力"
           className="flex-1 border border-gray-200 rounded-2xl px-4 py-3 focus:outline-none bg-gray-50 text-base shadow-sm resize-none leading-6"
           style={{ height: 'auto', overflowY: 'hidden' }}
         />

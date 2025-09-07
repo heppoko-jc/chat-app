@@ -1,8 +1,7 @@
 // app/chat-list/page.tsx
-
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import axios from 'axios'
 import FixedTabBar from '../components/FixedTabBar'
@@ -14,12 +13,12 @@ export interface ChatItem {
   matchedUser: { id: string; name: string }
   matchMessage: string
   latestMessage: string
-  latestMessageAt: string | null
-  latestMessageAtRaw: string | null
+  latestMessageAt: string | null               // ← サーバから来る“生”の値はここに保持
+  latestMessageAtRaw: string | null            // ← 互換のため残すが、上と同じ“生”を入れる
   latestMessageSenderId: string | null
-  latestMessageAtDisplay?: string
+  latestMessageAtDisplay?: string              // 画面用にフォーマットした文字列
   messages: { id: string; senderId: string; content: string; createdAt: string }[]
-  matchMessageMatchedAt?: string | null
+  matchMessageMatchedAt?: string | null        // マッチ成立時刻（サーバから来る or WSで更新）
   matchHistory?: { message: string; matchedAt: string }[]
 }
 
@@ -51,6 +50,16 @@ function formatChatDate(dateString: string | null): string {
     }
   }
   return `${date.getMonth() + 1}/${date.getDate()}`
+}
+
+/**
+ * 並び順のキー：最新メッセージ時刻 or マッチ成立時刻の“新しい方”
+ * どちらも無ければ 0（= 一番下の方に沈む）
+ */
+function sortTimestampOf(chat: ChatItem): number {
+  const msgTs = chat.latestMessageAt ? new Date(chat.latestMessageAt).getTime() : 0
+  const matchTs = chat.matchMessageMatchedAt ? new Date(chat.matchMessageMatchedAt).getTime() : 0
+  return Math.max(msgTs || 0, matchTs || 0)
 }
 
 export default function ChatList() {
@@ -91,20 +100,18 @@ export default function ChatList() {
     setIsLoading(true)
     try {
       const res = await axios.get<ChatItem[]>('/api/chat-list', { headers: { userId: uid } })
-      const formatted = res.data
-        .map((c) => ({
+
+      // ⚠️ ここではソートしない（開いただけで上に来る副作用を防ぐ）
+      const formatted = res.data.map((c) => {
+        const latestRaw = c.latestMessageAt ?? null
+        return {
           ...c,
-          latestMessageAtRaw: c.latestMessageAt,
-          latestMessageAt: c.latestMessageAt
-            ? new Date(c.latestMessageAt).toLocaleString('ja-JP', {
-                month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit'
-              })
-            : ''
-        }))
-        .sort((a, b) =>
-          (b.latestMessageAt ? new Date(b.latestMessageAt).getTime() : 0) -
-          (a.latestMessageAt ? new Date(a.latestMessageAt).getTime() : 0)
-        )
+          latestMessageAt: latestRaw,               // “生”のまま保持
+          latestMessageAtRaw: latestRaw,            // 互換
+          latestMessageAtDisplay: formatChatDate(latestRaw), // 表示用
+        }
+      })
+
       setChats(formatted)
 
       // 取得した実チャットは全て join（マッチ直後の newMessage も拾えるように）
@@ -278,15 +285,19 @@ export default function ChatList() {
     }
   }
 
-  const sortedChats = [...chats].sort((a, b) => {
-    const aIsNew = newMatchChats.has(a.chatId)
-    const bIsNew = newMatchChats.has(b.chatId)
-    if (aIsNew && !bIsNew) return -1
-    if (!aIsNew && bIsNew) return 1
-    const aTime = a.latestMessageAtRaw ? new Date(a.latestMessageAtRaw).getTime() : 0
-    const bTime = b.latestMessageAtRaw ? new Date(b.latestMessageAtRaw).getTime() : 0
-    return bTime - aTime
-  })
+  /**
+   * 表示用の最終ソート：
+   *  1) 「最新メッセージ時刻 or マッチ成立時刻」の新しい方の降順
+   *  2) どちらも無い（=0）のものは元の並び（安定ソート）を維持
+   */
+  const sortedChats = useMemo(() => {
+    return [...chats].sort((a, b) => {
+      const at = sortTimestampOf(a)
+      const bt = sortTimestampOf(b)
+      if (at === bt) return 0
+      return bt - at
+    })
+  }, [chats])
 
   return (
     <div className="flex flex-col h-[100dvh] bg-gradient-to-b from-gray-50 to-white overflow-hidden">
@@ -316,6 +327,7 @@ export default function ChatList() {
               const hasOpenedMatch = openedMatchChats.has(chat.chatId)
               const isNewMatch = newMatchChats.has(chat.chatId)
               const shouldShowMatchHighlight = (isMatched && !hasOpenedMatch) || isNewMatch
+
               return (
                 <li
                   key={chat.chatId}
@@ -346,7 +358,7 @@ export default function ChatList() {
                       <span className="text-lg font-bold text-gray-800 truncate">{chat.matchedUser.name}</span>
                       <div className="flex flex-col items-end min-w-[60px]">
                         <span className="text-xs text-gray-400 font-medium whitespace-nowrap">
-                          {chat.latestMessageAtDisplay || formatChatDate(chat.latestMessageAtRaw)}
+                          {chat.latestMessageAtDisplay || formatChatDate(chat.latestMessageAt)}
                         </span>
                         {unreadCounts[chat.chatId] > 0 && !isLatestFromMe && (
                           <span className="mt-1 flex items-center justify-center w-7 h-7 rounded-full bg-gradient-to-r from-green-400 to-green-500 text-white text-xs font-bold shadow-md">
