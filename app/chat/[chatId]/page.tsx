@@ -43,6 +43,12 @@ type MatchPayload = {
   matchId?: string
 }
 
+/** visualViewport を型安全に取得 */
+function getVV(): VisualViewport | undefined {
+  if (typeof window === 'undefined') return undefined
+  return window.visualViewport ?? undefined
+}
+
 export default function Chat() {
   const router = useRouter()
   const params = useParams()
@@ -66,19 +72,20 @@ export default function Chat() {
   const footerRef = useRef<HTMLDivElement | null>(null)
   const headerRef = useRef<HTMLElement | null>(null)
 
-  // visualViewport / キーボード検知
+  // visualViewport（iOS/Android 差吸収）
   const [keyboardHeight, setKeyboardHeight] = useState(0)
-  const [shrinkMode, setShrinkMode] = useState(false) // iOS の「layout が縮む」モード
+  const [vvTop, setVvTop] = useState(0)
+  const [shrinkMode, setShrinkMode] = useState(false) // iOSの「レイアウト自体が縮む」モード
   const baseVvHeightRef = useRef<number | null>(null)
   const baseInnerHeightRef = useRef<number | null>(null)
 
-  // ヘッダー高さを実測して main の paddingTop に反映
+  // ヘッダー高さを実測（main の padding-top に使う）
   const [headerH, setHeaderH] = useState(64)
 
   // 受信済みID（broadcast重複防止）
   const seenIdsRef = useRef<Set<string>>(new Set())
 
-  // ====== テキストエリア：自動リサイズ（最大 3 行）======
+  // ======= テキストエリア：自動リサイズ（最大3行）=======
   const autoResizeTextarea = useCallback(() => {
     const ta = inputRef.current
     if (!ta) return
@@ -87,28 +94,31 @@ export default function Chat() {
     const padding =
       parseFloat(getComputedStyle(ta).paddingTop || '0') +
       parseFloat(getComputedStyle(ta).paddingBottom || '0')
-    const maxH = line * 3 + padding // 3行分まで
+    const maxH = line * 3 + padding
     const newH = Math.min(ta.scrollHeight, maxH)
     ta.style.maxHeight = `${maxH}px`
     ta.style.height = `${newH}px`
     ta.style.overflowY = ta.scrollHeight > maxH ? 'auto' : 'hidden'
   }, [])
 
-  // ====== 下端の可視保証（OS差込み）======
+  // ======= 最後のメッセージを必要なときだけ可視化 =======
   const ensureLastMessageVisible = useCallback(() => {
     const main = mainRef.current
     const footer = footerRef.current
     if (!main) return
 
+    // small コンテンツなら無理にスクロールしない（競り上がり抑止）
+    if (main.scrollHeight <= main.clientHeight + 1) return
+
     const rows = main.querySelectorAll<HTMLElement>('[data-msg-row="1"]')
     const last = rows.length ? rows[rows.length - 1] : null
     if (!last) return
 
-    const vv = (typeof window !== 'undefined' ? window.visualViewport : undefined) as VisualViewport | undefined
+    const vv = getVV()
     const viewH = vv?.height ?? window.innerHeight
-    const footerH = footer ? footer.getBoundingClientRect().height : 0
-    const effectiveKb = shrinkMode ? 0 : keyboardHeight // iOS は shrink 済みなので 0
-    const bottomSafe = viewH - (effectiveKb + footerH + 12)
+    const fH = footer ? footer.getBoundingClientRect().height : 0
+    const effectiveKb = shrinkMode ? 0 : keyboardHeight
+    const bottomSafe = viewH - (effectiveKb + fH + 12)
     const lastRect = last.getBoundingClientRect()
     const delta = lastRect.bottom - bottomSafe
     if (delta > 0) main.scrollTop += delta
@@ -156,11 +166,11 @@ export default function Chat() {
     measure()
     const onResize = () => measure()
     window.addEventListener('resize', onResize)
-    const t = setInterval(measure, 300)
-    setTimeout(() => clearInterval(t), 2000)
+    const t = window.setInterval(measure, 300)
+    window.setTimeout(() => window.clearInterval(t), 2000)
     return () => {
       window.removeEventListener('resize', onResize)
-      clearInterval(t)
+      window.clearInterval(t)
     }
   }, [])
 
@@ -342,14 +352,14 @@ export default function Chat() {
     }
   }, [id, messages.length])
 
-  // メッセージ or キーボード変化で最下部へ寄せる
+  // メッセージ/キーボード変化時に必要なときだけ最下部に寄せる
   useEffect(() => {
     ensureLastMessageVisible()
   }, [messages, keyboardHeight, shrinkMode, ensureLastMessageVisible])
 
   // ===== visualViewport による OS 差吸収 =====
   const recomputeViewport = useCallback(() => {
-    const vv = (typeof window !== 'undefined' ? window.visualViewport : undefined) as VisualViewport | undefined
+    const vv = getVV()
     const layoutH = window.innerHeight
     const vvH = vv?.height ?? layoutH
     const top = vv?.offsetTop ?? 0
@@ -357,23 +367,29 @@ export default function Chat() {
     if (baseVvHeightRef.current == null) baseVvHeightRef.current = vvH
     if (baseInnerHeightRef.current == null) baseInnerHeightRef.current = layoutH
 
-    // keyboard 高さの推定（Android 寄り & iOS 寄り）
+    // keyboard 高さ推定（Android寄り / iOS寄り）
     const kb1 = Math.max(0, layoutH - (vvH + top))
     const kb2 = Math.max(0, (baseVvHeightRef.current ?? vvH) - vvH)
     const kb = Math.max(kb1, kb2)
 
-    // shrink 判定
+    // shrink 判定（iOSはlayout自体が縮む）
     const innerDelta = Math.max(0, (baseInnerHeightRef.current ?? layoutH) - layoutH)
     const isShrink = innerDelta > kb * 0.5
 
     setKeyboardHeight(kb)
+    setVvTop(top)            // ← header を visual viewport に追従
     setShrinkMode(isShrink)
+
+    // iOSの“勝手スクロール”を抑え込み（bodyが動いたら戻す）
+    if (window.scrollY !== 0) {
+      window.scrollTo(0, 0)
+    }
 
     setTimeout(ensureLastMessageVisible, 0)
   }, [ensureLastMessageVisible])
 
   useEffect(() => {
-    const vv = (typeof window !== 'undefined' ? window.visualViewport : undefined) as VisualViewport | undefined
+    const vv = getVV()
     if (!vv) return
     const handler = () => recomputeViewport()
     vv.addEventListener('resize', handler)
@@ -483,7 +499,7 @@ export default function Chat() {
       console.error('🚨 送信エラー:', e)
     } finally {
       setIsSending(false)
-      // キーボードを閉じさせない
+      // キーボードを閉じさせない（iOS/Android 共通）
       setTimeout(() => {
         inputRef.current?.focus()
         autoResizeTextarea()
@@ -611,17 +627,19 @@ export default function Chat() {
   }
 
   return (
-    <div className="flex flex-col bg-[#f6f8fa] h-screen overflow-x-hidden">
-      {/* ヘッダー：常に固定（iOS でも見切れない） */}
+    // 画面全体を固定。ページ自体はスクロールさせない（iOSの勝手スクロール防止）
+    <div className="fixed inset-0 flex flex-col bg-[#f6f8fa] overflow-hidden">
+      {/* ヘッダー：visual viewport 上端に追従（iOSでも上へ行かない） */}
       <header
         ref={headerRef}
-        className="fixed top-0 left-0 right-0 z-10 bg-white px-4 py-3 flex items-center border-b"
+        className="fixed left-0 right-0 z-10 bg-white px-4 py-3 flex items-center border-b will-change-transform"
+        style={{ top: 0, transform: `translateY(${vvTop}px)` }}
       >
         <button onClick={() => router.push('/chat-list')} className="mr-3 focus:outline-none">
           <Image src="/icons/back.png" alt="Back" width={24} height={24} />
         </button>
         <div className="flex flex-col">
-          <div className="flex items-center">
+          <div className="flex items中心">
             <div
               className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-lg mr-2 shadow"
               style={{ backgroundColor: getBgColor(headerName) }}
@@ -646,27 +664,25 @@ export default function Chat() {
         </div>
       </header>
 
-      {/* メッセージ一覧：ヘッダー高さぶん上余白 + （Androidのみ）キーボードぶん下余白 */}
+      {/* メッセージ一覧：ヘッダー分 + vvTop 分の上余白。下は Androidのみ keyboard 分を足す */}
       <main
         ref={mainRef}
         className="flex-1 px-2 overflow-y-auto overflow-x-hidden scrollbar-hide"
         style={{
-          paddingTop: `${headerH}px`,
+          paddingTop: `${headerH + vvTop}px`,
           paddingBottom: `calc(${BASE_INPUT_BAR_SPACE_PX}px + ${shrinkMode ? 0 : keyboardHeight}px)`,
         }}
       >
-        <div className="flex flex-col gap-1 py-2">
-          {renderMessagesWithDate(messages)}
-        </div>
+        <div className="flex flex-col gap-1 py-2">{renderMessagesWithDate(messages)}</div>
       </main>
 
-      {/* 入力欄：Android は transform で上げる / iOS は 0（レイアウトが縮むため） */}
+      {/* 入力欄：Android は keyboard 分だけ上げる / iOS は0（レイアウトが縮むため） */}
       <footer
         ref={footerRef}
-        className="fixed left-0 right-0 bg-white px-4 py-3 shadow-[0_-2px_10px_rgba(0,0,0,0.04)] flex items-center gap-3"
+        className="fixed left-0 right-0 bg-white px-4 py-3 shadow-[0_-2px_10px_rgba(0,0,0,0.04)] flex items-center gap-3 will-change-transform"
         style={{
           bottom: `calc(env(safe-area-inset-bottom) + 8px)`,
-          transform: `translateY(${- (shrinkMode ? 0 : keyboardHeight)}px)`,
+          transform: `translateY(${-(shrinkMode ? 0 : keyboardHeight)}px)`,
         }}
       >
         <textarea
@@ -680,7 +696,7 @@ export default function Chat() {
           style={{ height: 'auto', overflowY: 'hidden' }}
         />
         <button
-          onMouseDown={(e) => e.preventDefault()}   // ← フォーカスを奪わずキーボードを閉じさせない
+          onMouseDown={(e) => e.preventDefault()} // フォーカス保持＝キーボード閉じない
           onTouchStart={(e) => e.preventDefault()}
           onClick={handleSend}
           className="p-3 rounded-2xl bg-green-400 hover:bg-green-500 transition shadow-lg active:scale-95"
