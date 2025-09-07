@@ -9,7 +9,7 @@ import FixedTabBar from '../components/FixedTabBar'
 import { useRouter } from 'next/navigation'
 import { useChatData, PresetMessage } from '../contexts/ChatDataContext'
 import MatchNotification from '../components/MatchNotification'
-import socket from '../socket'
+import socket, { setSocketUserId } from '../socket'     // ← 重要：再接続時も確実にユーザールーム参加
 import type { ChatItem } from '../chat-list/page'
 
 interface User {
@@ -17,6 +17,7 @@ interface User {
   name: string
   bio: string
 }
+
 type ChatListApiItem = Omit<ChatItem, 'latestMessageAtDisplay' | 'latestMessageAtRaw'> & {
   latestMessageAt: string | null
 }
@@ -31,7 +32,7 @@ function getBgColor(name: string) {
   return `hsl(${h}, 70%, 80%)`
 }
 
-// シェアされた順：count desc → createdAt desc
+// ── 「シェアされた順」：count desc → createdAt desc
 const sortBySharedThenNew = (arr: PresetMessage[]) =>
   [...arr].sort((a, b) => {
     const ca = a.count ?? 0
@@ -40,7 +41,7 @@ const sortBySharedThenNew = (arr: PresetMessage[]) =>
     return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   })
 
-// ポップアップ・キューの要素型
+// ── ポップアップ・キュー要素
 type MatchQueueItem = {
   matchId?: string
   matchedAt: string
@@ -49,7 +50,22 @@ type MatchQueueItem = {
   chatId?: string
 }
 
+// ── キュー重複排除＋成立時刻昇順マージ
+const keyOf = (i: MatchQueueItem) =>
+  `${i.matchId ?? ''}|${i.matchedUser.id}|${i.message}|${i.matchedAt}`
+const mergeQueue = (prev: MatchQueueItem[], incoming: MatchQueueItem[]) => {
+  const map = new Map<string, MatchQueueItem>()
+  for (const p of prev) map.set(keyOf(p), p)
+  for (const n of incoming) map.set(keyOf(n), n)
+  return [...map.values()].sort(
+    (a, b) => new Date(a.matchedAt).getTime() - new Date(b.matchedAt).getTime()
+  )
+}
+
 export default function Main() {
+  const router = useRouter()
+
+  // ── ステート
   const [currentUserId, setCurrentUserId] = useState<string | null>(null)
   const [users, setUsers] = useState<User[]>([])
   const [selectedMessage, setSelectedMessage] = useState<string | null>(null)
@@ -59,24 +75,23 @@ export default function Main() {
   const [step, setStep] = useState<'select-message' | 'select-recipients'>('select-message')
   const [sentMessageInfo, setSentMessageInfo] = useState<{ message: string; recipients: string[] } | null>(null)
   const [touchStartX, setTouchStartX] = useState<number | null>(null)
-  const router = useRouter()
   const [isInputMode, setIsInputMode] = useState(false)
   const [inputMessage, setInputMessage] = useState('')
   const { presetMessages, setPresetMessages, setChatList } = useChatData()
   const [isSending, setIsSending] = useState(false)
 
-  // ポップアップ・キュー
+  // ── ポップアップ・キュー
   const [matchQueue, setMatchQueue] = useState<MatchQueueItem[]>([])
   const queueHead = matchQueue[0] ?? null
   const isPopupVisible = !!queueHead
 
-  // localStorage キー
+  // ── localStorage の既読しきい値キー
   const lastSeenKey = useMemo(
     () => (currentUserId ? `last-match-popup-seen-at-${currentUserId}` : null),
     [currentUserId]
   )
 
-  // プリセットことば（シェアされた順）
+  // ── プリセット（シェア順）
   const fetchPresetMessages = useCallback(async () => {
     try {
       const res = await axios.get<PresetMessage[]>('/api/preset-message')
@@ -86,7 +101,7 @@ export default function Main() {
     }
   }, [setPresetMessages])
 
-  // チャットリスト
+  // ── チャットリスト
   const fetchChatList = useCallback(
     async (uid: string) => {
       try {
@@ -99,10 +114,7 @@ export default function Main() {
             latestMessageAtRaw: c.latestMessageAt ?? '',
             latestMessageAt: c.latestMessageAt
               ? new Date(c.latestMessageAt).toLocaleString('ja-JP', {
-                  month: '2-digit',
-                  day: '2-digit',
-                  hour: '2-digit',
-                  minute: '2-digit',
+                  month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit',
                 })
               : '',
           }))
@@ -119,7 +131,7 @@ export default function Main() {
     [setChatList]
   )
 
-  // 初期ロード
+  // ── 初期ロード
   useEffect(() => {
     const uid = localStorage.getItem('userId')
     setCurrentUserId(uid)
@@ -131,8 +143,7 @@ export default function Main() {
         .catch((e) => console.error('件数取得エラー:', e))
     }
 
-    axios
-      .get<User[]>('/api/users')
+    axios.get<User[]>('/api/users')
       .then((res) => setUsers(res.data))
       .catch((e) => console.error('ユーザー取得エラー:', e))
 
@@ -140,7 +151,7 @@ export default function Main() {
     if (uid) fetchChatList(uid)
   }, [fetchPresetMessages, fetchChatList])
 
-  // 未表示マッチの取り込み
+  // ── 非表示中に溜まったマッチを取り込み（成立順でキューへ）
   const pullPendingMatches = useCallback(async () => {
     if (!currentUserId || !lastSeenKey) return
     try {
@@ -150,14 +161,17 @@ export default function Main() {
         { headers: { userId: currentUserId } }
       )
       if (Array.isArray(res.data.items) && res.data.items.length > 0) {
-        setMatchQueue((prev) => [...prev, ...res.data.items])
+        const incoming = [...res.data.items].sort(
+          (a, b) => new Date(a.matchedAt).getTime() - new Date(b.matchedAt).getTime()
+        )
+        setMatchQueue((prev) => mergeQueue(prev, incoming))
       }
     } catch (e) {
       console.error('未表示マッチの取得失敗:', e)
     }
   }, [currentUserId, lastSeenKey])
 
-  // 可視化時に同期 & 未表示取り込み
+  // ── 可視化時：再取得＋未表示マッチ取り込み（初回も即実行）
   useEffect(() => {
     const onVis = () => {
       if (document.visibilityState === 'visible') {
@@ -168,14 +182,14 @@ export default function Main() {
       }
     }
     document.addEventListener('visibilitychange', onVis)
-    onVis() // 初回
+    onVis()
     return () => document.removeEventListener('visibilitychange', onVis)
   }, [fetchPresetMessages, fetchChatList, pullPendingMatches])
 
-  // WebSocket: マッチ通知
+  // ── ソケット：両者に通知 → 即キューへ（先送り側も即表示）
   useEffect(() => {
     if (!currentUserId) return
-    socket.emit('setUserId', currentUserId)
+    setSocketUserId(currentUserId)  // ← 再接続時の取りこぼし防止
 
     const handleMatchEstablished = (data: {
       matchId: string
@@ -189,17 +203,17 @@ export default function Main() {
       if (data.targetUserId && data.targetUserId !== currentUserId) return
 
       if (data.matchedUserId && data.matchedUserName) {
-        setMatchQueue((prev) => [
-          ...prev,
-          {
-            matchId: data.matchId,
-            matchedAt: data.matchedAt,
-            message: data.message,
-            matchedUser: { id: data.matchedUserId!, name: data.matchedUserName! },
-            chatId: data.chatId,
-          },
-        ])
+        const item: MatchQueueItem = {
+          matchId: data.matchId,
+          matchedAt: data.matchedAt,
+          message: data.message,
+          matchedUser: { id: data.matchedUserId, name: data.matchedUserName },
+          chatId: data.chatId,
+        }
+        setMatchQueue((prev) => mergeQueue(prev, [item]))
       }
+
+      // 表示情報の同期
       fetchPresetMessages()
       fetchChatList(currentUserId)
     }
@@ -210,7 +224,7 @@ export default function Main() {
     }
   }, [currentUserId, fetchPresetMessages, fetchChatList])
 
-  // スワイプ（JSXで使用）
+  // ── スワイプ（JSXに渡して使用）
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     setTouchStartX(e.touches[0].clientX)
   }, [])
@@ -233,7 +247,7 @@ export default function Main() {
     setSelectedRecipientIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
   }
 
-  // 表示用：count>0 & 「シェアされた順」
+  // ── 表示用：count>0 & シェア順
   const messageOptions = presetMessages
     .filter((m) => (m.count ?? 0) > 0)
     .sort((a, b) => {
@@ -253,7 +267,7 @@ export default function Main() {
     }
   }
 
-  // 送信
+  // ── 送信
   const handleSend = async () => {
     if (!selectedMessage) return
     if (selectedRecipientIds.length === 0) {
@@ -308,21 +322,19 @@ export default function Main() {
         message: messageToSend,
       })
 
-      // 成立 → 自分側も即キュー投入
+      // 成立 → 自分側も即キューに積む（後送/先送どちらでも）
       if (matchResponse.data.message === 'Match created!') {
         const matchedUserId = recipientsToSend.find((id) => matchResponse.data.matchedUserId === id)
         if (matchedUserId) {
           const matchedUser = users.find((u) => u.id === matchedUserId)
           if (matchedUser) {
-            setMatchQueue((prev) => [
-              ...prev,
-              {
-                matchedAt: new Date().toISOString(),
-                message: messageToSend,
-                matchedUser: { id: matchedUser.id, name: matchedUser.name },
-                chatId: matchResponse.data.chatId,
-              },
-            ])
+            const selfItem: MatchQueueItem = {
+              matchedAt: new Date().toISOString(),
+              message: messageToSend,
+              matchedUser: { id: matchedUser.id, name: matchedUser.name },
+              chatId: matchResponse.data.chatId,
+            }
+            setMatchQueue((prev) => mergeQueue(prev, [selfItem]))
           }
         }
         await Promise.all([fetchPresetMessages(), fetchChatList(currentUserId)])
@@ -343,21 +355,16 @@ export default function Main() {
     }
   }
 
-  // 送信ボタン用の分岐
   const canSend = !!selectedMessage && selectedRecipientIds.length > 0
-  const handleSendButtonClick = () => {
-    if (canSend) handleSend()
-    else handleMessageIconClick()
-  }
 
-  // レイアウト定数
+  // ── レイアウト定数
   const HEADER_H = 132
   const GAP_AFTER_HEADER = 8
   const SEND_BAR_TOTAL_H = 80
   const SEND_BAR_TOP = HEADER_H + GAP_AFTER_HEADER
   const LIST_PT = SEND_BAR_TOP + SEND_BAR_TOTAL_H + 20
 
-  // ポップアップを閉じたとき：キュー先頭を剥がし、lastSeenAt を進める
+  // ── ポップアップを閉じたとき：先頭を剥がし、しきい値を進める
   const handleClosePopup = useCallback(() => {
     if (!queueHead) return
     setMatchQueue((prev) => prev.slice(1))
@@ -370,7 +377,7 @@ export default function Main() {
 
   return (
     <>
-      {/* ヘッダー */}
+      {/* ヘッダー（高さ拡張済み） */}
       <div
         className="fixed top-0 left-0 w-full bg-gradient-to-b from-white via-orange-50 to-orange-100 z-20 px-6 pt-6 pb-3 flex flex-col items-center shadow-md rounded-b-3xl"
         style={{ minHeight: HEADER_H, height: HEADER_H }}
@@ -401,11 +408,11 @@ export default function Main() {
         </p>
       </div>
 
-      {/* 送信待機バー */}
+      {/* 送信待機バー（ヘッダー直下より少し下） */}
       <div
         className={`fixed left-6 right-6 z-30 py-2 flex items-center h-16 px-3 shadow-lg rounded-2xl border border-orange-200 transition-all duration-200
           ${
-            selectedMessage && selectedRecipientIds.length > 0
+            canSend
               ? 'bg-gradient-to-r from-orange-400 to-orange-300'
               : selectedMessage || selectedRecipientIds.length > 0
                 ? 'bg-gradient-to-r from-orange-200 to-orange-100'
@@ -473,17 +480,16 @@ export default function Main() {
         )}
 
         <button
-          onClick={handleSendButtonClick}
+          onClick={canSend ? handleSend : handleMessageIconClick}
           className="flex-none px-1 py-1 transition-transform duration-200 ease-out active:scale-125 focus:outline-none rounded-full bg-white/80 hover:bg-orange-100 shadow border border-orange-200"
           disabled={isSending}
-          aria-disabled={isSending}
           style={{ minWidth: 36, minHeight: 36 }}
         >
           <Image src={canSend ? '/icons/send.png' : '/icons/message.png'} alt="send" width={28} height={28} />
         </button>
       </div>
 
-      {/* コンテンツ（スワイプハンドラ使用） */}
+      {/* コンテンツ（スワイプ可能） */}
       <main
         className="flex-1 overflow-y-auto overflow-x-hidden bg-orange-50"
         style={{ overscrollBehavior: 'contain', touchAction: 'pan-y' }}
@@ -494,7 +500,7 @@ export default function Main() {
           className="flex w-full h-full transition-transform duration-300 will-change-transform"
           style={{ transform: step === 'select-message' ? 'translateX(0%)' : 'translateX(-100%)' }}
         >
-          {/* メッセージ選択 */}
+          {/* メッセージ選択（シェア順） */}
           <div
             className="basis-full flex-none box-border text-lg overflow-y-auto px-4 pb-[40px]"
             style={{ maxHeight: 'calc(100dvh - 160px)', paddingTop: `${LIST_PT}px` }}
