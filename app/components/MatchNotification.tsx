@@ -25,18 +25,15 @@ export default function MatchNotification({
   const router = useRouter()
   const [isAnimating, setIsAnimating] = useState(false)
 
-  // 表示切替で入退場アニメーションだけ行う（自動クローズは廃止）
+  // 表示切替で入退場アニメーションだけ行う（自動クローズは無し）
   useEffect(() => {
-    if (isVisible) setIsAnimating(true)
-    else setIsAnimating(false)
+    setIsAnimating(isVisible)
   }, [isVisible])
 
   const handleClose = () => {
     setIsAnimating(false)
-    // 退場アニメーション分だけ待ってから本体を閉じる
-    setTimeout(() => {
-      onClose()
-    }, 300)
+    // 退場アニメ分だけ待ってから閉じる
+    setTimeout(() => onClose(), 300)
   }
 
   const handleOpenChat = async () => {
@@ -48,7 +45,6 @@ export default function MatchNotification({
         return
       }
       const userId = typeof window !== 'undefined' ? localStorage.getItem('userId') : null
-      // userId が無い場合は一覧へフォールバック
       if (!userId) {
         handleClose()
         router.push('/chat-list')
@@ -60,12 +56,10 @@ export default function MatchNotification({
         { partnerId },
         { headers: { userId } }
       )
-      const chatId = res.data.chatId
       handleClose()
-      router.push(`/chat/${chatId}`)
+      router.push(`/chat/${res.data.chatId}`)
     } catch (e) {
       console.error('[MatchNotification] open chat failed:', e)
-      // 失敗時は一覧へフォールバック
       handleClose()
       router.push('/chat-list')
     }
