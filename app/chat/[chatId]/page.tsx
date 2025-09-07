@@ -2,7 +2,7 @@
 
 'use client'
 
-import React, { useEffect, useState, useRef } from 'react'
+import React, { useEffect, useState, useRef, useCallback } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import axios from 'axios'
 import socket from '@/app/socket'
@@ -60,7 +60,11 @@ export default function Chat() {
   const [isSending, setIsSending] = useState(false)
   const [matchHistory, setMatchHistory] = useState<{ message: string; matchedAt: string }[]>([])
 
+  // ===== キーボード・レイアウト制御 =====
   const mainRef = useRef<HTMLDivElement | null>(null)
+  const inputRef = useRef<HTMLTextAreaElement | null>(null)
+  const [keyboardOffset, setKeyboardOffset] = useState(0)
+  const [contentBottomInset, setContentBottomInset] = useState(0)
 
   // 受信済みID（broadcast重複防止）
   const seenIdsRef = useRef<Set<string>>(new Set())
@@ -187,23 +191,18 @@ export default function Chat() {
   useEffect(() => {
     if (!id || id.startsWith('dummy-')) return
 
-    // 相手ID（chatList > messages の順で推定）
     const partnerId =
       chatList?.find((c) => c.chatId === id)?.matchedUser.id ||
       messages.find((m) => m.sender.id !== currentUserId)?.sender.id ||
       null
 
     const apply = (data: MatchPayload) => {
-      // chatId が付いていれば厳密一致
       if (data.chatId && data.chatId !== id) return
-      // chatId が無い古い/ユーザールーム経由の保険
       if (!data.chatId && partnerId && data.matchedUserId && data.matchedUserId !== partnerId) return
 
-      // ヘッダー
       setMatchMessage(data.message)
       setMatchMessageMatchedAt(data.matchedAt)
 
-      // タイムライン用履歴（重複防止 & 昇順）
       setMatchHistory((prev) => {
         if (prev.some((m) => m.matchedAt === data.matchedAt && m.message === data.message)) return prev
         const next = [...prev, { message: data.message, matchedAt: data.matchedAt }]
@@ -211,7 +210,6 @@ export default function Chat() {
         return next
       })
 
-      // チャットリスト側も同期
       setChatList((prev) => {
         if (!prev) return prev
         return prev.map((c) =>
@@ -233,9 +231,7 @@ export default function Chat() {
     const onNewMatch = (data: MatchPayload) => apply(data)
     const onMatchEstablished = (data: MatchPayload) => apply(data)
 
-    // 部屋宛
     socket.on('newMatch', onNewMatch)
-    // ユーザールーム宛
     socket.on('matchEstablished', onMatchEstablished)
 
     return () => {
@@ -286,10 +282,57 @@ export default function Chat() {
     }
   }, [id, messages.length])
 
-  // 自動スクロール
+  // 自動スクロール（メッセージ更新時）
   useEffect(() => {
     if (mainRef.current) mainRef.current.scrollTop = mainRef.current.scrollHeight
   }, [messages])
+
+  // ===== キーボード検知（visualViewport）とインセット制御 =====
+  const recomputeBottomInset = useCallback(() => {
+    if (!mainRef.current) return
+    const main = mainRef.current
+
+    // 最後のメッセージ行（バブル）を拾う
+    const rows = main.querySelectorAll<HTMLElement>('[data-msg-row="1"]')
+    const last = rows.length ? rows[rows.length - 1] : null
+
+    const vv = typeof window !== 'undefined' ? window.visualViewport : undefined
+    const vh = vv?.height ?? window.innerHeight
+    const half = vh / 2
+
+    // 「最後のメッセージの下端」が画面の半分より下にあるか？
+    const lastBottom = last ? last.getBoundingClientRect().bottom : 0
+    const isShortTimeline = !last || lastBottom < half
+
+    // 短いタイムラインなら“せり上げ用のパディング”は 0
+    setContentBottomInset(isShortTimeline ? 0 : keyboardOffset)
+  }, [keyboardOffset])
+
+  useEffect(() => {
+    const vv = typeof window !== 'undefined' ? window.visualViewport : undefined
+    if (!vv) return
+
+    const handler = () => {
+      const currentHeight = vv.height ?? window.innerHeight
+      const offset = Math.max(0, window.innerHeight - currentHeight) // 見かけ上のKB高さ
+      setKeyboardOffset(offset)
+    }
+
+    vv.addEventListener('resize', handler)
+    vv.addEventListener('scroll', handler) // Android 対策
+    handler() // 初期計算
+
+    return () => {
+      vv.removeEventListener('resize', handler)
+      vv.removeEventListener('scroll', handler)
+    }
+  }, [])
+
+  // keyboardOffset / レイアウト変化時にボトムインセット再計算
+  useEffect(() => {
+    const r = requestAnimationFrame(recomputeBottomInset)
+    return () => cancelAnimationFrame(r)
+  }, [recomputeBottomInset, keyboardOffset, messages.length])
 
   // 送信
   const handleSend = async () => {
@@ -318,9 +361,9 @@ export default function Chat() {
       const res = await axios.post<Message>(`/api/chat/${id}`, { senderId, content: contentToSend })
       const saved = res.data
 
-      // 二重反映の最終ガード
       if (seenIdsRef.current.has(saved.id)) {
         setIsSending(false)
+        inputRef.current?.focus() // 送信後もキーボードは閉じない
         return
       }
 
@@ -378,6 +421,7 @@ export default function Chat() {
       console.error('🚨 送信エラー:', e)
     } finally {
       setIsSending(false)
+      inputRef.current?.focus() // 送信後もキーボードを閉じない
     }
   }
 
@@ -423,7 +467,8 @@ export default function Chat() {
     }
 
     let mi = 0
-    for (const msg of msgs) {
+    for (let i = 0; i < msgs.length; i++) {
+      const msg = msgs[i]
       const msgTs = new Date(msg.createdAt).getTime()
       while (mi < matches.length && new Date(matches[mi].matchedAt).getTime() <= msgTs) {
         const m = matches[mi]
@@ -440,7 +485,11 @@ export default function Chat() {
       ensureDateBar(msg.createdAt)
       const isMe = msg.sender.id === currentUserId
       result.push(
-        <div key={msg.id} className={`flex items-end ${isMe ? 'justify-end' : 'justify-start'} w-full`}>
+        <div
+          key={msg.id}
+          data-msg-row="1"
+          className={`flex items-end ${isMe ? 'justify-end' : 'justify-start'} w-full`}
+        >
           {!isMe && (
             <div
               className="w-9 h-9 rounded-full flex items-center justify-center text-white font-bold text-base mr-2 shadow"
@@ -497,9 +546,11 @@ export default function Chat() {
     )
   }
 
+  const BASE_INPUT_BAR_SPACE_PX = 128
+
   return (
     <div className="flex flex-col bg-[#f6f8fa] h-screen overflow-x-hidden">
-      {/* ヘッダー */}
+      {/* ヘッダー（常時固定） */}
       <header className="fixed top-0 left-0 right-0 z-10 bg-white px-4 py-3 flex items-center border-b">
         <button onClick={() => router.push('/chat-list')} className="mr-3 focus:outline-none">
           <Image src="/icons/back.png" alt="Back" width={24} height={24} />
@@ -530,24 +581,40 @@ export default function Chat() {
         </div>
       </header>
 
-      {/* メッセージ一覧 */}
-      <main ref={mainRef} className="flex-1 px-2 pt-20 overflow-y-auto overflow-x-hidden pb-32 scrollbar-hide">
+      {/* メッセージ一覧（底の余白を動的に調整） */}
+      <main
+        ref={mainRef}
+        className="flex-1 px-2 pt-20 overflow-y-auto overflow-x-hidden scrollbar-hide"
+        style={{
+          paddingBottom: `calc(${BASE_INPUT_BAR_SPACE_PX}px + ${contentBottomInset}px)`,
+        }}
+      >
         <div className="flex flex-col gap-1 py-2">{renderMessagesWithDate(messages)}</div>
       </main>
 
-      {/* 入力欄 */}
-      <footer className="fixed bottom-0 left-0 right-0 bg-white px-4 py-3 shadow-[0_-2px_10px_rgba(0,0,0,0.04)] flex items-center gap-2">
-        <input
-          type="text"
+      {/* 入力欄（上寄せ＋キーボード時は浮かせる） */}
+      <footer
+        className="fixed left-0 right-0 bg-white px-4 py-4 shadow-[0_-2px_10px_rgba(0,0,0,0.04)] flex items-center gap-3"
+        style={{
+          bottom: 'calc(env(safe-area-inset-bottom) + 8px)',
+          transform: `translateY(-${keyboardOffset}px)`,
+        }}
+      >
+        <textarea
+          ref={inputRef}
+          rows={1}
           value={newMessage}
           onChange={(e) => setNewMessage(e.target.value)}
-          placeholder="メッセージを入力"
-          className="flex-1 border border-gray-200 rounded-full px-4 py-2 focus:outline-none bg-gray-50 text-base shadow-sm"
+          placeholder="メッセージを入力（改行可）"
+          className={`flex-1 border border-gray-200 rounded-2xl px-4 py-3
+            focus:outline-none bg-gray-50 text-base shadow-sm
+            resize-none leading-5 h-12 max-h-24 overflow-auto`}
         />
         <button
           onClick={handleSend}
-          className="ml-2 p-2 rounded-full bg-green-400 hover:bg-green-500 transition shadow-lg"
+          className="p-3 rounded-2xl bg-green-400 hover:bg-green-500 transition shadow-lg active:scale-95"
           style={{ boxShadow: '0 2px 8px rgba(0,0,0,0.08)' }}
+          disabled={isSending || !newMessage.trim()}
         >
           <Image src={newMessage.trim() ? '/icons/send.png' : '/icons/message.png'} alt="Send" width={28} height={28} />
         </button>
