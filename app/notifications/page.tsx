@@ -1,8 +1,7 @@
 // app/notifications/page.tsx
-
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import axios from "axios";
 import Image from "next/image";
@@ -15,6 +14,10 @@ interface SentMessage {
   message: string;
   createdAt: string;
   isMatched: boolean;
+}
+
+interface ApiResponse {
+  sentMessages: SentMessage[];
 }
 
 // ──────────── ユーティリティ関数 ────────────
@@ -55,25 +58,36 @@ export default function Notifications() {
   const [userId, setUserId] = useState<string | null>(null);
   const [cancelPopup, setCancelPopup] = useState<SentMessage | null>(null);
   const [animateExit, setAnimateExit] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   const touchStart = useRef<{ x: number; y: number; time: number } | null>(null);
+
+  // セクション分割（未マッチ／マッチ済み）
+  const { unmatchedMessages, matchedMessages } = useMemo(() => {
+    const unmatched = sentMessages.filter((m) => !m.isMatched);
+    const matched = sentMessages.filter((m) => m.isMatched);
+    return { unmatchedMessages: unmatched, matchedMessages: matched };
+  }, [sentMessages]);
 
   // ──────────── データ取得 ────────────
   useEffect(() => {
     setUserId(localStorage.getItem("userId"));
   }, []);
+
   useEffect(() => {
     if (!userId) return;
-    axios
-      .get(`/api/notifications?userId=${userId}`)
-      .then((res) => {
-        // マッチ済み以外のみ表示
-        setSentMessages(
-          (res.data.sentMessages as SentMessage[]).filter((m) => !m.isMatched)
-        );
-        // res.data.matchedPairs は未使用なので参照しない
-      })
-      .catch(console.error);
+    (async () => {
+      try {
+        setIsLoading(true);
+        const res = await axios.get<ApiResponse>(`/api/notifications?userId=${userId}`);
+        // すべて保持（未マッチのみでフィルタしない）
+        setSentMessages(res.data.sentMessages);
+      } catch (e) {
+        console.error(e);
+      } finally {
+        setIsLoading(false);
+      }
+    })();
   }, [userId]);
 
   // ──────────── 画面スワイプで戻る ────────────
@@ -101,6 +115,7 @@ export default function Notifications() {
     touchStart.current = null;
   };
 
+  // ──────────── UI ────────────
   return (
     <div
       className={`
@@ -132,61 +147,142 @@ export default function Notifications() {
         </div>
         <h2 className="text-sm text-center">
           ことばをシェアした履歴です。<br />
-          右のボタンから取り消すこともできます。
+          右のボタンから取り消すこともできます（未マッチのみ）。
         </h2>
       </div>
 
-      {/* ─── スクロール可能リスト ─── */}
-      <div className="flex-1 overflow-y-auto space-y-4 pb-4">
-        {sentMessages.length > 0 ? (
-          sentMessages.map((msg) => (
-            <li
-              key={msg.id}
-              className="
-                list-none flex items-center justify-between p-3
-                bg-white shadow rounded-3xl
-                transition-all duration-300 ease-out active:scale-90
-              "
-            >
-              {/* アイコン＋送信相手＋テキスト */}
-              <div className="flex items-center gap-3 flex-1">
-                <div
-                  className="w-11 h-11 rounded-full flex items-center justify-center text-white font-bold"
-                  style={{ backgroundColor: getBgColor(msg.receiver.name) }}
-                >
-                  {msg.receiver.name.charAt(0)}
-                </div>
-                <div className="flex-1">
-                  <p className="text-sm font-semibold">To {msg.receiver.name}</p>
-                  <p className="text-medium whitespace-nowrap">{msg.message}</p>
-                </div>
-              </div>
-              {/* 日付＋moreボタン */}
-              <div className="flex gap-2">
-                {formatDate(msg.createdAt) && (
-                  <span className="text-xs text-gray-500 whitespace-nowrap">
-                    {formatDate(msg.createdAt)}
-                  </span>
-                )}
-                <button
-                  onClick={() => setCancelPopup(msg)}
-                  className="p-2 transition-transform duration-200 ease-out active:scale-90"
-                >
-                  <Image src="/icons/more.png" alt="More" width={18} height={18} />
-                </button>
-              </div>
-            </li>
-          ))
+      {/* ─── スクロール可能領域 ─── */}
+      <div className="flex-1 overflow-y-auto space-y-6 pb-4">
+        {/* ローディング */}
+        {isLoading ? (
+          <div className="flex flex-col items-center justify-center py-12">
+            <div className="w-8 h-8 border-4 border-gray-300 border-t-blue-500 rounded-full animate-spin mb-4" />
+            <p className="text-gray-500 font-medium">読み込み中…</p>
+          </div>
         ) : (
-          <p className="text-center text-gray-500">
-            読み込み中...<br />
-            または、まだことばをシェアしたことがありません。
-          </p>
+          <>
+            {/* どちらも 0 件 */}
+            {unmatchedMessages.length === 0 && matchedMessages.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-12">
+                <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
+                  <span className="text-2xl">📝</span>
+                </div>
+                <p className="text-center text-gray-500">
+                  まだことばをシェアしたことがありません。
+                </p>
+              </div>
+            ) : (
+              <>
+                {/* ─── 未マッチセクション ─── */}
+                {unmatchedMessages.length > 0 && (
+                  <section>
+                    <h3 className="text-sm font-bold text-gray-700 mb-2">
+                      まだマッチしてないことば
+                    </h3>
+                    <ul className="space-y-3">
+                      {unmatchedMessages.map((msg) => (
+                        <li
+                          key={msg.id}
+                          className="
+                            list-none flex items-center justify-between p-3
+                            bg-white shadow rounded-3xl
+                            transition-all duration-300 ease-out active:scale-90
+                          "
+                        >
+                          {/* アイコン＋送信相手＋テキスト */}
+                          <div className="flex items-center gap-3 flex-1">
+                            <div
+                              className="w-11 h-11 rounded-full flex items-center justify-center text-white font-bold"
+                              style={{ backgroundColor: getBgColor(msg.receiver.name) }}
+                            >
+                              {msg.receiver.name.charAt(0)}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-semibold truncate">
+                                To {msg.receiver.name}
+                              </p>
+                              <p className="text-medium whitespace-nowrap truncate">
+                                {msg.message}
+                              </p>
+                            </div>
+                          </div>
+                          {/* 日付＋moreボタン（未マッチのみ） */}
+                          <div className="flex items-center gap-2">
+                            {formatDate(msg.createdAt) && (
+                              <span className="text-xs text-gray-500 whitespace-nowrap">
+                                {formatDate(msg.createdAt)}
+                              </span>
+                            )}
+                            <button
+                              onClick={() => setCancelPopup(msg)}
+                              className="p-2 transition-transform duration-200 ease-out active:scale-90"
+                              aria-label="more"
+                            >
+                              <Image src="/icons/more.png" alt="More" width={18} height={18} />
+                            </button>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                )}
+
+                {/* ─── マッチ済みセクション ─── */}
+                {matchedMessages.length > 0 && (
+                  <section>
+                    <h3 className="text-sm font-bold text-gray-700 mb-2">
+                      マッチしたことば
+                    </h3>
+                    <ul className="space-y-3">
+                      {matchedMessages.map((msg) => (
+                        <li
+                          key={msg.id}
+                          className="
+                            list-none flex items-center justify-between p-3
+                            bg-white shadow rounded-3xl
+                          "
+                        >
+                          {/* アイコン＋送信相手＋テキスト */}
+                          <div className="flex items-center gap-3 flex-1">
+                            <div
+                              className="w-11 h-11 rounded-full flex items-center justify-center text-white font-bold"
+                              style={{ backgroundColor: getBgColor(msg.receiver.name) }}
+                            >
+                              {msg.receiver.name.charAt(0)}
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-sm font-semibold truncate">
+                                To {msg.receiver.name}
+                              </p>
+                              <p className="text-medium whitespace-nowrap truncate">
+                                {msg.message}
+                              </p>
+                            </div>
+                          </div>
+                          {/* 日付＋“マッチ済”バッジ（More なし） */}
+                          <div className="flex items-center gap-2">
+                            {formatDate(msg.createdAt) && (
+                              <span className="text-xs text-gray-500 whitespace-nowrap">
+                                {formatDate(msg.createdAt)}
+                              </span>
+                            )}
+                            <span className="text-xs px-2 py-1 rounded-full bg-green-100 text-green-600 font-semibold">
+                              マッチ済
+                            </span>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                )}
+              </>
+            )}
+          </>
         )}
       </div>
 
-      {/* ─── 取り消し確認ポップアップ ─── */}
-      {cancelPopup && (
+      {/* ─── 取り消し確認ポップアップ（未マッチのみ表示） ─── */}
+      {cancelPopup && !cancelPopup.isMatched && (
         <div className="fixed inset-0 flex items-center justify-center bg-black/50 z-50">
           <div className="bg-white p-5 rounded-3xl shadow-lg w-11/12 max-w-sm">
             <h3 className="text-lg font-bold mb-2">シェアの取り消し</h3>
@@ -202,23 +298,22 @@ export default function Notifications() {
             <div className="flex justify-center gap-3">
               <button
                 onClick={async () => {
-                  setCancelPopup(null);
                   const id = cancelPopup.id;
+                  setCancelPopup(null);
                   try {
                     await axios.delete("/api/cancel-message", {
                       data: { messageId: id, senderId: userId },
                     });
                     setSentMessages((prev) => prev.filter((m) => m.id !== id));
 
-                    // メインページのpresetMessagesのカウントを更新
+                    // メインページの presetMessages のカウントを更新
                     setPresetMessages((prev) => {
-                      const updated = prev.map((msg) =>
-                        msg.content === cancelPopup.message
-                          ? { ...msg, count: Math.max(0, msg.count - 1) }
-                          : msg
+                      const updated = prev.map((p) =>
+                        p.content === cancelPopup.message
+                          ? { ...p, count: Math.max(0, p.count - 1) }
+                          : p
                       );
-                      // カウントが0になったものは削除
-                      return updated.filter((msg) => msg.count > 0);
+                      return updated.filter((p) => p.count > 0);
                     });
                   } catch {
                     alert("取り消しに失敗しました");
