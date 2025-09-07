@@ -45,7 +45,6 @@ function isIOS(): boolean {
   if (typeof navigator === 'undefined') return false
   return /iP(hone|ad|od)/.test(navigator.userAgent)
 }
-
 function isStandalone(): boolean {
   if (typeof window === 'undefined') return false
   const mql = window.matchMedia && window.matchMedia('(display-mode: standalone)')
@@ -53,7 +52,6 @@ function isStandalone(): boolean {
   const nav = navigator as Navigator & { standalone?: boolean }
   return displayStandalone || !!nav.standalone
 }
-
 function getVisualViewport(): VisualViewport | undefined {
   if (typeof window === 'undefined') return undefined
   return window.visualViewport ?? undefined // null を undefined に正規化
@@ -80,17 +78,18 @@ export default function Chat() {
   const mainRef = useRef<HTMLDivElement | null>(null)
   const inputRef = useRef<HTMLTextAreaElement | null>(null)
 
-  // キーボード高さ推定（JSフォールバック用・px）
+  // JS 推定のキーボード高さ(px)
   const [keyboardHeight, setKeyboardHeight] = useState(0)
+  // UA の自動ズラし量(px) = visualViewport.offsetTop
+  const [vvTop, setVvTop] = useState(0)
 
-  // ベースライン（最初の layout 高さ）
+  // ベースライン（最初の visualViewport.height）
   const baseVvHeightRef = useRef<number | null>(null)
-
-  // iOS PWA のスパイク対策
+  // iOS PWA のスパイク平滑化
   const kbSamplesRef = useRef<number[]>([])
   const currentKbRef = useRef<number>(0)
 
-  // 受信済みID（broadcast重複防止）
+  // 受信重複ガード
   const seenIdsRef = useRef<Set<string>>(new Set())
 
   // ===== テキストエリア：自動リサイズ（最大 3 行まで） =====
@@ -232,7 +231,6 @@ export default function Chat() {
         return updated
       })
 
-      // 新着を受けたら一番下へ
       scrollToBottom()
     }
 
@@ -340,7 +338,7 @@ export default function Chat() {
     }
   }, [id, messages.length])
 
-  // ===== visualViewport で JS 側のキーボード高さを推定（CSS env のフォールバック用）=====
+  // ===== visualViewport で JS 側のキーボード高さを推定 + offsetTop を保持 =====
   const recomputeViewport = useCallback(() => {
     const vv = getVisualViewport()
     const layoutH = typeof window !== 'undefined' ? window.innerHeight : 0
@@ -352,41 +350,39 @@ export default function Chat() {
       baseVvHeightRef.current = vvH
     }
 
-    // 生の推定
+    // 生の KB 推定
     const kb1 = Math.max(0, layoutH - (vvH + top)) // overlay 正常系
     const base = baseVvHeightRef.current ?? layoutH
     const kb2 = Math.max(0, base - vvH)            // fallback
     let kbRaw = Math.round(Math.max(kb1, kb2))
 
-    // 端末差の吸収ツマミ（iOS PWA のみ）
-    const MAX_KB_RATIO = 0.55
-    const MAX_KB_PX    = 420
-    const HYSTERESIS_PX = 8
-
+    // iOS PWA のスパイク平滑化
     const isIOSDevice = isIOS()
     const isIOSStandalone = isStandalone()
     if (isIOSDevice && isIOSStandalone) {
-      if (vvH <= 0 || layoutH <= 0) return
-
-      const maxKb = Math.round(Math.min(layoutH * MAX_KB_RATIO, MAX_KB_PX))
-      const minKb = 0
-      kbRaw = Math.min(Math.max(kbRaw, minKb), maxKb)
-
+      const MAX_KB_RATIO = 0.55
+      const MAX_KB_PX    = 420
+      const HYSTERESIS_PX = 8
+      if (vvH > 0 && layoutH > 0) {
+        const maxKb = Math.round(Math.min(layoutH * MAX_KB_RATIO, MAX_KB_PX))
+        kbRaw = Math.min(Math.max(kbRaw, 0), maxKb)
+      }
       const prev = currentKbRef.current
       if (Math.abs(kbRaw - prev) < HYSTERESIS_PX) {
+        // ほぼ変化なし → 早期 return してブレを抑制
+        setVvTop(top)
         return
       }
-
       kbSamplesRef.current.push(kbRaw)
       if (kbSamplesRef.current.length > 3) kbSamplesRef.current.shift()
       const sorted = [...kbSamplesRef.current].sort((a, b) => a - b)
-      if (sorted.length >= 2) {
-        kbRaw = sorted[Math.floor(sorted.length / 2)]
-      }
+      if (sorted.length >= 2) kbRaw = sorted[Math.floor(sorted.length / 2)]
     }
 
     currentKbRef.current = kbRaw
     setKeyboardHeight(kbRaw)
+    setVvTop(top)
+
     requestAnimationFrame(scrollToBottom)
   }, [scrollToBottom])
 
@@ -396,8 +392,7 @@ export default function Chat() {
     const handler = () => recomputeViewport()
     vv.addEventListener('resize', handler)
     vv.addEventListener('scroll', handler)
-    // 初期一発
-    recomputeViewport()
+    recomputeViewport() // 初期一発
     return () => {
       vv.removeEventListener('resize', handler)
       vv.removeEventListener('scroll', handler)
@@ -409,7 +404,7 @@ export default function Chat() {
     autoResizeTextarea()
   }, [newMessage, autoResizeTextarea])
 
-  // 入力欄フォーカス時（iOS で高さ確定後にボトムへ）
+  // 入力欄フォーカス時（高さ確定後にボトムへ）
   const handleFocus = () => {
     setTimeout(() => {
       autoResizeTextarea()
@@ -447,7 +442,7 @@ export default function Chat() {
 
       if (seenIdsRef.current.has(saved.id)) {
         setIsSending(false)
-        setTimeout(() => inputRef.current?.focus(), 0)
+        setTimeout(() => inputRef.current?.focus(), 0) // キーボードは閉じない
         return
       }
 
@@ -507,9 +502,8 @@ export default function Chat() {
       console.error('🚨 送信エラー:', e)
     } finally {
       setIsSending(false)
-      // フォーカス維持（キーボードを閉じない）
       setTimeout(() => {
-        inputRef.current?.focus()
+        inputRef.current?.focus() // キーボード閉じさせない
         autoResizeTextarea()
         scrollToBottom()
       }, 0)
@@ -522,7 +516,7 @@ export default function Chat() {
     messages.find((m) => m.sender.id !== currentUserId)?.sender.name ||
     'チャット'
 
-  // ====== タイムライン描画（メッセージとマッチを時系列マージ）======
+  // ====== タイムライン描画 ======
   function renderMessagesWithDate(msgs: Message[]) {
     const result: React.ReactElement[] = []
     let lastDate = ''
@@ -621,15 +615,19 @@ export default function Chat() {
     return result
   }
 
-  // 入力エリアの基準スペース（キーボード非表示時の main の下余白）
+  // 入力エリアの基準スペース（KB 非表示時の下余白）
   const BASE_INPUT_BAR_SPACE_PX = 136
 
-  // CSS の env(keyboard-inset-height) を優先利用するための共通計算式
-  const KB_ENV_EXPR = `max(env(keyboard-inset-height, 0px), var(--kb-js, 0px))`
+  // ★ “二重持ち上げ” を避ける補正式
+  //  - RAW: キーボード高さ（CSS env or JS）
+  //  - CORR: max(0, RAW - vvTop) … UAのズレ分を差し引く
+  const KB_RAW_EXPR = `max(env(keyboard-inset-height, 0px), var(--kb-js, 0px))`
+  const KB_CORR_EXPR = `max(0px, calc(${KB_RAW_EXPR} - var(--vv-top, 0px)))`
 
-  // CSS変数を型安全に注入
-  const kbVar: React.CSSProperties & Record<'--kb-js', string> = {
+  // CSS 変数注入（any 使わず型安全に）
+  const cssVars: React.CSSProperties & Record<'--kb-js' | '--vv-top', string> = {
     ['--kb-js']: `${keyboardHeight}px`,
+    ['--vv-top']: `${vvTop}px`,
   }
 
   if (isPreloading && messages.length === 0) {
@@ -650,8 +648,11 @@ export default function Chat() {
 
   return (
     <div className="flex flex-col bg-[#f6f8fa] h-screen overflow-x-hidden">
-      {/* ヘッダー（固定） */}
-      <header className="fixed top-0 left-0 right-0 z-10 bg-white px-4 py-3 flex items-center border-b">
+      {/* ヘッダー：UAズレ(vvTop)に追従して常に見える */}
+      <header
+        className="fixed left-0 right-0 z-10 bg-white px-4 py-3 flex items-center border-b"
+        style={{ top: vvTop }}
+      >
         <button onClick={() => router.push('/chat-list')} className="mr-3 focus:outline-none">
           <Image src="/icons/back.png" alt="Back" width={24} height={24} />
         </button>
@@ -681,13 +682,13 @@ export default function Chat() {
         </div>
       </header>
 
-      {/* メッセージ一覧：入力バー分 + 正確な KB 分の下余白 */}
+      {/* メッセージ一覧：入力バー分 + “補正後KB” 分の下余白 */}
       <main
         ref={mainRef}
         className="flex-1 px-2 pt-20 overflow-y-auto overflow-x-hidden scrollbar-hide"
         style={{
-          ...kbVar,
-          paddingBottom: `calc(${BASE_INPUT_BAR_SPACE_PX}px + ${KB_ENV_EXPR})`,
+          ...cssVars,
+          paddingBottom: `calc(${BASE_INPUT_BAR_SPACE_PX}px + ${KB_CORR_EXPR})`,
           overscrollBehavior: 'contain',
         }}
       >
@@ -696,12 +697,12 @@ export default function Chat() {
         </div>
       </main>
 
-      {/* 入力欄：下端にぴったり。KB が出たらその分だけ上げる */}
+      {/* 入力欄：下端にぴったり（safe-area + 補正後KB） */}
       <footer
         className="fixed left-0 right-0 bg-white px-4 py-4 shadow-[0_-2px_10px_rgba(0,0,0,0.04)] flex items-center gap-3"
         style={{
-          ...kbVar,
-          bottom: `calc(env(safe-area-inset-bottom) + ${KB_ENV_EXPR})`,
+          ...cssVars,
+          bottom: `calc(env(safe-area-inset-bottom) + ${KB_CORR_EXPR})`,
         }}
       >
         <textarea
