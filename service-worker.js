@@ -1,4 +1,4 @@
-/* service-worker.js */
+// service-worker.js
 /* global self, clients */
 
 importScripts('https://storage.googleapis.com/workbox-cdn/releases/6.5.4/workbox-sw.js');
@@ -19,13 +19,14 @@ const normalizePath = (urlString) => {
   }
 };
 
-// iOS/Android PWA 向け：ページ側から送ってもらう状態をキャッシュ
+// アプリ前面状態（ページ側のピンガーが送ってくる）
 let foregroundState = {
-  path: '/',      // 例: '/chat/xxx', '/chat-list', '/notifications'
-  visible: false, // 参考値（iOS PWA では不正確なことがある）
-  ts: 0,          // 最終更新時刻
+  path: '/',          // 例: '/chat/xxx', '/chat-list', '/notifications' など
+  visible: false,     // document.visibilityState === 'visible'
+  focused: false,     // document.hasFocus()
+  ts: 0,              // 最終更新時刻
 };
-const STATE_TTL = 120 * 1000; // 120秒を新鮮とみなす
+const STATE_TTL = 120 * 1000; // 120秒以内なら“新鮮”とみなす
 
 const isStateFresh = () => Date.now() - foregroundState.ts < STATE_TTL;
 
@@ -36,6 +37,7 @@ self.addEventListener('message', (event) => {
     foregroundState = {
       path: normalizePath(data.path || '/'),
       visible: !!data.visible,
+      focused: !!data.focused,           // ★ 追加：フォーカスも保存
       ts: Date.now(),
     };
   }
@@ -47,7 +49,7 @@ self.addEventListener('push', (event) => {
   try { payload = event.data ? event.data.json() : {}; } catch {}
 
   const {
-    type,           // "message" | "match" 等
+    type,           // "message" | "match" など（今回の抑制では区別しない）
     chatId,         // 紐づくチャットID（可能なら常に付与）
     title = '通知',
     body = '',
@@ -55,42 +57,32 @@ self.addEventListener('push', (event) => {
 
   event.waitUntil(
     (async () => {
-      // 従来の可視クライアント検出（Chrome などでは信頼できる）
+      // 1) 現在開いているクライアント一覧
       const wins = await clients.matchAll({ type: 'window', includeUncontrolled: true });
-      const visibleClients = wins
-        .map((c) => ({
-          c,
-          path: normalizePath(c.url),
-          visible: 'visibilityState' in c ? c.visibilityState === 'visible' : false,
-        }))
-        .filter((w) => w.visible);
 
-      const anyVisibleChat = (typeof chatId === 'string' && chatId)
-        ? visibleClients.some(({ path }) => path === `/chat/${chatId}`)
-        : false;
-      const anyVisibleList = visibleClients.some(({ path }) => path === '/chat-list');
+      // 1-A) ブラウザが可視状態を返せる場合（Chrome など）
+      const anyVisibleWindow = wins.some((c) => {
+        // visibilityState は 'hidden' | 'visible' | など
+        try {
+          return 'visibilityState' in c && c.visibilityState === 'visible';
+        } catch {
+          return false;
+        }
+      });
 
-      // iOS/Android PWA のフォールバック（visible は信用しないで path だけ見る）
-      const stateFresh  = isStateFresh();
-      const stateIsChat = stateFresh && (typeof chatId === 'string' && chatId) && (foregroundState.path === `/chat/${chatId}`);
-      const stateIsList = stateFresh && (foregroundState.path === '/chat-list');
+      // 2) ページ側心拍（5s）で直近120s以内かつ、visible or focused が true
+      const freshActive = isStateFresh() && (foregroundState.visible || foregroundState.focused);
 
-      let suppress = false;
-
-      if (type === 'message') {
-        // 対象チャット or チャットリストが “表示中 or 直近で前面” なら抑制
-        suppress = anyVisibleChat || anyVisibleList || stateIsChat || stateIsList;
-      } else if (type === 'match') {
-        // マッチは常に通知（抑制したいなら上と同様の条件を足す）
-        suppress = false;
-      } else {
-        suppress = false;
+      // === ここが今回の“アプリがアクティブなら抑制”の中核 ===
+      // 画面種類やパスに関係なく、前面ならすべて抑制（message / match を問わない）
+      if (anyVisibleWindow || freshActive) {
+        return; // 抑制：通知を出さない
       }
 
-      if (suppress) return;
+      // 非アクティブ時のみ通知を表示
       return self.registration.showNotification(title, {
         body,
-        tag: `${type}:${chatId ?? ''}`,
+        tag: `${type}:${chatId ?? ''}`,  // OS側で重複通知を束ねられるように
         data: payload,
       });
     })()
@@ -105,7 +97,7 @@ self.addEventListener('notificationclick', (event) => {
 
   const targetUrl =
     type === 'match'
-      ? '/notifications'
+      ? '/main'
       : (chatId ? `/chat/${chatId}` : (matchId ? `/chat/${matchId}` : '/chat-list'));
 
   event.waitUntil(
