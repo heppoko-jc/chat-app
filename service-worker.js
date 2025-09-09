@@ -1,6 +1,5 @@
 // service-worker.js
 /* global self, clients */
-
 importScripts('https://storage.googleapis.com/workbox-cdn/releases/6.5.4/workbox-sw.js');
 
 self.addEventListener('install', () => self.skipWaiting());
@@ -13,33 +12,78 @@ workbox.precaching.precacheAndRoute(self.__WB_MANIFEST);
 const normalizePath = (urlString) => {
   try {
     const u = new URL(urlString);
-    return (u.pathname || '/').replace(/\/+$/, '') || '/'; // 末尾スラッシュ削除
+    return (u.pathname || '/').replace(/\/+$/, '') || '/';
   } catch {
     return '/';
   }
 };
 
-// アプリ前面状態（ページ側のピンガーが送ってくる）
+// ===== 前面状態（メモリ + 永続化） =====
 let foregroundState = {
-  path: '/',          // 例: '/chat/xxx', '/chat-list', '/notifications' など
-  visible: false,     // document.visibilityState === 'visible'
-  focused: false,     // document.hasFocus()
-  ts: 0,              // 最終更新時刻
+  path: '/',
+  visible: false,
+  focused: false,
+  ts: 0,
 };
-const STATE_TTL = 120 * 1000; // 120秒以内なら“新鮮”とみなす
 
-const isStateFresh = () => Date.now() - foregroundState.ts < STATE_TTL;
+const STATE_TTL_MS = 15 * 1000;               // ★ iOS 向けに短めの TTL（15s）
+const isFresh = (ts) => Date.now() - ts < STATE_TTL_MS;
 
-// ページからの状態メッセージを受け取る
+const PERSIST_CACHE = 'fg-state-v1';
+const PERSIST_URL   = '/__fg_state__';
+
+async function saveForegroundStatePersistent(state) {
+  try {
+    const cache = await caches.open(PERSIST_CACHE);
+    const res = new Response(JSON.stringify(state), { headers: { 'content-type': 'application/json' } });
+    await cache.put(PERSIST_URL, res);
+  } catch { /* noop */ }
+}
+async function readForegroundStatePersistent() {
+  try {
+    const cache = await caches.open(PERSIST_CACHE);
+    const res = await cache.match(PERSIST_URL);
+    if (!res) return null;
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
+// ページからの状態メッセージ（postMessage）
 self.addEventListener('message', (event) => {
   const data = event.data || {};
   if (data.type === 'FOREGROUND_STATE') {
     foregroundState = {
       path: normalizePath(data.path || '/'),
       visible: !!data.visible,
-      focused: !!data.focused,           // ★ 追加：フォーカスも保存
+      focused: !!data.focused,
       ts: Date.now(),
     };
+    // 永続化（SW が落ちても push 時に読める）
+    event.waitUntil(saveForegroundStatePersistent(foregroundState));
+  }
+});
+
+// ページからの状態送信（sendBeacon/Fetch フォールバック）
+self.addEventListener('fetch', (event) => {
+  const url = new URL(event.request.url);
+  if (event.request.method === 'POST' && url.pathname === '/__sw/fg') {
+    event.respondWith((async () => {
+      try {
+        const data = await event.request.json();
+        if (data && data.type === 'FOREGROUND_STATE') {
+          foregroundState = {
+            path: normalizePath(data.path || '/'),
+            visible: !!data.visible,
+            focused: !!data.focused,
+            ts: Date.now(),
+          };
+          await saveForegroundStatePersistent(foregroundState);
+        }
+      } catch { /* noop */ }
+      return new Response(null, { status: 204 });
+    })());
   }
 });
 
@@ -49,44 +93,34 @@ self.addEventListener('push', (event) => {
   try { payload = event.data ? event.data.json() : {}; } catch {}
 
   const {
-    type,           // "message" | "match" など（今回の抑制では区別しない）
-    chatId,         // 紐づくチャットID（可能なら常に付与）
+    type,                 // "message" | "match" など
+    chatId,
     title = '通知',
     body = '',
   } = payload;
 
-  event.waitUntil(
-    (async () => {
-      // 1) 現在開いているクライアント一覧
-      const wins = await clients.matchAll({ type: 'window', includeUncontrolled: true });
+  event.waitUntil((async () => {
+    // 1) 現在開いているクライアント一覧（可視判定は iOS では信用しない）
+    const wins = await clients.matchAll({ type: 'window', includeUncontrolled: true });
 
-      // 1-A) ブラウザが可視状態を返せる場合（Chrome など）
-      const anyVisibleWindow = wins.some((c) => {
-        // visibilityState は 'hidden' | 'visible' | など
-        try {
-          return 'visibilityState' in c && c.visibilityState === 'visible';
-        } catch {
-          return false;
-        }
-      });
+    // 2) 永続化された最新の前面状態を読む（SW リスタートに耐える）
+    const persisted = await readForegroundStatePersistent();
+    const activeByHeartbeat =
+      !!persisted && isFresh(persisted.ts) && (persisted.visible || persisted.focused);
 
-      // 2) ページ側心拍（5s）で直近120s以内かつ、visible or focused が true
-      const freshActive = isStateFresh() && (foregroundState.visible || foregroundState.focused);
+    // 3) 抑制判定：アプリがアクティブなら出さない
+    //    - wins.length>0 は「ページが開いている」程度の参考値（iOSは hidden になることがある）
+    const suppress = activeByHeartbeat || wins.length > 0 && activeByHeartbeat;
 
-      // === ここが今回の“アプリがアクティブなら抑制”の中核 ===
-      // 画面種類やパスに関係なく、前面ならすべて抑制（message / match を問わない）
-      if (anyVisibleWindow || freshActive) {
-        return; // 抑制：通知を出さない
-      }
+    if (suppress) return;
 
-      // 非アクティブ時のみ通知を表示
-      return self.registration.showNotification(title, {
-        body,
-        tag: `${type}:${chatId ?? ''}`,  // OS側で重複通知を束ねられるように
-        data: payload,
-      });
-    })()
-  );
+    // 非アクティブ時のみ通知を出す
+    return self.registration.showNotification(title, {
+      body,
+      tag: `${type}:${chatId ?? ''}`,
+      data: payload,
+    });
+  })());
 });
 
 // ------------ click ------------
@@ -97,7 +131,7 @@ self.addEventListener('notificationclick', (event) => {
 
   const targetUrl =
     type === 'match'
-      ? '/main'
+      ? '/main'                                  // ← マッチはメインへ
       : (chatId ? `/chat/${chatId}` : (matchId ? `/chat/${matchId}` : '/chat-list'));
 
   event.waitUntil(
