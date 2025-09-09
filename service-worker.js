@@ -1,56 +1,63 @@
-// service-worker.js
 /* global self, clients */
 importScripts('https://storage.googleapis.com/workbox-cdn/releases/6.5.4/workbox-sw.js');
 
 self.addEventListener('install', () => self.skipWaiting());
-self.addEventListener('activate', (event) => { event.waitUntil(clients.claim()); });
+self.addEventListener('activate', (event) => {
+  event.waitUntil((async () => {
+    await clients.claim();
+    // 起動時に保存済みバッジを復元
+    const c = await readBadgeFromCache();
+    badgeCount = c;
+    try { await self.registration.setAppBadge?.(badgeCount); } catch {}
+  })());
+});
 
-// Workbox InjectManifest：ビルド時に __WB_MANIFEST が差し込まれる
+// Workbox InjectManifest
 workbox.precaching.precacheAndRoute(self.__WB_MANIFEST);
 
-// ------------ 共有ヘルパ ------------
+// ---------- 共有ヘルパ ----------
 const normalizePath = (urlString) => {
   try {
     const u = new URL(urlString);
     return (u.pathname || '/').replace(/\/+$/, '') || '/';
-  } catch {
-    return '/';
-  }
+  } catch { return '/'; }
 };
 
-// ===== 前面状態（メモリ + 永続化） =====
-let foregroundState = {
-  path: '/',
-  visible: false,
-  focused: false,
-  ts: 0,
-};
+// フロントからの“前面状態”
+let foregroundState = { path: '/', visible: false, focused: false, ts: 0 };
+const STATE_TTL = 120 * 1000;
+const isStateFresh = () => Date.now() - foregroundState.ts < STATE_TTL;
 
-const STATE_TTL_MS = 15 * 1000;               // ★ iOS 向けに短めの TTL（15s）
-const isFresh = (ts) => Date.now() - ts < STATE_TTL_MS;
+// ★ バッジカウント（SW内に保持し、CacheStorageにも保存）
+let badgeCount = 0;
+const BADGE_CACHE = 'app-badge';
+const BADGE_URL   = '/__badge__';
 
-const PERSIST_CACHE = 'fg-state-v1';
-const PERSIST_URL   = '/__fg_state__';
-
-async function saveForegroundStatePersistent(state) {
+async function readBadgeFromCache() {
   try {
-    const cache = await caches.open(PERSIST_CACHE);
-    const res = new Response(JSON.stringify(state), { headers: { 'content-type': 'application/json' } });
-    await cache.put(PERSIST_URL, res);
-  } catch { /* noop */ }
+    const cache = await caches.open(BADGE_CACHE);
+    const res = await cache.match(BADGE_URL);
+    if (!res) return 0;
+    const data = await res.json();
+    return data?.count | 0;
+  } catch { return 0; }
 }
-async function readForegroundStatePersistent() {
+async function writeBadgeToCache(n) {
   try {
-    const cache = await caches.open(PERSIST_CACHE);
-    const res = await cache.match(PERSIST_URL);
-    if (!res) return null;
-    return await res.json();
-  } catch {
-    return null;
-  }
+    const cache = await caches.open(BADGE_CACHE);
+    await cache.put(BADGE_URL, new Response(JSON.stringify({ count: n }), {
+      headers: { 'content-type': 'application/json' }
+    }));
+  } catch {}
 }
+async function setBadge(n) {
+  badgeCount = Math.max(0, n | 0);
+  try { await self.registration.setAppBadge?.(badgeCount); } catch {}
+  await writeBadgeToCache(badgeCount);
+}
+async function incBadge(delta = 1) { await setBadge(badgeCount + (delta | 0)); }
 
-// ページからの状態メッセージ（postMessage）
+// ---------- フロントからの message ----------
 self.addEventListener('message', (event) => {
   const data = event.data || {};
   if (data.type === 'FOREGROUND_STATE') {
@@ -60,61 +67,63 @@ self.addEventListener('message', (event) => {
       focused: !!data.focused,
       ts: Date.now(),
     };
-    // 永続化（SW が落ちても push 時に読める）
-    event.waitUntil(saveForegroundStatePersistent(foregroundState));
+  } else if (data.type === 'BADGE_SET') {
+    event.waitUntil(setBadge(data.count | 0));
+  } else if (data.type === 'BADGE_DECREMENT') {
+    const d = Math.max(0, data.delta | 0);
+    event.waitUntil(setBadge(badgeCount - d));
   }
 });
 
-// ページからの状態送信（sendBeacon/Fetch フォールバック）
+// ---------- iOS対策：/__sw/fg への sendBeacon/keepalive fetch も受ける ----------
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
-  if (event.request.method === 'POST' && url.pathname === '/__sw/fg') {
+  if (url.pathname === '/__sw/fg' && event.request.method === 'POST') {
     event.respondWith((async () => {
-      try {
-        const data = await event.request.json();
-        if (data && data.type === 'FOREGROUND_STATE') {
-          foregroundState = {
-            path: normalizePath(data.path || '/'),
-            visible: !!data.visible,
-            focused: !!data.focused,
-            ts: Date.now(),
-          };
-          await saveForegroundStatePersistent(foregroundState);
-        }
-      } catch { /* noop */ }
-      return new Response(null, { status: 204 });
+      let body = {};
+      try { body = await event.request.json(); } catch {}
+      if (body?.type === 'FOREGROUND_STATE') {
+        foregroundState = {
+          path: normalizePath(body.path || '/'),
+          visible: !!body.visible,
+          focused: !!body.focused,
+          ts: Date.now(),
+        };
+      }
+      return new Response(JSON.stringify({ ok: true }), {
+        headers: { 'content-type': 'application/json' }
+      });
     })());
   }
 });
 
-// ------------ push ------------
+// ---------- push ----------
 self.addEventListener('push', (event) => {
   let payload = {};
   try { payload = event.data ? event.data.json() : {}; } catch {}
 
-  const {
-    type,                 // "message" | "match" など
-    chatId,
-    title = '通知',
-    body = '',
-  } = payload;
+  const { type, chatId, title = '通知', body = '', unreadTotal } = payload;
 
   event.waitUntil((async () => {
-    // 1) 現在開いているクライアント一覧（可視判定は iOS では信用しない）
+    // “アプリがアクティブなら通知抑制”
     const wins = await clients.matchAll({ type: 'window', includeUncontrolled: true });
+    const anyVisibleWindow = wins.some((c) => {
+      try { return 'visibilityState' in c && c.visibilityState === 'visible'; } catch { return false; }
+    });
+    const freshActive = isStateFresh() && (foregroundState.visible || foregroundState.focused);
 
-    // 2) 永続化された最新の前面状態を読む（SW リスタートに耐える）
-    const persisted = await readForegroundStatePersistent();
-    const activeByHeartbeat =
-      !!persisted && isFresh(persisted.ts) && (persisted.visible || persisted.focused);
+    // バッジはアクティブでも加算（= 未読として積む）
+    if (typeof unreadTotal === 'number') {
+      await setBadge(unreadTotal | 0);
+    } else if (type === 'message') {
+      await incBadge(1);
+    }
 
-    // 3) 抑制判定：アプリがアクティブなら出さない
-    //    - wins.length>0 は「ページが開いている」程度の参考値（iOSは hidden になることがある）
-    const suppress = activeByHeartbeat || wins.length > 0 && activeByHeartbeat;
+    if (anyVisibleWindow || freshActive) {
+      // 通知は出さない（抑制）
+      return;
+    }
 
-    if (suppress) return;
-
-    // 非アクティブ時のみ通知を出す
     return self.registration.showNotification(title, {
       body,
       tag: `${type}:${chatId ?? ''}`,
@@ -123,7 +132,7 @@ self.addEventListener('push', (event) => {
   })());
 });
 
-// ------------ click ------------
+// ---------- click ----------
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   const data = event.notification?.data || {};
@@ -131,16 +140,14 @@ self.addEventListener('notificationclick', (event) => {
 
   const targetUrl =
     type === 'match'
-      ? '/main'                                  // ← マッチはメインへ
+      ? '/main'
       : (chatId ? `/chat/${chatId}` : (matchId ? `/chat/${matchId}` : '/chat-list'));
 
-  event.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((wins) => {
-      const targetPath = normalizePath(targetUrl);
-      for (const w of wins) {
-        if (normalizePath(w.url) === targetPath) return w.focus();
-      }
-      return clients.openWindow(targetUrl);
-    })
-  );
+  event.waitUntil(clients.matchAll({ type: 'window', includeUncontrolled: true }).then((wins) => {
+    const targetPath = normalizePath(targetUrl);
+    for (const w of wins) {
+      if (normalizePath(w.url) === targetPath) return w.focus();
+    }
+    return clients.openWindow(targetUrl);
+  }));
 });

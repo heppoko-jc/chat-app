@@ -9,6 +9,41 @@ import socket from '@/app/socket'
 import Image from 'next/image'
 import { useChatData } from '@/app/contexts/ChatDataContext'
 
+type BadgeCapableNavigator = Navigator & {
+  serviceWorker?: {
+    ready?: Promise<ServiceWorkerRegistration>
+  }
+}
+
+async function getSWRegistration(): Promise<ServiceWorkerRegistration | null> {
+  try {
+    if (typeof navigator === 'undefined') return null
+    const nav = navigator as unknown as BadgeCapableNavigator
+    const ready = nav.serviceWorker?.ready
+    if (!ready) return null
+    const reg = await ready
+    return reg ?? null
+  } catch {
+    return null
+  }
+}
+
+/** SW にメッセージ送る（存在すれば） */
+async function postToSW(msg: unknown) {
+  try {
+    const reg = await getSWRegistration()
+    reg?.active?.postMessage(msg)
+  } catch {
+    // noop
+  }
+}
+
+/** 既読にした分を OS バッジから差し引く（合計は SW が保持） */
+function decrementBadge(delta: number) {
+  const d = Math.max(0, delta | 0)
+  if (d > 0) postToSW({ type: 'BADGE_DECREMENT', delta: d })
+}
+
 function getInitials(name: string) {
   return name.split(' ').map((w) => w.charAt(0)).join('').toUpperCase()
 }
@@ -327,10 +362,27 @@ export default function Chat() {
     }
   }, [id, setChatData, scrollToBottom])
 
-  // ===== 既読書き込み =====
+  // ===== 既読書き込み（★ 未読分だけバッジ減算を追加） =====
   useEffect(() => {
     if (!id || id.startsWith('dummy-')) return
-    const write = () => localStorage.setItem(`chat-last-read-${id}`, new Date().toISOString())
+
+    const computeUnreadDelta = () => {
+      const uid = typeof window !== 'undefined' ? localStorage.getItem('userId') : null
+      if (!uid) return 0
+      const lastRead = localStorage.getItem(`chat-last-read-${id}`)
+      const lastReadTime = lastRead ? new Date(lastRead).getTime() : 0
+      return messages.filter(
+        (m) => new Date(m.createdAt).getTime() > lastReadTime && m.sender.id !== uid
+      ).length
+    }
+
+    const write = () => {
+      // 既読書き込みの直前に、このチャットの未読件数を差し引く
+      const delta = computeUnreadDelta()
+      if (delta > 0) decrementBadge(delta)
+      localStorage.setItem(`chat-last-read-${id}`, new Date().toISOString())
+    }
+
     write()
     const onVis = () => { if (document.visibilityState === 'visible') write() }
     document.addEventListener('visibilitychange', onVis)
@@ -338,7 +390,7 @@ export default function Chat() {
       write()
       document.removeEventListener('visibilitychange', onVis)
     }
-  }, [id, messages.length])
+  }, [id, messages])
 
   // ===== visualViewport で JS 側のキーボード高さを推定 + offsetTop を保持 =====
   const recomputeViewport = useCallback(() => {
