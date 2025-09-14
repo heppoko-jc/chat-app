@@ -201,13 +201,13 @@ export default function Notifications() {
                               <p className="text-sm font-semibold truncate">
                                 To {msg.receiver.name}
                               </p>
-                              <p className="text-medium whitespace-nowrap truncate">
+                              <p className="text-medium whitespace-normal break-words">
                                 {msg.message}
                               </p>
                             </div>
                           </div>
                           {/* 日付＋moreボタン（未マッチのみ） */}
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-none shrink-0">
                             {formatDate(msg.createdAt) && (
                               <span className="text-xs text-gray-500 whitespace-nowrap">
                                 {formatDate(msg.createdAt)}
@@ -254,13 +254,13 @@ export default function Notifications() {
                               <p className="text-sm font-semibold truncate">
                                 To {msg.receiver.name}
                               </p>
-                              <p className="text-medium whitespace-nowrap truncate">
+                              <p className="text-medium whitespace-normal break-words">
                                 {msg.message}
                               </p>
                             </div>
                           </div>
                           {/* 日付＋“マッチ済”バッジ（More なし） */}
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-2 flex-none shrink-0">
                             {formatDate(msg.createdAt) && (
                               <span className="text-xs text-gray-500 whitespace-nowrap">
                                 {formatDate(msg.createdAt)}
