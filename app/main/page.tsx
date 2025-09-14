@@ -537,7 +537,7 @@ export default function Main() {
                       borderColor: selectedRecipientIds.includes(u.id) ? '#ea580c' : '#fed7aa',
                     }}
                   >
-                    <div className="w-10 h-10 rounded-full flex items-center justify-center text白 font-bold shadow" style={{ backgroundColor: getBgColor(u.name) }}>
+                    <div className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold shadow" style={{ backgroundColor: getBgColor(u.name) }}>
                       {getInitials(u.name)}
                     </div>
                     <div className="flex-1 min-w-0">
