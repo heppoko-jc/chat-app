@@ -1,5 +1,13 @@
 {
     "buildCommand": "npx prisma generate && npm run build",
     
-    "ignoreCommand": "git diff --quiet HEAD^ HEAD -- prisma/schema.prisma"
+    "ignoreCommand": "git diff --quiet HEAD^ HEAD -- prisma/schema.prisma",
+
+    "crons": [
+    {
+      "path": "/api/cron/digest-18",
+      "schedule": "0 9 * * *"
+    }
+  ]
+  
   }

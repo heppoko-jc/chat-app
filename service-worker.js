@@ -150,12 +150,14 @@ self.addEventListener('push', (event) => {
   try { payload = event.data ? event.data.json() : {}; } catch {}
 
   const {
-    type,                 // "message" | "match" など
+    type,                 // "message" | "match" | "digest_user" | "digest_global" など
     chatId,
     title = '通知',
     body  = '',
     // 任意: サーバが与える増分（無ければ 1）
     badgeDelta,
+    // 任意: 同じダイジェストの重複抑止に使える識別子（あれば tag に反映）
+    digestKey,
   } = payload;
 
   event.waitUntil((async () => {
@@ -167,24 +169,30 @@ self.addEventListener('push', (event) => {
     const isActiveByHeartbeat = !!persisted && isFresh(persisted.ts) && (persisted.visible || persisted.focused);
 
     // 3) まずバッジ更新（アプリが起動していなくても増える）
-    //    - メッセージ系だけを未読としてカウント（必要なら type で条件調整）
+    //    - メッセージ系だけを未読としてカウント（digest はカウントしない）
     if (type === 'message') {
       const inc = Number.isFinite(badgeDelta) ? (badgeDelta|0) : 1;
       await adjustBadge(+inc);
     }
 
-    // 4) 抑制判定：アプリが「直近 15s 以内に前面」であれば通知は出さない
-    const suppress = isActiveByHeartbeat || (wins.length > 0 && isActiveByHeartbeat);
+    // 4) 抑制判定
+    const isDigest = type === 'digest_user' || type === 'digest_global';
+    // 普通の message/match は「前面なら抑制」、
+    // ダイジェストは“確実に届かせたい”ケースとして抑制しない（= 常に表示）
+    const suppress = isDigest ? false : (isActiveByHeartbeat || (wins.length > 0 && isActiveByHeartbeat));
 
     if (suppress) return;
 
-    // 5) 非アクティブ時のみ通知表示
+    // 5) 通知表示
+    const tagBase =
+      isDigest
+        ? `digest:${digestKey || ''}:${type}`           // digest はまとまるように
+        : `${type}:${chatId ?? ''}`;                    // 既存の tag を踏襲
     return self.registration.showNotification(title, {
       body,
-      tag: `${type}:${chatId ?? ''}`,
+      tag: tagBase,
       data: payload,
-      // badge オプションは一部環境のみ（無くても害はない）
-      // badge: '/icons/badge.png',
+      // badge: '/icons/badge.png', // 必要なら用意
     });
   })());
 });
@@ -196,7 +204,9 @@ self.addEventListener('notificationclick', (event) => {
   const { type, matchId, chatId } = data;
 
   const targetUrl =
-    type === 'match'
+    // digest は利用導線としてチャット一覧へ（必要なら '/main' 等に変更可）
+    (type === 'digest_user' || type === 'digest_global') ? '/main'
+    : type === 'match'
       ? '/main'
       : (chatId ? `/chat/${chatId}` : (matchId ? `/chat/${matchId}` : '/chat-list'));
 

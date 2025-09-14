@@ -30,14 +30,9 @@ function getBgColor(name: string) {
   return `hsl(${h}, 70%, 80%)`
 }
 
-// 「シェアされた順」：count desc → createdAt desc
-const sortBySharedThenNew = (arr: PresetMessage[]) =>
-  [...arr].sort((a, b) => {
-    const ca = a.count ?? 0
-    const cb = b.count ?? 0
-    if (cb !== ca) return cb - ca
-    return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-  })
+// 「最新順」：createdAt desc
+const sortByNewest = (arr: PresetMessage[]) =>
+  [...arr].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
 
 // ── ポップアップ・キュー要素
 type MatchQueueItem = {
@@ -88,11 +83,11 @@ export default function Main() {
     [currentUserId]
   )
 
-  // プリセットことば（シェア順）
+  // プリセットことば（最新順）
   const fetchPresetMessages = useCallback(async () => {
     try {
       const res = await axios.get<PresetMessage[]>('/api/preset-message')
-      setPresetMessages(sortBySharedThenNew(res.data))
+      setPresetMessages(sortByNewest(res.data))
     } catch (e) {
       console.error('preset取得エラー:', e)
     }
@@ -249,15 +244,10 @@ export default function Main() {
     setSelectedRecipientIds((prev) => (prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]))
   }
 
-  // 表示用：count>0 & 「シェア順」
+  // 表示用：count>0 & 「最新順」
   const messageOptions = presetMessages
     .filter((m) => (m.count ?? 0) > 0)
-    .sort((a, b) => {
-      const ca = a.count ?? 0
-      const cb = b.count ?? 0
-      if (cb !== ca) return cb - ca
-      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    })
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
 
   const handleMessageIconClick = () => {
     if (isInputMode && inputMessage.trim()) {
@@ -302,7 +292,7 @@ export default function Main() {
         })
         if (res.ok) {
           const created: PresetMessage = await res.json()
-          setPresetMessages((prev) => sortBySharedThenNew([{ ...created, count: 1 }, ...prev]))
+          setPresetMessages((prev) => sortByNewest([{ ...created, count: 1 }, ...prev]))
         } else {
           alert('ことばの登録に失敗しました')
           setIsSending(false)
@@ -312,7 +302,7 @@ export default function Main() {
         }
       } else {
         setPresetMessages((prev) =>
-          sortBySharedThenNew(
+          sortByNewest(
             prev.map((m) => (m.content === messageToSend ? { ...m, count: (m.count ?? 0) + 1 } : m))
           )
         )
@@ -449,7 +439,7 @@ export default function Main() {
           ) : (
             <span
               onClick={() => setSelectedMessage(null)}
-              className="px-3 py-2 rounded-xl font-bold cursor-pointer bg-white/80 text-orange-600 shadow border border-orange-200 hover:bg-orange-100 transition"
+              className="px-3 py-2 rounded-xl font-bold cursor-pointer bg白/80 text-orange-600 shadow border border-orange-200 hover:bg-orange-100 transition"
             >
               {selectedMessage}
             </span>
@@ -502,7 +492,7 @@ export default function Main() {
           className="flex w-full h-full transition-transform duration-300 will-change-transform"
           style={{ transform: step === 'select-message' ? 'translateX(0%)' : 'translateX(-100%)' }}
         >
-          {/* メッセージ選択（シェア順） */}
+          {/* メッセージ選択（最新順） */}
           <div
             className="basis-full flex-none box-border text-lg overflow-y-auto px-4 pb-[40px]"
             style={{ maxHeight: 'calc(100dvh - 160px)', paddingTop: `${LIST_PT}px` }}
@@ -547,7 +537,7 @@ export default function Main() {
                       borderColor: selectedRecipientIds.includes(u.id) ? '#ea580c' : '#fed7aa',
                     }}
                   >
-                    <div className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold shadow" style={{ backgroundColor: getBgColor(u.name) }}>
+                    <div className="w-10 h-10 rounded-full flex items-center justify-center text白 font-bold shadow" style={{ backgroundColor: getBgColor(u.name) }}>
                       {getInitials(u.name)}
                     </div>
                     <div className="flex-1 min-w-0">
@@ -563,7 +553,7 @@ export default function Main() {
 
       {/* リスト切替トグル */}
       <div
-        className="fixed left-4 right-4 z-30 bg-white py-2 px-4 rounded-3xl shadow-lg border border-orange-200"
+        className="固定 left-4 right-4 z-30 bg-white py-2 px-4 rounded-3xl shadow-lg border border-orange-200"
         style={{ bottom: 'calc(76px + env(safe-area-inset-bottom))' }}
       >
         <div className="relative flex">
