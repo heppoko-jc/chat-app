@@ -472,6 +472,7 @@ export default function Main() {
           あなたは現在、マッチの可能性が
           <span className="text-orange-500 font-bold mx-1">{matchCount}</span>
           件あります
+          {/* 取り消されたメッセージは自動的に除外される */}
         </p>
       </div>
 
