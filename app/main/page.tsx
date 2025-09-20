@@ -606,7 +606,7 @@ export default function Main() {
                 >
                   <span className="truncate">{msg.content}</span>
                   <span className="text-xs text-gray-500 ml-2 whitespace-nowrap">
-                    {msg.count}回シェアされました
+                    {msg.count}人がシェアしました
                   </span>
                 </button>
               ))}
