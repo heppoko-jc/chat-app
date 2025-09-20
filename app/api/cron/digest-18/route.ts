@@ -5,6 +5,49 @@ import webpush, { PushSubscription as WebPushSubscription } from "web-push";
 
 const prisma = new PrismaClient();
 
+// メイン画面と同じロジック：マッチしていない受信メッセージの件数を取得
+async function getUnmatchedMessageCount(userId: string): Promise<number> {
+  try {
+    // 自分が受信したメッセージのうち、マッチしていないものをカウント
+    const unmatchedMessages = await prisma.sentMessage.findMany({
+      where: {
+        receiverId: userId,
+      },
+      select: {
+        id: true,
+        senderId: true,
+        message: true,
+        createdAt: true,
+      },
+    });
+
+    let unmatchedCount = 0;
+
+    for (const receivedMessage of unmatchedMessages) {
+      // このメッセージについて、マッチが成立しているかチェック
+      const matchExists = await prisma.matchPair.findFirst({
+        where: {
+          message: receivedMessage.message,
+          OR: [
+            { user1Id: receivedMessage.senderId, user2Id: userId },
+            { user1Id: userId, user2Id: receivedMessage.senderId },
+          ],
+        },
+      });
+
+      // マッチが存在しない場合のみカウント
+      if (!matchExists) {
+        unmatchedCount++;
+      }
+    }
+
+    return unmatchedCount;
+  } catch (error) {
+    console.error("Error counting unmatched messages:", error);
+    return 0;
+  }
+}
+
 webpush.setVapidDetails(
   "mailto:you@domain.com",
   process.env.VAPID_PUBLIC_KEY!,
@@ -32,7 +75,10 @@ function jstWindowUtc() {
   const startUTC = new Date(Date.UTC(y, m, d, -9, 0, 0));
   const endUTC = new Date(Date.UTC(y, m, d, 9, 0, 0));
   // 返す文字列キー（任意、ログ用）
-  const dateKey = `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
+  const dateKey = `${y}-${String(m + 1).padStart(2, "0")}-${String(d).padStart(
+    2,
+    "0"
+  )}`;
   return { startUTC, endUTC, dateKey };
 }
 
@@ -42,7 +88,9 @@ async function sendToSubs(
   payload: string
 ): Promise<string[]> {
   const results = await Promise.allSettled(
-    subs.map((s) => webpush.sendNotification(s.subscription as WebPushSubscription, payload))
+    subs.map((s) =>
+      webpush.sendNotification(s.subscription as WebPushSubscription, payload)
+    )
   );
   const toDeactivate: string[] = [];
   results.forEach((r, idx) => {
@@ -60,25 +108,21 @@ export async function GET() {
   try {
     const { startUTC, endUTC, dateKey } = jstWindowUtc();
 
-    // 1) 個人：receiverId ごとに、その日 0-18 時の sentMessage 件数を集計
-    const personalCounts = await prisma.sentMessage.groupBy({
-      by: ["receiverId"],
-      where: { createdAt: { gte: startUTC, lt: endUTC } },
-      _count: { _all: true },
-    });
-
-    // 2) 全体：その日 0-18 時の presetMessage 件数
+    // 1) 全体：その日 0-18 時の presetMessage 件数
     const globalCount = await prisma.presetMessage.count({
       where: { createdAt: { gte: startUTC, lt: endUTC } },
     });
 
-    // 3) 有効な Push 購読を取得して userId → 購読配列にマップ
+    // 2) 有効な Push 購読を取得して userId → 購読配列にマップ
     const allActiveSubs = await prisma.pushSubscription.findMany({
       where: { isActive: true },
       select: { endpoint: true, subscription: true, userId: true },
     });
 
-    const subsByUser = new Map<string, { endpoint: string; subscription: unknown }[]>();
+    const subsByUser = new Map<
+      string,
+      { endpoint: string; subscription: unknown }[]
+    >();
     for (const s of allActiveSubs) {
       const arr = subsByUser.get(s.userId) ?? [];
       arr.push({ endpoint: s.endpoint, subscription: s.subscription });
@@ -88,18 +132,17 @@ export async function GET() {
     // 無効化対象 endpoint を集約する集合（重複排除）
     const endpointsToDeactivate = new Set<string>();
 
-    // 4) 個人配信（0 件のユーザーはスキップ）
-    for (const row of personalCounts) {
-      const count = row._count._all;
-      if (!count) continue;
-
-      const subs = subsByUser.get(row.receiverId);
+    // 3) 個人配信（マッチしていない受信メッセージの件数）
+    for (const [userId, subs] of subsByUser) {
       if (!subs?.length) continue;
+
+      const unmatchedCount = await getUnmatchedMessageCount(userId);
+      if (unmatchedCount === 0) continue;
 
       const payload = JSON.stringify({
         type: "digest_user",
         title: "マッチングチャンス！",
-        body: `あなたは現在、${count}件のマッチの可能性があります`,
+        body: `あなたは現在、${unmatchedCount}件のマッチの可能性があります`,
         dateKey,
       });
 
@@ -130,8 +173,11 @@ export async function GET() {
 
     return NextResponse.json({
       ok: true,
-      windowUtc: { startUTC: startUTC.toISOString(), endUTC: endUTC.toISOString() },
-      personalRecipients: personalCounts.length,
+      windowUtc: {
+        startUTC: startUTC.toISOString(),
+        endUTC: endUTC.toISOString(),
+      },
+      personalRecipients: Array.from(subsByUser.keys()).length,
       globalCount,
       deactivated: endpointsToDeactivate.size,
     });

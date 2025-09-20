@@ -467,7 +467,7 @@ export default function Main() {
         </div>
 
         <p className="text-[15px] text-gray-700 text-center leading-snug mt-1 font-medium">
-          同じことばをシェアし合えるかな？
+          同じことばを送り合ってマッチできるかな？
           <br />
           あなたは現在、マッチの可能性が
           <span className="text-orange-500 font-bold mx-1">{matchCount}</span>
