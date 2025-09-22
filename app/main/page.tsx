@@ -74,6 +74,9 @@ export default function Main() {
   // ステート
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [users, setUsers] = useState<User[]>([]);
+  const [lastSentMap, setLastSentMap] = useState<Record<string, string | null>>(
+    {}
+  );
   const [selectedMessage, setSelectedMessage] = useState<string | null>(null);
   const [selectedRecipientIds, setSelectedRecipientIds] = useState<string[]>(
     []
@@ -174,6 +177,24 @@ export default function Main() {
       .get<User[]>("/api/users")
       .then((res) => setUsers(res.data))
       .catch((e) => console.error("ユーザー取得エラー:", e));
+
+    if (uid) {
+      axios
+        .get<{ userId: string; lastSentAt: string | null }[]>(
+          "/api/users/last-sent",
+          {
+            headers: { userId: uid },
+          }
+        )
+        .then((res) => {
+          const map: Record<string, string | null> = {};
+          res.data.forEach((row) => {
+            map[row.userId] = row.lastSentAt;
+          });
+          setLastSentMap(map);
+        })
+        .catch((e) => console.error("last-sent 取得エラー:", e));
+    }
 
     fetchPresetMessages();
     if (uid) fetchChatList(uid);
@@ -604,7 +625,9 @@ export default function Main() {
                       selectedMessage === msg.content ? "#ea580c" : "#fed7aa",
                   }}
                 >
-                  <span className="truncate">{msg.content}</span>
+                  <span className="whitespace-pre-wrap break-words">
+                    {msg.content}
+                  </span>
                   <span className="text-xs text-gray-500 ml-2 whitespace-nowrap">
                     {msg.count}人がシェアしました
                   </span>
@@ -624,6 +647,19 @@ export default function Main() {
             <div className="flex flex-col gap-2">
               {users
                 .filter((u) => u.id !== currentUserId)
+                .slice()
+                .sort((a, b) => {
+                  const la = lastSentMap[a.id];
+                  const lb = lastSentMap[b.id];
+                  // 1) どちらも送信履歴あり → 新しい順
+                  if (la && lb)
+                    return new Date(lb).getTime() - new Date(la).getTime();
+                  // 2) 片方のみ履歴あり → 履歴ありを前へ
+                  if (la && !lb) return -1;
+                  if (!la && lb) return 1;
+                  // 3) 両方なし → 名前の五十音順（localeCompare）
+                  return a.name.localeCompare(b.name, "ja");
+                })
                 .map((u) => (
                   <div
                     key={u.id}
