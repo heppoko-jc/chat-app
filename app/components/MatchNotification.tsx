@@ -50,12 +50,26 @@ export default function MatchNotification({
         router.push("/chat-list");
         return;
       }
+      // 画面導線に依らず、開く時点でチャットリストの強調/新着を解除できるように先に通知しておく
+      try {
+        // partnerId から ensure で得る chatId とは異なる可能性があるため、
+        // ここではチャットIDが未確定。遷移後にチャット画面側でも確実に解除する実装と併用する。
+        window.dispatchEvent(new CustomEvent("match-opened", { detail: {} }));
+      } catch {}
       // チャット部屋を確実に用意して遷移
       const res = await axios.post<{ chatId: string }>(
         "/api/chat/ensure",
         { partnerId },
         { headers: { userId } }
       );
+      // chatId が確定したので、念のためもう一度正しい chatId で解除通知
+      try {
+        window.dispatchEvent(
+          new CustomEvent("match-opened", {
+            detail: { chatId: res.data.chatId },
+          })
+        );
+      } catch {}
       handleClose();
       router.push(`/chat/${res.data.chatId}`);
     } catch (e) {
