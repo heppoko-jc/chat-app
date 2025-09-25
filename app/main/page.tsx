@@ -95,6 +95,77 @@ export default function Main() {
   const [inputMessage, setInputMessage] = useState("");
   const { presetMessages, setPresetMessages, setChatList } = useChatData();
   const [isSending, setIsSending] = useState(false);
+  const [linkPreview, setLinkPreview] = useState<{
+    url: string;
+    title: string;
+    image?: string;
+  } | null>(null);
+
+  const [selectedMessageLinkData, setSelectedMessageLinkData] = useState<{
+    url: string;
+    title: string;
+    image?: string;
+  } | null>(null);
+
+  const [showLinkActionMenu, setShowLinkActionMenu] = useState(false);
+
+  const urlRegex = useMemo(() => /(https?:\/\/[^\s]+)/i, []);
+
+  // 入力がURLを含む場合、プレビューを取得
+  useEffect(() => {
+    console.log("[main] inputMessage changed:", inputMessage);
+    // 先頭の @ や空白を除去してから URL を抽出（Xやメモアプリ風の貼り付け対策）
+    const cleaned = (inputMessage || "").replace(/^[@\s]+/, "");
+    console.log("[main] cleaned input:", cleaned);
+    const m = cleaned.match(urlRegex);
+    const url = m?.[0];
+    console.log("[main] matched URL:", url);
+    if (!url) {
+      console.log("[main] no URL found, clearing preview");
+      setLinkPreview(null);
+      return;
+    }
+    console.log("[main] starting fetch for:", url);
+    let aborted = false;
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/link-preview?url=${encodeURIComponent(url)}`
+        );
+        console.log("[main] fetch response:", res.status, res.ok);
+        if (!aborted) {
+          if (!res.ok) {
+            // 失敗時でも最低限のプレビューを表示
+            console.log("[main] fetch failed, showing basic preview");
+            setLinkPreview({
+              url,
+              title: url,
+              image: `${new URL(url).origin}/favicon.ico`,
+            });
+            return;
+          }
+          const data = await res.json();
+          console.log("[main] fetch success, data:", data);
+          setLinkPreview({
+            url: data.url || url,
+            title: data.title || url,
+            image: data.image,
+          });
+        }
+      } catch (e) {
+        console.log("[main] fetch error:", e);
+        if (!aborted)
+          setLinkPreview({
+            url,
+            title: url,
+            image: `${new URL(url).origin}/favicon.ico`,
+          });
+      }
+    })();
+    return () => {
+      aborted = true;
+    };
+  }, [inputMessage, urlRegex]);
 
   // ポップアップ・キュー
   const [matchQueue, setMatchQueue] = useState<MatchQueueItem[]>([]);
@@ -296,9 +367,34 @@ export default function Main() {
 
   const handleHistoryNavigation = () => router.push("/notifications");
 
-  const handleSelectMessage = (msg: string) => {
+  const handleSelectMessage = (
+    msg: string,
+    linkData?: { url: string; title: string; image?: string }
+  ) => {
+    // リンクの場合はアクションメニューを表示
+    if (linkData) {
+      setShowLinkActionMenu(true);
+      return;
+    }
+
     setSelectedMessage((prev) => (prev === msg ? null : msg));
     setInputMessage("");
+    setSelectedMessageLinkData(null);
+  };
+
+  const handleLinkAction = (action: "open" | "select") => {
+    if (!selectedMessageLinkData) return;
+
+    if (action === "open") {
+      // リンク先を開く
+      window.open(selectedMessageLinkData.url, "_blank");
+      setShowLinkActionMenu(false);
+    } else if (action === "select") {
+      // ことばとして選択
+      setSelectedMessage(selectedMessageLinkData.url);
+      setInputMessage("");
+      setShowLinkActionMenu(false);
+    }
   };
   const toggleRecipient = (id: string) => {
     setSelectedRecipientIds((prev) =>
@@ -314,10 +410,76 @@ export default function Main() {
         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
 
-  const handleMessageIconClick = () => {
+  // リンクプレビューをことばリストに統合
+  const allMessageOptions = useMemo(() => {
+    const options = [...messageOptions];
+
+    // リンクプレビューがある場合は先頭に追加
+    if (linkPreview && step === "select-message") {
+      options.unshift({
+        id: `link-preview-${Date.now()}`,
+        content: linkPreview.url,
+        createdBy: currentUserId || "",
+        createdAt: new Date().toISOString(),
+        count: 0,
+        isLinkPreview: true,
+        linkData: linkPreview,
+      } as any);
+    }
+
+    return options;
+  }, [messageOptions, linkPreview, step, currentUserId]);
+
+  const handleMessageIconClick = async () => {
     if (isInputMode && inputMessage.trim()) {
-      setSelectedMessage(inputMessage.trim());
+      const message = inputMessage.trim();
+      setSelectedMessage(message);
       setIsInputMode(false);
+
+      // リンクの場合はメタデータを取得してから次のステップに進む
+      if (message.startsWith("http")) {
+        try {
+          console.log("[main] リンクメタデータを取得中:", message);
+          const res = await fetch(
+            `/api/link-preview?url=${encodeURIComponent(message)}`
+          );
+          if (res.ok) {
+            const data = await res.json();
+            console.log("[main] 取得したメタデータ:", data);
+            const linkData = {
+              url: data.url || message,
+              title: data.title || message,
+              image: data.image,
+            };
+            setSelectedMessageLinkData(linkData);
+            console.log("[main] メタデータ設定完了:", linkData);
+          } else {
+            console.log("[main] メタデータ取得失敗:", res.status);
+            // メタデータ取得に失敗した場合でも、空のデータを設定
+            const fallbackData = {
+              url: message,
+              title: message,
+              image: undefined,
+            };
+            setSelectedMessageLinkData(fallbackData);
+            console.log(
+              "[main] フォールバックメタデータ設定完了:",
+              fallbackData
+            );
+          }
+        } catch (error) {
+          console.error("リンクプレビュー取得エラー:", error);
+          // エラーの場合でも、空のデータを設定
+          const errorData = {
+            url: message,
+            title: message,
+            image: undefined,
+          };
+          setSelectedMessageLinkData(errorData);
+          console.log("[main] エラー時メタデータ設定完了:", errorData);
+        }
+      }
+
       setStep("select-recipients");
     } else if (selectedMessage) {
       setStep("select-recipients");
@@ -332,6 +494,32 @@ export default function Main() {
       return;
     }
     if (!currentUserId || isSending) return;
+
+    // リンクの場合、メタデータが設定されているか確認
+    let finalLinkData = selectedMessageLinkData;
+    if (
+      selectedMessage.startsWith("http") &&
+      (!selectedMessageLinkData || !selectedMessageLinkData.title)
+    ) {
+      console.log("[main] 送信前メタデータ再取得:", selectedMessage);
+      try {
+        const res = await fetch(
+          `/api/link-preview?url=${encodeURIComponent(selectedMessage)}`
+        );
+        if (res.ok) {
+          const data = await res.json();
+          finalLinkData = {
+            url: data.url || selectedMessage,
+            title: data.title || selectedMessage,
+            image: data.image,
+          };
+          setSelectedMessageLinkData(finalLinkData);
+          console.log("[main] 送信前メタデータ再取得完了:", finalLinkData);
+        }
+      } catch (error) {
+        console.error("[main] 送信前メタデータ再取得エラー:", error);
+      }
+    }
 
     setIsSending(true);
     setSentMessageInfo({
@@ -349,6 +537,7 @@ export default function Main() {
     setStep("select-message");
     setIsInputMode(false);
     setInputMessage("");
+    setSelectedMessageLinkData(null);
 
     try {
       const isPreset = presetMessages.some(
@@ -361,6 +550,8 @@ export default function Main() {
           body: JSON.stringify({
             content: messageToSend,
             createdBy: currentUserId,
+            linkTitle: finalLinkData?.title,
+            linkImage: finalLinkData?.image,
           }),
         });
         if (res.ok) {
@@ -387,11 +578,23 @@ export default function Main() {
         );
       }
 
-      const matchResponse = await axios.post("/api/match-message", {
+      const requestData = {
         senderId: currentUserId,
         receiverIds: recipientsToSend,
         message: messageToSend,
+        linkTitle: finalLinkData?.title,
+        linkImage: finalLinkData?.image,
+      };
+
+      console.log("[main] 送信データ:", {
+        message: messageToSend,
+        linkTitle: finalLinkData?.title,
+        linkImage: finalLinkData?.image,
+        isLink: messageToSend.startsWith("http"),
+        finalLinkData: finalLinkData,
+        originalSelectedMessageLinkData: selectedMessageLinkData,
       });
+      const matchResponse = await axios.post("/api/match-message", requestData);
 
       // 成立 → 自分側も即キューに積む（後送/先送どちらでも）
       if (matchResponse.data.message === "Match created!") {
@@ -414,6 +617,9 @@ export default function Main() {
           fetchPresetMessages(),
           fetchChatList(currentUserId),
         ]);
+      } else {
+        // マッチが成立しなかった場合でもことばリストを更新
+        await fetchPresetMessages();
       }
 
       if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
@@ -535,12 +741,47 @@ export default function Main() {
               }}
             />
           ) : (
-            <span
+            <div
               onClick={() => setSelectedMessage(null)}
               className="px-3 py-2 rounded-xl font-bold cursor-pointer bg白/80 text-orange-600 shadow border border-orange-200 hover:bg-orange-100 transition"
             >
-              {selectedMessage}
-            </span>
+              {selectedMessageLinkData ? (
+                // リンクの場合はプレビュー形式で表示
+                <div className="flex items-center gap-2">
+                  {selectedMessageLinkData.image ? (
+                    <img
+                      src={selectedMessageLinkData.image}
+                      alt={selectedMessageLinkData.title}
+                      className="w-8 h-8 object-cover rounded-lg border border-orange-300"
+                      onError={(e) => {
+                        e.currentTarget.style.display = "none";
+                        e.currentTarget.nextElementSibling?.classList.remove(
+                          "hidden"
+                        );
+                      }}
+                    />
+                  ) : null}
+                  <div
+                    className={`w-8 h-8 rounded-lg bg-orange-100 border border-orange-300 flex items-center justify-center text-orange-600 font-bold text-xs ${
+                      selectedMessageLinkData.image ? "hidden" : ""
+                    }`}
+                  >
+                    URL
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-orange-800 truncate">
+                      {selectedMessageLinkData.title}
+                    </p>
+                    <p className="text-xs text-orange-600 truncate">
+                      {selectedMessageLinkData.url}
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                // 通常のメッセージの場合
+                selectedMessage
+              )}
+            </div>
           )}
           <div className="flex overflow-x-auto whitespace-nowrap scrollbar-hide mt-1">
             {selectedRecipientIds.length > 0 ? (
@@ -584,6 +825,65 @@ export default function Main() {
         </button>
       </div>
 
+      {/* リンクアクションメニュー */}
+      {showLinkActionMenu && selectedMessageLinkData && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl p-6 mx-4 max-w-sm w-full">
+            <div className="flex items-center gap-3 mb-4">
+              {selectedMessageLinkData.image ? (
+                <img
+                  src={selectedMessageLinkData.image}
+                  alt={selectedMessageLinkData.title}
+                  className="w-12 h-12 object-cover rounded-xl border border-orange-200"
+                  onError={(e) => {
+                    e.currentTarget.style.display = "none";
+                    e.currentTarget.nextElementSibling?.classList.remove(
+                      "hidden"
+                    );
+                  }}
+                />
+              ) : null}
+              <div
+                className={`w-12 h-12 rounded-xl bg-orange-100 border border-orange-200 flex items-center justify-center text-orange-600 font-bold text-xs ${
+                  selectedMessageLinkData.image ? "hidden" : ""
+                }`}
+              >
+                URL
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold text-gray-800 truncate">
+                  {selectedMessageLinkData.title}
+                </p>
+                <p className="text-xs text-gray-500 truncate">
+                  {selectedMessageLinkData.url}
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <button
+                onClick={() => handleLinkAction("open")}
+                className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 px-4 rounded-xl transition"
+              >
+                リンク先へ
+              </button>
+              <button
+                onClick={() => handleLinkAction("select")}
+                className="w-full bg-orange-200 hover:bg-orange-300 text-orange-800 font-bold py-3 px-4 rounded-xl transition"
+              >
+                このリンクをことばとして選ぶ
+              </button>
+              <button
+                onClick={() => setShowLinkActionMenu(false)}
+                className="w-full bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-3 px-4 rounded-xl transition"
+              >
+                キャンセル
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* コンテンツ（スワイプ可能） */}
       <main
         className="flex-1 overflow-y-auto overflow-x-hidden bg-orange-50"
@@ -591,6 +891,19 @@ export default function Main() {
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
       >
+        {/* デバッグ用：linkPreview状態の表示 */}
+        {process.env.NODE_ENV === "development" && (
+          <div className="px-6 pt-2 text-xs text-gray-500">
+            DEBUG: step={step}, linkPreview={linkPreview ? "exists" : "null"}
+            {linkPreview && (
+              <div>
+                title: {linkPreview.title}
+                <br />
+                image: {linkPreview.image ? "exists" : "null"}
+              </div>
+            )}
+          </div>
+        )}
         <div
           className="flex w-full h-full transition-transform duration-300 will-change-transform"
           style={{
@@ -609,30 +922,163 @@ export default function Main() {
             }}
           >
             <div className="flex flex-col gap-3">
-              {messageOptions.map((msg) => (
-                <button
-                  key={msg.id}
-                  onClick={() => handleSelectMessage(msg.content)}
-                  className={`w-full flex justify-between items-center text-left px-5 py-3 rounded-3xl shadow-md border border-orange-100 hover:bg-orange-100 active:scale-95 font-medium text-base ${
-                    selectedMessage === msg.content
-                      ? "font-bold text-orange-700 bg-orange-200 border-orange-300 shadow-lg"
-                      : "text-gray-700 bg-white"
-                  }`}
-                  style={{
-                    backgroundColor:
-                      selectedMessage === msg.content ? "#fed7aa" : "#ffffff",
-                    borderColor:
-                      selectedMessage === msg.content ? "#ea580c" : "#fed7aa",
-                  }}
-                >
-                  <span className="whitespace-pre-wrap break-words">
-                    {msg.content}
-                  </span>
-                  <span className="text-xs text-gray-500 ml-2 whitespace-nowrap">
-                    {msg.count}人がシェアしました
-                  </span>
-                </button>
-              ))}
+              {allMessageOptions.map((msg) => {
+                // リンクプレビューの場合の特別な表示
+                if ((msg as any).isLinkPreview) {
+                  const linkData = (msg as any).linkData;
+                  return (
+                    <button
+                      key={msg.id}
+                      onClick={() => {
+                        setSelectedMessageLinkData(linkData);
+                        handleSelectMessage(msg.content, linkData);
+                      }}
+                      className={`w-full flex items-center gap-3 text-left px-5 py-3 rounded-3xl shadow-md border border-orange-100 hover:bg-orange-100 active:scale-95 font-medium text-base ${
+                        selectedMessage === msg.content
+                          ? "font-bold text-orange-700 bg-orange-200 border-orange-300 shadow-lg"
+                          : "text-gray-700 bg-white"
+                      }`}
+                      style={{
+                        backgroundColor:
+                          selectedMessage === msg.content
+                            ? "#fed7aa"
+                            : "#ffffff",
+                        borderColor:
+                          selectedMessage === msg.content
+                            ? "#ea580c"
+                            : "#fed7aa",
+                      }}
+                    >
+                      {linkData.image ? (
+                        <img
+                          src={linkData.image}
+                          alt={linkData.title}
+                          className="w-12 h-12 object-cover rounded-xl border border-orange-200"
+                          onError={(e) => {
+                            e.currentTarget.style.display = "none";
+                            e.currentTarget.nextElementSibling?.classList.remove(
+                              "hidden"
+                            );
+                          }}
+                        />
+                      ) : null}
+                      <div
+                        className={`w-12 h-12 rounded-xl bg-orange-100 border border-orange-200 flex items-center justify-center text-orange-600 font-bold text-xs ${
+                          linkData.image ? "hidden" : ""
+                        }`}
+                      >
+                        URL
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-bold text-gray-800 truncate">
+                          {linkData.title}
+                        </p>
+                        <p className="text-xs text-gray-500 truncate">
+                          {linkData.url}
+                        </p>
+                        <p className="text-xs text-orange-600 mt-1">
+                          このリンクをことばとして選ぶ
+                        </p>
+                      </div>
+                    </button>
+                  );
+                }
+
+                // 通常のメッセージの場合（リンクメタデータがある場合はプレビュー形式）
+                const hasLinkMetadata =
+                  (msg as any).linkTitle || (msg as any).linkImage;
+
+                if (hasLinkMetadata) {
+                  // リンクメタデータがある場合のプレビュー表示
+                  return (
+                    <button
+                      key={msg.id}
+                      onClick={() => {
+                        const linkData = {
+                          url: msg.content,
+                          title: (msg as any).linkTitle || msg.content,
+                          image: (msg as any).linkImage,
+                        };
+                        setSelectedMessageLinkData(linkData);
+                        handleSelectMessage(msg.content, linkData);
+                      }}
+                      className={`w-full flex items-center gap-3 text-left px-5 py-3 rounded-3xl shadow-md border border-orange-100 hover:bg-orange-100 active:scale-95 font-medium text-base ${
+                        selectedMessage === msg.content
+                          ? "font-bold text-orange-700 bg-orange-200 border-orange-300 shadow-lg"
+                          : "text-gray-700 bg-white"
+                      }`}
+                      style={{
+                        backgroundColor:
+                          selectedMessage === msg.content
+                            ? "#fed7aa"
+                            : "#ffffff",
+                        borderColor:
+                          selectedMessage === msg.content
+                            ? "#ea580c"
+                            : "#fed7aa",
+                      }}
+                    >
+                      {(msg as any).linkImage ? (
+                        <img
+                          src={(msg as any).linkImage}
+                          alt={(msg as any).linkTitle || msg.content}
+                          className="w-12 h-12 object-cover rounded-xl border border-orange-200"
+                          onError={(e) => {
+                            e.currentTarget.style.display = "none";
+                            e.currentTarget.nextElementSibling?.classList.remove(
+                              "hidden"
+                            );
+                          }}
+                        />
+                      ) : null}
+                      <div
+                        className={`w-12 h-12 rounded-xl bg-orange-100 border border-orange-200 flex items-center justify-center text-orange-600 font-bold text-xs ${
+                          (msg as any).linkImage ? "hidden" : ""
+                        }`}
+                      >
+                        URL
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-bold text-gray-800 truncate">
+                          {(msg as any).linkTitle || msg.content}
+                        </p>
+                        <p className="text-xs text-gray-500 truncate">
+                          {msg.content}
+                        </p>
+                        <p className="text-xs text-orange-600 mt-1">
+                          {msg.count}人がシェアしました
+                        </p>
+                      </div>
+                    </button>
+                  );
+                }
+
+                // 通常のテキストメッセージの場合
+                return (
+                  <button
+                    key={msg.id}
+                    onClick={() => handleSelectMessage(msg.content)}
+                    className={`w-full flex justify-between items-center text-left px-5 py-3 rounded-3xl shadow-md border border-orange-100 hover:bg-orange-100 active:scale-95 font-medium text-base ${
+                      selectedMessage === msg.content
+                        ? "font-bold text-orange-700 bg-orange-200 border-orange-300 shadow-lg"
+                        : "text-gray-700 bg-white"
+                    }`}
+                    style={{
+                      backgroundColor:
+                        selectedMessage === msg.content ? "#fed7aa" : "#ffffff",
+                      borderColor:
+                        selectedMessage === msg.content ? "#ea580c" : "#fed7aa",
+                    }}
+                  >
+                    <span className="whitespace-pre-wrap break-words">
+                      {msg.content}
+                    </span>
+                    <span className="text-xs text-gray-500 ml-2 whitespace-nowrap">
+                      {msg.count}人がシェアしました
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </div>
 

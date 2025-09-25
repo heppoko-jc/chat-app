@@ -83,4 +83,6 @@ model PresetMessage {
   createdBy String   // ユーザーID（匿名の場合もあり）
   createdAt DateTime @default(now())
   count     Int      @default(0) // 送信回数
+  linkTitle String?  // リンクのタイトル
+  linkImage String?  // リンクの画像URL
 }

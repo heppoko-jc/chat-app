@@ -1,355 +1,463 @@
 // app/chat-list/page.tsx
 
-'use client'
+"use client";
 
-import { useEffect, useMemo, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import axios from 'axios'
-import FixedTabBar from '../components/FixedTabBar'
-import Image from 'next/image'
-import socket, { setSocketUserId } from '../socket'
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import axios from "axios";
+import FixedTabBar from "../components/FixedTabBar";
+import Image from "next/image";
+import socket, { setSocketUserId } from "../socket";
 
 // ===== バッジ用の軽量ユーティリティ（型安全・any なし） =====
 type BadgeCapableNavigator = Navigator & {
   serviceWorker?: {
-    ready?: Promise<ServiceWorkerRegistration>
-  }
-  setAppBadge?: (contents?: number) => Promise<void>
-  clearAppBadge?: () => Promise<void>
-}
+    ready?: Promise<ServiceWorkerRegistration>;
+  };
+  setAppBadge?: (contents?: number) => Promise<void>;
+  clearAppBadge?: () => Promise<void>;
+};
 async function getSWRegistration(): Promise<ServiceWorkerRegistration | null> {
   try {
-    if (typeof navigator === 'undefined') return null
-    const nav = navigator as unknown as BadgeCapableNavigator
-    const ready = nav.serviceWorker?.ready
-    if (!ready) return null
-    const reg = await ready
-    return reg ?? null
+    if (typeof navigator === "undefined") return null;
+    const nav = navigator as unknown as BadgeCapableNavigator;
+    const ready = nav.serviceWorker?.ready;
+    if (!ready) return null;
+    const reg = await ready;
+    return reg ?? null;
   } catch {
-    return null
+    return null;
   }
 }
 async function postToSW(msg: unknown) {
   try {
-    const reg = await getSWRegistration()
-    reg?.active?.postMessage(msg)
+    const reg = await getSWRegistration();
+    reg?.active?.postMessage(msg);
   } catch {}
 }
 async function setAppBadgeCount(count: number) {
-  const n = Math.max(0, count | 0)
+  const n = Math.max(0, count | 0);
   try {
-    if (typeof navigator !== 'undefined') {
-      const nav = navigator as unknown as BadgeCapableNavigator
-      if (typeof nav.setAppBadge === 'function') {
-        await nav.setAppBadge(n)
+    if (typeof navigator !== "undefined") {
+      const nav = navigator as unknown as BadgeCapableNavigator;
+      if (typeof nav.setAppBadge === "function") {
+        await nav.setAppBadge(n);
       } else {
-        const reg = await getSWRegistration()
-        await reg?.setAppBadge?.(n)
+        const reg = await getSWRegistration();
+        await reg?.setAppBadge?.(n);
       }
     }
   } catch {}
-  postToSW({ type: 'BADGE_SET', count: n })
+  postToSW({ type: "BADGE_SET", count: n });
 }
 
 // ===== 型 =====
 export interface ChatItem {
-  chatId: string
-  matchedUser: { id: string; name: string }
-  matchMessage: string
-  latestMessage: string
-  latestMessageAt: string | null
-  latestMessageAtRaw: string | null
-  latestMessageSenderId: string | null
-  latestMessageAtDisplay?: string
-  messages: { id: string; senderId: string; content: string; createdAt: string }[]
-  matchMessageMatchedAt?: string | null
-  matchHistory?: { message: string; matchedAt: string }[]
+  chatId: string;
+  matchedUser: { id: string; name: string };
+  matchMessage: string;
+  latestMessage: string;
+  latestMessageAt: string | null;
+  latestMessageAtRaw: string | null;
+  latestMessageSenderId: string | null;
+  latestMessageAtDisplay?: string;
+  messages: {
+    id: string;
+    senderId: string;
+    content: string;
+    createdAt: string;
+  }[];
+  matchMessageMatchedAt?: string | null;
+  matchHistory?: { message: string; matchedAt: string }[];
 }
 
 // ===== 見た目用ユーティリティ =====
 function getInitials(name: string) {
-  return name.split(' ').map((w) => w.charAt(0)).join('').toUpperCase()
+  return name
+    .split(" ")
+    .map((w) => w.charAt(0))
+    .join("")
+    .toUpperCase();
 }
 function getBgColor(name: string) {
-  let hash = 0
-  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash)
-  const h = hash % 360
-  return `hsl(${h}, 70%, 80%)`
+  let hash = 0;
+  for (let i = 0; i < name.length; i++)
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  const h = hash % 360;
+  return `hsl(${h}, 70%, 80%)`;
 }
 function formatChatDate(dateString: string | null): string {
-  if (!dateString) return ''
-  const now = new Date()
-  const date = new Date(dateString)
+  if (!dateString) return "";
+  const now = new Date();
+  const date = new Date(dateString);
   if (now.toDateString() === date.toDateString()) {
-    const hh = String(date.getHours()).padStart(2, '0')
-    const mm = String(date.getMinutes()).padStart(2, '0')
-    return `${hh}:${mm}`
+    const hh = String(date.getHours()).padStart(2, "0");
+    const mm = String(date.getMinutes()).padStart(2, "0");
+    return `${hh}:${mm}`;
   }
-  const yesterday = new Date(now); yesterday.setDate(now.getDate() - 1)
-  if (yesterday.toDateString() === date.toDateString()) return '昨日'
+  const yesterday = new Date(now);
+  yesterday.setDate(now.getDate() - 1);
+  if (yesterday.toDateString() === date.toDateString()) return "昨日";
   for (let i = 2; i <= 5; i++) {
-    const prev = new Date(now); prev.setDate(now.getDate() - i)
+    const prev = new Date(now);
+    prev.setDate(now.getDate() - i);
     if (prev.toDateString() === date.toDateString()) {
-      const week = ['日','月','火','水','木','金','土']; return week[date.getDay()]
+      const week = ["日", "月", "火", "水", "木", "金", "土"];
+      return week[date.getDay()];
     }
   }
-  return `${date.getMonth() + 1}/${date.getDate()}`
+  return `${date.getMonth() + 1}/${date.getDate()}`;
 }
 function sortTimestampOf(chat: ChatItem): number {
-  const msgTs = chat.latestMessageAt ? new Date(chat.latestMessageAt).getTime() : 0
-  const matchTs = chat.matchMessageMatchedAt ? new Date(chat.matchMessageMatchedAt).getTime() : 0
-  return Math.max(msgTs || 0, matchTs || 0)
+  const msgTs = chat.latestMessageAt
+    ? new Date(chat.latestMessageAt).getTime()
+    : 0;
+  const matchTs = chat.matchMessageMatchedAt
+    ? new Date(chat.matchMessageMatchedAt).getTime()
+    : 0;
+  return Math.max(msgTs || 0, matchTs || 0);
 }
 
 // ===== 本体 =====
 export default function ChatList() {
-  const router = useRouter()
-  const [chats, setChats] = useState<ChatItem[]>([])
-  const [isLoading, setIsLoading] = useState(false)
-  const [unreadCounts, setUnreadCounts] = useState<{ [chatId: string]: number }>({})
-  const [userId, setUserId] = useState<string | null>(null)
-  const [openedMatchChats, setOpenedMatchChats] = useState<Set<string>>(new Set())
-  const [isOpenedMatchStateLoaded, setIsOpenedMatchStateLoaded] = useState(false)
-  const [newMatchChats, setNewMatchChats] = useState<Set<string>>(new Set())
+  const router = useRouter();
+  const [chats, setChats] = useState<ChatItem[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [unreadCounts, setUnreadCounts] = useState<{
+    [chatId: string]: number;
+  }>({});
+  const [userId, setUserId] = useState<string | null>(null);
+  const [openedMatchChats, setOpenedMatchChats] = useState<Set<string>>(
+    new Set()
+  );
+  const [isOpenedMatchStateLoaded, setIsOpenedMatchStateLoaded] =
+    useState(false);
+  const [newMatchChats, setNewMatchChats] = useState<Set<string>>(new Set());
 
   // 未読合計（バッジ同期に使用）
   const unreadTotal = useMemo(
     () => Object.values(unreadCounts).reduce((a, b) => a + (b || 0), 0),
     [unreadCounts]
-  )
+  );
 
   // ユーザーIDとローカル状態ロード
   useEffect(() => {
-    const uid = typeof window !== 'undefined' ? localStorage.getItem('userId') : null
-    setUserId(uid)
-  }, [])
+    const uid =
+      typeof window !== "undefined" ? localStorage.getItem("userId") : null;
+    setUserId(uid);
+  }, []);
   useEffect(() => {
-    if (!userId) return
-    setSocketUserId(userId)
+    if (!userId) return;
+    setSocketUserId(userId);
 
-    const openedMatchData = localStorage.getItem(`opened-match-chats-${userId}`)
+    const openedMatchData = localStorage.getItem(
+      `opened-match-chats-${userId}`
+    );
     if (openedMatchData) {
-      try { setOpenedMatchChats(new Set(JSON.parse(openedMatchData))) } catch {}
+      try {
+        setOpenedMatchChats(new Set(JSON.parse(openedMatchData)));
+      } catch {}
     }
-    setIsOpenedMatchStateLoaded(true)
+    setIsOpenedMatchStateLoaded(true);
 
-    const newMatchData = localStorage.getItem(`new-match-chats-${userId}`)
+    const newMatchData = localStorage.getItem(`new-match-chats-${userId}`);
     if (newMatchData) {
-      try { setNewMatchChats(new Set(JSON.parse(newMatchData))) } catch {}
+      try {
+        setNewMatchChats(new Set(JSON.parse(newMatchData)));
+      } catch {}
     }
-  }, [userId])
+  }, [userId]);
 
   // 一覧取得
   const fetchChats = async () => {
-    const uid = typeof window !== 'undefined' ? localStorage.getItem('userId') : null
-    if (!uid) return
-    setIsLoading(true)
+    const uid =
+      typeof window !== "undefined" ? localStorage.getItem("userId") : null;
+    if (!uid) return;
+    setIsLoading(true);
     try {
-      const res = await axios.get<ChatItem[]>('/api/chat-list', { headers: { userId: uid } })
+      const res = await axios.get<ChatItem[]>("/api/chat-list", {
+        headers: { userId: uid },
+      });
 
       const formatted = res.data.map((c) => {
-        const latestRaw = c.latestMessageAt ?? null
+        const latestRaw = c.latestMessageAt ?? null;
         return {
           ...c,
           latestMessageAt: latestRaw,
           latestMessageAtRaw: latestRaw,
           latestMessageAtDisplay: formatChatDate(latestRaw),
-        }
-      })
+        };
+      });
 
-      setChats(formatted)
+      setChats(formatted);
 
       // 取得した実チャットは全て join
       formatted
-        .filter(c => !c.chatId.startsWith('dummy-'))
-        .forEach(c => socket.emit('joinChat', c.chatId))
+        .filter((c) => !c.chatId.startsWith("dummy-"))
+        .forEach((c) => socket.emit("joinChat", c.chatId));
 
       // 未読件数
-      const unread: { [chatId: string]: number } = {}
+      const unread: { [chatId: string]: number } = {};
       for (const chat of res.data) {
-        if (!chat.latestMessageAt || chat.latestMessage === 'メッセージなし') continue
-        if (chat.latestMessageSenderId === uid) { unread[chat.chatId] = 0; continue }
-        const lastRead = localStorage.getItem(`chat-last-read-${chat.chatId}`)
-        const lastReadTime = lastRead ? new Date(lastRead).getTime() : 0
+        if (!chat.latestMessageAt || chat.latestMessage === "メッセージなし")
+          continue;
+        if (chat.latestMessageSenderId === uid) {
+          unread[chat.chatId] = 0;
+          continue;
+        }
+        const lastRead = localStorage.getItem(`chat-last-read-${chat.chatId}`);
+        const lastReadTime = lastRead ? new Date(lastRead).getTime() : 0;
         unread[chat.chatId] = chat.messages.filter(
-          (m) => new Date(m.createdAt).getTime() > lastReadTime && m.senderId !== uid
-        ).length
+          (m) =>
+            new Date(m.createdAt).getTime() > lastReadTime && m.senderId !== uid
+        ).length;
       }
-      setUnreadCounts(unread)
+      setUnreadCounts(unread);
     } catch (e) {
-      console.error('🚨 チャットリスト取得エラー:', e)
+      console.error("🚨 チャットリスト取得エラー:", e);
     } finally {
-      setIsLoading(false)
+      setIsLoading(false);
     }
-  }
+  };
 
   // 初回ロード
   useEffect(() => {
-    if (isOpenedMatchStateLoaded) fetchChats()
-  }, [isOpenedMatchStateLoaded])
+    if (isOpenedMatchStateLoaded) fetchChats();
+  }, [isOpenedMatchStateLoaded]);
 
   // 未読合計が変わるたびに OS バッジへ反映
   useEffect(() => {
-    setAppBadgeCount(unreadTotal)
-  }, [unreadTotal])
+    setAppBadgeCount(unreadTotal);
+  }, [unreadTotal]);
 
   // matchMessage の変化検知（ローカル保存）
   useEffect(() => {
-    if (!isOpenedMatchStateLoaded || chats.length === 0 || !userId) return
-    const prevRaw = localStorage.getItem(`prev-match-messages-${userId}`)
-    let prevMap: Record<string, string> = {}
-    if (prevRaw) { try { prevMap = JSON.parse(prevRaw) } catch {} }
+    if (!isOpenedMatchStateLoaded || chats.length === 0 || !userId) return;
+    const prevRaw = localStorage.getItem(`prev-match-messages-${userId}`);
+    let prevMap: Record<string, string> = {};
+    if (prevRaw) {
+      try {
+        prevMap = JSON.parse(prevRaw);
+      } catch {}
+    }
 
-    const newRaw = localStorage.getItem(`new-match-chats-${userId}`)
-    let newSet = new Set<string>(); if (newRaw) { try { newSet = new Set(JSON.parse(newRaw)) } catch {} }
+    const newRaw = localStorage.getItem(`new-match-chats-${userId}`);
+    let newSet = new Set<string>();
+    if (newRaw) {
+      try {
+        newSet = new Set(JSON.parse(newRaw));
+      } catch {}
+    }
 
-    let changed = false
+    let changed = false;
     for (const chat of chats) {
-      const prev = prevMap[chat.chatId]
-      if (prev !== undefined && prev !== chat.matchMessage && !newSet.has(chat.chatId)) {
-        newSet.add(chat.chatId); changed = true
+      const prev = prevMap[chat.chatId];
+      if (
+        prev !== undefined &&
+        prev !== chat.matchMessage &&
+        !newSet.has(chat.chatId)
+      ) {
+        newSet.add(chat.chatId);
+        changed = true;
       }
-      if (prev === undefined && chat.matchMessage && chat.matchMessage !== '（マッチメッセージなし）' && !newSet.has(chat.chatId)) {
-        newSet.add(chat.chatId); changed = true
+      if (
+        prev === undefined &&
+        chat.matchMessage &&
+        chat.matchMessage !== "（マッチメッセージなし）" &&
+        !newSet.has(chat.chatId)
+      ) {
+        newSet.add(chat.chatId);
+        changed = true;
       }
     }
     if (changed) {
-      setNewMatchChats(newSet)
-      localStorage.setItem(`new-match-chats-${userId}`, JSON.stringify([...newSet]))
+      setNewMatchChats(newSet);
+      localStorage.setItem(
+        `new-match-chats-${userId}`,
+        JSON.stringify([...newSet])
+      );
     }
 
-    const nextMap: Record<string, string> = {}
-    chats.forEach((c) => { nextMap[c.chatId] = c.matchMessage })
-    localStorage.setItem(`prev-match-messages-${userId}`, JSON.stringify(nextMap))
-  }, [chats, isOpenedMatchStateLoaded, userId])
+    const nextMap: Record<string, string> = {};
+    chats.forEach((c) => {
+      nextMap[c.chatId] = c.matchMessage;
+    });
+    localStorage.setItem(
+      `prev-match-messages-${userId}`,
+      JSON.stringify(nextMap)
+    );
+  }, [chats, isOpenedMatchStateLoaded, userId]);
 
   // チャット画面からの強調解除通知
   useEffect(() => {
     const onOpened = (e: Event) => {
-      const detail = (e as CustomEvent).detail as { chatId?: string }
-      const cid = detail?.chatId
-      if (!cid) return
+      const detail = (e as CustomEvent).detail as { chatId?: string };
+      const cid = detail?.chatId;
+      if (!cid) return;
       setNewMatchChats((prev) => {
-        const next = new Set(prev); next.delete(cid)
-        if (userId) localStorage.setItem(`new-match-chats-${userId}`, JSON.stringify([...next]))
-        return next
-      })
-    }
-    window.addEventListener('match-opened', onOpened as EventListener)
-    return () => window.removeEventListener('match-opened', onOpened as EventListener)
-  }, [userId])
+        const next = new Set(prev);
+        next.delete(cid);
+        if (userId)
+          localStorage.setItem(
+            `new-match-chats-${userId}`,
+            JSON.stringify([...next])
+          );
+        return next;
+      });
+    };
+    window.addEventListener("match-opened", onOpened as EventListener);
+    return () =>
+      window.removeEventListener("match-opened", onOpened as EventListener);
+  }, [userId]);
 
   // WebSocket: マッチ成立
   useEffect(() => {
-    if (!userId) return
+    if (!userId) return;
     const handleMatchEstablished = (data: {
-      chatId?: string
-      message: string
-      matchedAt: string
-      matchedUserId?: string
-      targetUserId?: string
+      chatId?: string;
+      message: string;
+      matchedAt: string;
+      matchedUserId?: string;
+      targetUserId?: string;
     }) => {
-      if (data.targetUserId && data.targetUserId !== userId) return
+      if (data.targetUserId && data.targetUserId !== userId) return;
 
-      const realChatId = data.chatId
+      const realChatId = data.chatId;
       if (realChatId) {
-        socket.emit('joinChat', realChatId)
+        socket.emit("joinChat", realChatId);
 
         setChats((prev) => {
-          const idx = prev.findIndex(c => c.matchedUser.id === data.matchedUserId || c.chatId === realChatId)
-          if (idx === -1) return prev
-          const next = [...prev]
-          const item = { ...next[idx] }
+          const idx = prev.findIndex(
+            (c) =>
+              c.matchedUser.id === data.matchedUserId || c.chatId === realChatId
+          );
+          if (idx === -1) return prev;
+          const next = [...prev];
+          const item = { ...next[idx] };
 
-          if (item.chatId.startsWith('dummy-')) item.chatId = realChatId
+          if (item.chatId.startsWith("dummy-")) item.chatId = realChatId;
 
-          const list = [...(item.matchHistory || []), { message: data.message, matchedAt: data.matchedAt }]
-          const map = new Map(list.map(m => [`${m.matchedAt}|${m.message}`, m]))
-          item.matchHistory = Array.from(map.values())
-            .sort((a, b) => new Date(a.matchedAt).getTime() - new Date(b.matchedAt).getTime())
-          item.matchMessage = data.message
-          item.matchMessageMatchedAt = data.matchedAt
+          const list = [
+            ...(item.matchHistory || []),
+            { message: data.message, matchedAt: data.matchedAt },
+          ];
+          const map = new Map(
+            list.map((m) => [`${m.matchedAt}|${m.message}`, m])
+          );
+          item.matchHistory = Array.from(map.values()).sort(
+            (a, b) =>
+              new Date(a.matchedAt).getTime() - new Date(b.matchedAt).getTime()
+          );
+          item.matchMessage = data.message;
+          item.matchMessageMatchedAt = data.matchedAt;
 
-          next[idx] = item
-          return next
-        })
+          next[idx] = item;
+          return next;
+        });
 
         setNewMatchChats((prev) => {
-          const next = new Set(prev); next.add(realChatId)
-          if (userId) localStorage.setItem(`new-match-chats-${userId}`, JSON.stringify([...next]))
-          return next
-        })
+          const next = new Set(prev);
+          next.add(realChatId);
+          if (userId)
+            localStorage.setItem(
+              `new-match-chats-${userId}`,
+              JSON.stringify([...next])
+            );
+          return next;
+        });
       }
 
-      fetchChats()
-    }
+      fetchChats();
+    };
 
-    socket.on('matchEstablished', handleMatchEstablished)
-    return () => { socket.off('matchEstablished', handleMatchEstablished) }
-  }, [userId])
+    socket.on("matchEstablished", handleMatchEstablished);
+    return () => {
+      socket.off("matchEstablished", handleMatchEstablished);
+    };
+  }, [userId]);
 
   // WebSocket: 新着メッセージで再取得
   useEffect(() => {
-    const handleNewMessage = () => fetchChats()
-    socket.on('newMessage', handleNewMessage)
-    return () => { socket.off('newMessage', handleNewMessage) }
-  }, [])
+    const handleNewMessage = () => fetchChats();
+    socket.on("newMessage", handleNewMessage);
+    return () => {
+      socket.off("newMessage", handleNewMessage);
+    };
+  }, []);
 
   // クリックで既読＆ハイライト解除
   const handleOpenChat = async (item: ChatItem) => {
-    const uid = localStorage.getItem('userId'); if (!uid) return
+    const uid = localStorage.getItem("userId");
+    if (!uid) return;
 
     const goto = async (realId: string) => {
-      localStorage.setItem(`chat-last-read-${realId}`, new Date().toISOString())
+      localStorage.setItem(
+        `chat-last-read-${realId}`,
+        new Date().toISOString()
+      );
 
       // 既読反映＋バッジ同期
       setUnreadCounts((prev) => {
-        const next = { ...prev, [realId]: 0 }
-        const total = Object.values(next).reduce((a, b) => a + (b || 0), 0)
-        setAppBadgeCount(total)
-        return next
-      })
+        const next = { ...prev, [realId]: 0 };
+        const total = Object.values(next).reduce((a, b) => a + (b || 0), 0);
+        setAppBadgeCount(total);
+        return next;
+      });
 
       setOpenedMatchChats((prev) => {
-        const next = new Set(prev); next.add(realId)
-        if (userId) localStorage.setItem(`opened-match-chats-${userId}`, JSON.stringify([...next]))
-        return next
-      })
+        const next = new Set(prev);
+        next.add(realId);
+        if (userId)
+          localStorage.setItem(
+            `opened-match-chats-${userId}`,
+            JSON.stringify([...next])
+          );
+        return next;
+      });
       setNewMatchChats((prev) => {
-        const next = new Set(prev); next.delete(realId)
-        if (userId) localStorage.setItem(`new-match-chats-${userId}`, JSON.stringify([...next]))
-        return next
-      })
-      router.push(`/chat/${realId}`)
-    }
+        const next = new Set(prev);
+        next.delete(realId);
+        if (userId)
+          localStorage.setItem(
+            `new-match-chats-${userId}`,
+            JSON.stringify([...next])
+          );
+        return next;
+      });
+      router.push(`/chat/${realId}`);
+    };
 
-    if (item.chatId.startsWith('dummy-')) {
+    if (item.chatId.startsWith("dummy-")) {
       try {
         const res = await axios.post<{ chatId: string }>(
-          '/api/chat/ensure',
+          "/api/chat/ensure",
           { partnerId: item.matchedUser.id },
           { headers: { userId: uid } }
-        )
-        const realId = res.data.chatId
-        setChats((prev) => prev.map((c) => (c.chatId === item.chatId ? { ...c, chatId: realId } : c)))
-        await goto(realId)
+        );
+        const realId = res.data.chatId;
+        setChats((prev) =>
+          prev.map((c) =>
+            c.chatId === item.chatId ? { ...c, chatId: realId } : c
+          )
+        );
+        await goto(realId);
       } catch (e) {
-        console.error('🚨 ensure エラー:', e)
+        console.error("🚨 ensure エラー:", e);
       }
     } else {
-      await goto(item.chatId)
+      await goto(item.chatId);
     }
-  }
+  };
 
   // 表示用の最終ソート
   const sortedChats = useMemo(() => {
     return [...chats].sort((a, b) => {
-      const at = sortTimestampOf(a)
-      const bt = sortTimestampOf(b)
-      if (at === bt) return 0
-      return bt - at
-    })
-  }, [chats])
+      const at = sortTimestampOf(a);
+      const bt = sortTimestampOf(b);
+      if (at === bt) return 0;
+      return bt - at;
+    });
+  }, [chats]);
 
   return (
     <div className="flex flex-col h-[100dvh] bg-gradient-to-b from-gray-50 to-white overflow-hidden">
@@ -368,17 +476,23 @@ export default function ChatList() {
             <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
               <span className="text-2xl">💬</span>
             </div>
-            <p className="text-gray-500 font-medium">まだチャットがありません</p>
-            <p className="text-gray-400 text-sm mt-1">メイン画面でメッセージを送信してみてください</p>
+            <p className="text-gray-500 font-medium">
+              まだチャットがありません
+            </p>
+            <p className="text-gray-400 text-sm mt-1">
+              メイン画面でメッセージを送信してみてください
+            </p>
           </div>
         ) : (
           <ul className="space-y-2 pb-20">
             {sortedChats.map((chat) => {
-              const isLatestFromMe = chat.latestMessageSenderId === userId
-              const isMatched = chat.matchMessage !== '（マッチメッセージなし）'
-              const hasOpenedMatch = openedMatchChats.has(chat.chatId)
-              const isNewMatch = newMatchChats.has(chat.chatId)
-              const shouldShowMatchHighlight = (isMatched && !hasOpenedMatch) || isNewMatch
+              const isLatestFromMe = chat.latestMessageSenderId === userId;
+              const isMatched =
+                chat.matchMessage !== "（マッチメッセージなし）";
+              const hasOpenedMatch = openedMatchChats.has(chat.chatId);
+              const isNewMatch = newMatchChats.has(chat.chatId);
+              const shouldShowMatchHighlight =
+                (isMatched && !hasOpenedMatch) || isNewMatch;
 
               return (
                 <li
@@ -386,31 +500,33 @@ export default function ChatList() {
                   onClick={() => handleOpenChat(chat)}
                   className={`flex items-center backdrop-blur-sm rounded-3xl shadow-lg px-5 py-4 cursor-pointer hover:shadow-xl active:scale-98 transition-all duration-200 border mb-3 ${
                     shouldShowMatchHighlight
-                      ? 'bg-gradient-to-r from-orange-100 to-orange-200 border-orange-300 shadow-orange-300/50'
-                      : 'bg-white/90 border-white/50 hover:bg-white'
+                      ? "bg-gradient-to-r from-orange-100 to-orange-200 border-orange-300 shadow-orange-300/50"
+                      : "bg-white/90 border-white/50 hover:bg-white"
                   }`}
                 >
                   <div className="relative">
                     <div
                       className={`w-16 h-16 rounded-2xl flex items-center justify-center text-white font-bold text-xl mr-4 shadow-lg ${
-                        shouldShowMatchHighlight ? 'ring-2 ring-orange-300 ring-offset-2' : ''
+                        shouldShowMatchHighlight
+                          ? "ring-2 ring-orange-300 ring-offset-2"
+                          : ""
                       }`}
-                      style={{ backgroundColor: getBgColor(chat.matchedUser.name) }}
+                      style={{
+                        backgroundColor: getBgColor(chat.matchedUser.name),
+                      }}
                     >
                       {getInitials(chat.matchedUser.name)}
                     </div>
-                    {shouldShowMatchHighlight && (
-                      <div className="absolute -top-1 -right-1 w-6 h-6 bg-gradient-to-r from-orange-400 to-orange-500 rounded-full flex items-center justify-center shadow-lg">
-                        <Image src="/icons/check2.png" alt="Match" width={12} height={12} />
-                      </div>
-                    )}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between mb-2">
-                      <span className="text-lg font-bold text-gray-800 truncate">{chat.matchedUser.name}</span>
+                      <span className="text-lg font-bold text-gray-800 truncate">
+                        {chat.matchedUser.name}
+                      </span>
                       <div className="flex flex-col items-end min-w-[60px]">
                         <span className="text-xs text-gray-400 font-medium whitespace-nowrap">
-                          {chat.latestMessageAtDisplay || formatChatDate(chat.latestMessageAt)}
+                          {chat.latestMessageAtDisplay ||
+                            formatChatDate(chat.latestMessageAt)}
                         </span>
                         {unreadCounts[chat.chatId] > 0 && !isLatestFromMe && (
                           <span className="mt-1 flex items-center justify-center w-7 h-7 rounded-full bg-gradient-to-r from-green-400 to-green-500 text-white text-xs font-bold shadow-md">
@@ -419,15 +535,25 @@ export default function ChatList() {
                         )}
                       </div>
                     </div>
-                    <p className={`text-sm truncate mb-1 font-medium ${
-                      shouldShowMatchHighlight ? 'text-orange-700 font-semibold' : isMatched ? 'text-gray-600' : 'text-gray-400'
-                    }`}>
-                      {isMatched ? `「${chat.matchMessage}」` : 'まだマッチしていません'}
+                    <p
+                      className={`text-sm truncate mb-1 font-medium ${
+                        shouldShowMatchHighlight
+                          ? "text-orange-700 font-semibold"
+                          : isMatched
+                          ? "text-gray-600"
+                          : "text-gray-400"
+                      }`}
+                    >
+                      {isMatched
+                        ? `「${chat.matchMessage}」`
+                        : "まだマッチしていません"}
                     </p>
-                    <p className="text-sm text-gray-500 truncate">{chat.latestMessage}</p>
+                    <p className="text-sm text-gray-500 truncate">
+                      {chat.latestMessage}
+                    </p>
                   </div>
                 </li>
-              )
+              );
             })}
           </ul>
         )}
@@ -437,5 +563,5 @@ export default function ChatList() {
         <FixedTabBar />
       </div>
     </div>
-  )
+  );
 }
