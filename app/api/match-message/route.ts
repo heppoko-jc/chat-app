@@ -93,7 +93,13 @@ export async function POST(req: NextRequest) {
     for (const receiverId of receiverIds) {
       // 自分の送信をまず保存（createdAt を取得）
       const mySend = await prisma.sentMessage.create({
-        data: { senderId, receiverId, message },
+        data: {
+          senderId,
+          receiverId,
+          message,
+          linkTitle: finalLinkTitle,
+          linkImage: finalLinkImage,
+        },
         select: { id: true, createdAt: true },
       });
       myLatestCreatedAt = mySend.createdAt;

@@ -12,6 +12,8 @@ interface SentMessage {
   id: string;
   receiver: { id: string; name: string };
   message: string;
+  linkTitle?: string;
+  linkImage?: string;
   createdAt: string;
   isMatched: boolean;
 }
@@ -60,7 +62,9 @@ export default function Notifications() {
   const [animateExit, setAnimateExit] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
-  const touchStart = useRef<{ x: number; y: number; time: number } | null>(null);
+  const touchStart = useRef<{ x: number; y: number; time: number } | null>(
+    null
+  );
 
   // セクション分割（未マッチ／マッチ済み）
   const { unmatchedMessages, matchedMessages } = useMemo(() => {
@@ -79,7 +83,9 @@ export default function Notifications() {
     (async () => {
       try {
         setIsLoading(true);
-        const res = await axios.get<ApiResponse>(`/api/notifications?userId=${userId}`);
+        const res = await axios.get<ApiResponse>(
+          `/api/notifications?userId=${userId}`
+        );
         // すべて保持（未マッチのみでフィルタしない）
         setSentMessages(res.data.sentMessages);
       } catch (e) {
@@ -146,7 +152,8 @@ export default function Notifications() {
           <h1 className="text-2xl font-bold mt-1">History</h1>
         </div>
         <h2 className="text-sm text-center">
-          ことばをシェアした履歴です。<br />
+          ことばをシェアした履歴です。
+          <br />
           右のボタンから取り消すこともできます（未マッチのみ）。
         </h2>
       </div>
@@ -190,10 +197,12 @@ export default function Notifications() {
                           "
                         >
                           {/* アイコン＋送信相手＋テキスト */}
-                          <div className="flex items-center gap-3 flex-1">
+                          <div className="flex items-start gap-3 flex-1 min-w-0">
                             <div
                               className="w-11 h-11 rounded-full flex items-center justify-center text-white font-bold"
-                              style={{ backgroundColor: getBgColor(msg.receiver.name) }}
+                              style={{
+                                backgroundColor: getBgColor(msg.receiver.name),
+                              }}
                             >
                               {msg.receiver.name.charAt(0)}
                             </div>
@@ -201,9 +210,46 @@ export default function Notifications() {
                               <p className="text-sm font-semibold truncate">
                                 To {msg.receiver.name}
                               </p>
-                              <p className="text-medium whitespace-normal break-words">
-                                {msg.message}
-                              </p>
+                              {msg.linkTitle || msg.linkImage ? (
+                                // リンクメタデータがある場合のプレビュー表示
+                                <div className="flex items-start gap-2 mt-1">
+                                  {msg.linkImage ? (
+                                    <Image
+                                      src={msg.linkImage}
+                                      alt={msg.linkTitle || msg.message}
+                                      width={32}
+                                      height={32}
+                                      className="w-8 h-8 object-cover rounded-lg border border-orange-200 flex-shrink-0"
+                                      onError={(e) => {
+                                        e.currentTarget.style.display = "none";
+                                        e.currentTarget.nextElementSibling?.classList.remove(
+                                          "hidden"
+                                        );
+                                      }}
+                                    />
+                                  ) : null}
+                                  <div
+                                    className={`w-8 h-8 rounded-lg bg-orange-100 border border-orange-200 flex items-center justify-center text-orange-600 font-bold text-xs flex-shrink-0 ${
+                                      msg.linkImage ? "hidden" : ""
+                                    }`}
+                                  >
+                                    URL
+                                  </div>
+                                  <div className="flex-1 min-w-0 overflow-hidden">
+                                    <p className="text-sm font-bold text-gray-800 truncate">
+                                      {msg.linkTitle || msg.message}
+                                    </p>
+                                    <p className="text-xs text-gray-500 truncate">
+                                      {msg.message}
+                                    </p>
+                                  </div>
+                                </div>
+                              ) : (
+                                // 通常のテキストメッセージの場合
+                                <p className="text-medium whitespace-normal break-words">
+                                  {msg.message}
+                                </p>
+                              )}
                             </div>
                           </div>
                           {/* 日付＋moreボタン（未マッチのみ） */}
@@ -218,7 +264,12 @@ export default function Notifications() {
                               className="p-2 transition-transform duration-200 ease-out active:scale-90"
                               aria-label="more"
                             >
-                              <Image src="/icons/more.png" alt="More" width={18} height={18} />
+                              <Image
+                                src="/icons/more.png"
+                                alt="More"
+                                width={18}
+                                height={18}
+                              />
                             </button>
                           </div>
                         </li>
@@ -243,10 +294,12 @@ export default function Notifications() {
                           "
                         >
                           {/* アイコン＋送信相手＋テキスト */}
-                          <div className="flex items-center gap-3 flex-1">
+                          <div className="flex items-start gap-3 flex-1 min-w-0">
                             <div
                               className="w-11 h-11 rounded-full flex items-center justify-center text-white font-bold"
-                              style={{ backgroundColor: getBgColor(msg.receiver.name) }}
+                              style={{
+                                backgroundColor: getBgColor(msg.receiver.name),
+                              }}
                             >
                               {msg.receiver.name.charAt(0)}
                             </div>
@@ -254,9 +307,46 @@ export default function Notifications() {
                               <p className="text-sm font-semibold truncate">
                                 To {msg.receiver.name}
                               </p>
-                              <p className="text-medium whitespace-normal break-words">
-                                {msg.message}
-                              </p>
+                              {msg.linkTitle || msg.linkImage ? (
+                                // リンクメタデータがある場合のプレビュー表示
+                                <div className="flex items-start gap-2 mt-1">
+                                  {msg.linkImage ? (
+                                    <Image
+                                      src={msg.linkImage}
+                                      alt={msg.linkTitle || msg.message}
+                                      width={32}
+                                      height={32}
+                                      className="w-8 h-8 object-cover rounded-lg border border-orange-200 flex-shrink-0"
+                                      onError={(e) => {
+                                        e.currentTarget.style.display = "none";
+                                        e.currentTarget.nextElementSibling?.classList.remove(
+                                          "hidden"
+                                        );
+                                      }}
+                                    />
+                                  ) : null}
+                                  <div
+                                    className={`w-8 h-8 rounded-lg bg-orange-100 border border-orange-200 flex items-center justify-center text-orange-600 font-bold text-xs flex-shrink-0 ${
+                                      msg.linkImage ? "hidden" : ""
+                                    }`}
+                                  >
+                                    URL
+                                  </div>
+                                  <div className="flex-1 min-w-0 overflow-hidden">
+                                    <p className="text-sm font-bold text-gray-800 truncate">
+                                      {msg.linkTitle || msg.message}
+                                    </p>
+                                    <p className="text-xs text-gray-500 truncate">
+                                      {msg.message}
+                                    </p>
+                                  </div>
+                                </div>
+                              ) : (
+                                // 通常のテキストメッセージの場合
+                                <p className="text-medium whitespace-normal break-words">
+                                  {msg.message}
+                                </p>
+                              )}
                             </div>
                           </div>
                           {/* 日付＋“マッチ済”バッジ（More なし） */}

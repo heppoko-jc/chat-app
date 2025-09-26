@@ -108,6 +108,9 @@ export default function Main() {
   } | null>(null);
 
   const [showLinkActionMenu, setShowLinkActionMenu] = useState(false);
+  const [imageLoadErrors, setImageLoadErrors] = useState<Set<string>>(
+    new Set()
+  );
 
   const urlRegex = useMemo(() => /(https?:\/\/[^\s]+)/i, []);
 
@@ -120,11 +123,22 @@ export default function Main() {
     const m = cleaned.match(urlRegex);
     const url = m?.[0];
     console.log("[main] matched URL:", url);
+    
+    // URLが見つからない場合は即座にプレビューをクリア
     if (!url) {
       console.log("[main] no URL found, clearing preview");
       setLinkPreview(null);
       return;
     }
+    
+    // 新しいURLの場合は即座にローディング状態を設定
+    console.log("[main] new URL detected, setting loading state");
+    setLinkPreview({
+      url,
+      title: "Loading...",
+      image: undefined,
+    });
+    
     console.log("[main] starting fetch for:", url);
     let aborted = false;
     (async () => {
@@ -135,12 +149,12 @@ export default function Main() {
         console.log("[main] fetch response:", res.status, res.ok);
         if (!aborted) {
           if (!res.ok) {
-            // 失敗時でも最低限のプレビューを表示
-            console.log("[main] fetch failed, showing basic preview");
+            // 失敗時はno title/no photoを表示
+            console.log("[main] fetch failed, showing no data preview");
             setLinkPreview({
               url,
-              title: url,
-              image: `${new URL(url).origin}/favicon.ico`,
+              title: "no title",
+              image: undefined,
             });
             return;
           }
@@ -148,18 +162,19 @@ export default function Main() {
           console.log("[main] fetch success, data:", data);
           setLinkPreview({
             url: data.url || url,
-            title: data.title || url,
-            image: data.image,
+            title: data.title || "no title",
+            image: data.image || undefined,
           });
         }
       } catch (e) {
         console.log("[main] fetch error:", e);
-        if (!aborted)
+        if (!aborted) {
           setLinkPreview({
             url,
-            title: url,
-            image: `${new URL(url).origin}/favicon.ico`,
+            title: "no title",
+            image: undefined,
           });
+        }
       }
     })();
     return () => {
@@ -424,7 +439,7 @@ export default function Main() {
         count: 0,
         isLinkPreview: true,
         linkData: linkPreview,
-      } as any);
+      } as PresetMessage & { isLinkPreview: boolean; linkData: { url: string; title: string; image?: string } });
     }
 
     return options;
@@ -749,9 +764,11 @@ export default function Main() {
                 // リンクの場合はプレビュー形式で表示
                 <div className="flex items-center gap-2">
                   {selectedMessageLinkData.image ? (
-                    <img
+                    <Image
                       src={selectedMessageLinkData.image}
                       alt={selectedMessageLinkData.title}
+                      width={32}
+                      height={32}
                       className="w-8 h-8 object-cover rounded-lg border border-orange-300"
                       onError={(e) => {
                         e.currentTarget.style.display = "none";
@@ -831,9 +848,11 @@ export default function Main() {
           <div className="bg-white rounded-2xl p-6 mx-4 max-w-sm w-full">
             <div className="flex items-center gap-3 mb-4">
               {selectedMessageLinkData.image ? (
-                <img
+                <Image
                   src={selectedMessageLinkData.image}
                   alt={selectedMessageLinkData.title}
+                  width={48}
+                  height={48}
                   className="w-12 h-12 object-cover rounded-xl border border-orange-200"
                   onError={(e) => {
                     e.currentTarget.style.display = "none";
@@ -892,18 +911,19 @@ export default function Main() {
         onTouchEnd={handleTouchEnd}
       >
         {/* デバッグ用：linkPreview状態の表示 */}
-        {process.env.NODE_ENV === "development" && (
-          <div className="px-6 pt-2 text-xs text-gray-500">
-            DEBUG: step={step}, linkPreview={linkPreview ? "exists" : "null"}
-            {linkPreview && (
-              <div>
-                title: {linkPreview.title}
-                <br />
-                image: {linkPreview.image ? "exists" : "null"}
-              </div>
-            )}
-          </div>
-        )}
+        <div className="px-6 pt-2 text-xs text-gray-500">
+          DEBUG: step={step}, linkPreview={linkPreview ? "exists" : "null"}
+          {linkPreview && (
+            <div>
+              title: {linkPreview.title}
+              <br />
+              image: {linkPreview.image ? "exists" : "null"}
+              <br />
+              imageLoadErrors:{" "}
+              {Array.from(imageLoadErrors).join(", ") || "none"}
+            </div>
+          )}
+        </div>
         <div
           className="flex w-full h-full transition-transform duration-300 will-change-transform"
           style={{
@@ -924,8 +944,15 @@ export default function Main() {
             <div className="flex flex-col gap-3">
               {allMessageOptions.map((msg) => {
                 // リンクプレビューの場合の特別な表示
-                if ((msg as any).isLinkPreview) {
-                  const linkData = (msg as any).linkData;
+                if (
+                  (msg as PresetMessage & { isLinkPreview?: boolean })
+                    .isLinkPreview
+                ) {
+                  const linkData = (
+                    msg as PresetMessage & {
+                      linkData: { url: string; title: string; image?: string };
+                    }
+                  ).linkData;
                   return (
                     <button
                       key={msg.id}
@@ -950,15 +977,32 @@ export default function Main() {
                       }}
                     >
                       {linkData.image ? (
-                        <img
+                        <Image
                           src={linkData.image}
                           alt={linkData.title}
+                          width={48}
+                          height={48}
                           className="w-12 h-12 object-cover rounded-xl border border-orange-200"
                           onError={(e) => {
+                            console.log("Image load error:", linkData.image);
+                            setImageLoadErrors((prev) =>
+                              new Set(prev).add(linkData.image || "")
+                            );
                             e.currentTarget.style.display = "none";
                             e.currentTarget.nextElementSibling?.classList.remove(
                               "hidden"
                             );
+                          }}
+                          onLoad={() => {
+                            console.log(
+                              "Image loaded successfully:",
+                              linkData.image
+                            );
+                            setImageLoadErrors((prev) => {
+                              const newSet = new Set(prev);
+                              newSet.delete(linkData.image || "");
+                              return newSet;
+                            });
                           }}
                         />
                       ) : null}
@@ -967,7 +1011,7 @@ export default function Main() {
                           linkData.image ? "hidden" : ""
                         }`}
                       >
-                        URL
+                        {linkData.image ? "URL" : "no photo"}
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-bold text-gray-800 truncate">
@@ -985,8 +1029,7 @@ export default function Main() {
                 }
 
                 // 通常のメッセージの場合（リンクメタデータがある場合はプレビュー形式）
-                const hasLinkMetadata =
-                  (msg as any).linkTitle || (msg as any).linkImage;
+                const hasLinkMetadata = msg.linkTitle || msg.linkImage;
 
                 if (hasLinkMetadata) {
                   // リンクメタデータがある場合のプレビュー表示
@@ -996,8 +1039,8 @@ export default function Main() {
                       onClick={() => {
                         const linkData = {
                           url: msg.content,
-                          title: (msg as any).linkTitle || msg.content,
-                          image: (msg as any).linkImage,
+                          title: msg.linkTitle || msg.content,
+                          image: msg.linkImage,
                         };
                         setSelectedMessageLinkData(linkData);
                         handleSelectMessage(msg.content, linkData);
@@ -1018,29 +1061,46 @@ export default function Main() {
                             : "#fed7aa",
                       }}
                     >
-                      {(msg as any).linkImage ? (
-                        <img
-                          src={(msg as any).linkImage}
-                          alt={(msg as any).linkTitle || msg.content}
+                      {msg.linkImage ? (
+                        <Image
+                          src={msg.linkImage}
+                          alt={msg.linkTitle || msg.content}
+                          width={48}
+                          height={48}
                           className="w-12 h-12 object-cover rounded-xl border border-orange-200"
                           onError={(e) => {
+                            console.log("Image load error:", msg.linkImage);
+                            setImageLoadErrors((prev) =>
+                              new Set(prev).add(msg.linkImage || "")
+                            );
                             e.currentTarget.style.display = "none";
                             e.currentTarget.nextElementSibling?.classList.remove(
                               "hidden"
                             );
                           }}
+                          onLoad={() => {
+                            console.log(
+                              "Image loaded successfully:",
+                              msg.linkImage
+                            );
+                            setImageLoadErrors((prev) => {
+                              const newSet = new Set(prev);
+                              newSet.delete(msg.linkImage || "");
+                              return newSet;
+                            });
+                          }}
                         />
                       ) : null}
                       <div
                         className={`w-12 h-12 rounded-xl bg-orange-100 border border-orange-200 flex items-center justify-center text-orange-600 font-bold text-xs ${
-                          (msg as any).linkImage ? "hidden" : ""
+                          msg.linkImage ? "hidden" : ""
                         }`}
                       >
                         URL
                       </div>
                       <div className="flex-1 min-w-0">
                         <p className="text-sm font-bold text-gray-800 truncate">
-                          {(msg as any).linkTitle || msg.content}
+                          {msg.linkTitle || msg.content}
                         </p>
                         <p className="text-xs text-gray-500 truncate">
                           {msg.content}

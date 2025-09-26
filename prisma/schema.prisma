@@ -29,6 +29,8 @@ model SentMessage {
   senderId   String
   receiverId String
   message    String
+  linkTitle  String?  // リンクのタイトル
+  linkImage  String?  // リンクの画像URL
   createdAt  DateTime @default(now())
   receiver   User     @relation("ReceivedMessages", fields: [receiverId], references: [id])
   sender     User     @relation("SentMessages",   fields: [senderId],   references: [id])

@@ -29,6 +29,22 @@ const withPWAMiddleware = withPWA(pwaOptions);
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
+  images: {
+    remotePatterns: [
+      {
+        protocol: "https",
+        hostname: "images.ctfassets.net",
+        port: "",
+        pathname: "/**",
+      },
+      {
+        protocol: "https",
+        hostname: "**",
+        port: "",
+        pathname: "/**",
+      },
+    ],
+  },
 };
 
 export default withPWAMiddleware(nextConfig);

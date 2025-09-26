@@ -6,7 +6,6 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import axios from "axios";
 import FixedTabBar from "../components/FixedTabBar";
-import Image from "next/image";
 import socket, { setSocketUserId } from "../socket";
 
 // ===== バッジ用の軽量ユーティリティ（型安全・any なし） =====
