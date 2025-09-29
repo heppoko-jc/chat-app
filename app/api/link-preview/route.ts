@@ -74,6 +74,155 @@ function extractMeta(html: string, url: string) {
   return { title, image };
 }
 
+// Google Maps URLから地名を抽出する関数
+function extractLocationFromGoogleMapsUrl(url: URL): string | null {
+  try {
+    console.log("[link-preview] Extracting location from URL:", url.toString());
+
+    // パスから地名を抽出
+    const pathParts = url.pathname.split("/").filter((part) => part.length > 0);
+
+    // /maps/place/地名 の形式の場合
+    if (pathParts.includes("place") && pathParts.length > 2) {
+      const placeIndex = pathParts.indexOf("place");
+      if (placeIndex + 1 < pathParts.length) {
+        const location = pathParts[placeIndex + 1];
+        const decodedLocation = decodeURIComponent(
+          location.replace(/\+/g, " ")
+        );
+        console.log(
+          "[link-preview] Extracted location from path:",
+          decodedLocation
+        );
+
+        // 長い住所の場合は、店舗名を抽出
+        if (decodedLocation.length > 50) {
+          // 店舗名のパターンを検索（例：ATELIER KOHTA、虎ノ門横丁など）
+          const shopNamePatterns = [
+            /([A-Z][A-Z\s]+[A-Z])/, // 大文字の店舗名（例：ATELIER KOHTA）
+            /([^0-9]+店)/, // 〜店で終わる名前
+            /([^0-9]+横丁)/, // 〜横丁で終わる名前
+            /([^0-9]+ビル)/, // 〜ビルで終わる名前
+          ];
+
+          for (const pattern of shopNamePatterns) {
+            const match = decodedLocation.match(pattern);
+            if (match && match[1]) {
+              const shopName = match[1].trim();
+              console.log("[link-preview] Found shop name:", shopName);
+              return shopName;
+            }
+          }
+
+          // パターンが見つからない場合は、最初の部分を取得
+          const parts = decodedLocation.split(/[,，]/);
+          if (parts.length > 1) {
+            const shortName = parts[0].trim();
+            console.log("[link-preview] Shortened location:", shortName);
+            return shortName;
+          }
+        }
+
+        return decodedLocation;
+      }
+    }
+
+    // クエリパラメータから地名を抽出
+    const q = url.searchParams.get("q");
+    if (q) {
+      const decodedQ = decodeURIComponent(q);
+      console.log("[link-preview] Extracted location from query:", decodedQ);
+
+      // 長い住所の場合は短縮
+      if (decodedQ.length > 50) {
+        const parts = decodedQ.split(/[,，]/);
+        if (parts.length > 1) {
+          const shortName = parts[0].trim();
+          console.log("[link-preview] Shortened query location:", shortName);
+          return shortName;
+        }
+      }
+
+      return decodedQ;
+    }
+
+    // @lat,lng,zoom の形式の場合
+    const atParam = url.searchParams.get("@");
+    if (atParam) {
+      // この場合は座標なので、別の方法で地名を取得する必要がある
+      return null;
+    }
+
+    console.log("[link-preview] No location found in URL");
+    return null;
+  } catch (e) {
+    console.log("[link-preview] Error extracting location:", e);
+    return null;
+  }
+}
+
+// 短縮URLを解決する関数
+async function resolveShortUrl(shortUrl: string): Promise<string | null> {
+  try {
+    const response = await fetch(shortUrl, {
+      method: "HEAD",
+      redirect: "manual",
+    });
+
+    const location = response.headers.get("location");
+    return location;
+  } catch (e) {
+    console.log("[link-preview] Error resolving short URL:", e);
+    return null;
+  }
+}
+
+// 地名に基づいて画像を取得する関数
+async function getLocationImage(
+  locationTitle: string | null
+): Promise<string | undefined> {
+  if (!locationTitle) {
+    console.log("[link-preview] No location title provided");
+    return undefined;
+  }
+
+  console.log("[link-preview] Getting image for location:", locationTitle);
+
+  try {
+    // APIキーがない場合は、画像なし（アイコン表示）
+    if (!process.env.GOOGLE_MAPS_API_KEY) {
+      console.log(
+        "[link-preview] No Google Maps API key, no image will be shown"
+      );
+      return undefined; // 画像なしで、フロントエンドで🗺️アイコンを表示
+    }
+
+    // Google Static Maps APIを使用して地図の画像を取得
+    const staticMapsUrl = `https://maps.googleapis.com/maps/api/staticmap?center=${encodeURIComponent(
+      locationTitle
+    )}&zoom=13&size=400x300&maptype=roadmap&markers=color:red%7C${encodeURIComponent(
+      locationTitle
+    )}&key=${process.env.GOOGLE_MAPS_API_KEY}`;
+
+    console.log("[link-preview] Generated Google Maps URL:", staticMapsUrl);
+    return staticMapsUrl;
+  } catch (e) {
+    console.log("[link-preview] Error fetching location image:", e);
+  }
+
+  return undefined;
+}
+
+// 文字列から色を生成する関数
+function getColorFromString(str: string): string {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = str.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  const color = (hash & 0x00ffffff).toString(16).toUpperCase();
+  return "00000".substring(0, 6 - color.length) + color;
+}
+
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
@@ -87,6 +236,63 @@ export async function GET(req: NextRequest) {
       url = new URL(target);
     } catch {
       return NextResponse.json({ error: "invalid url" }, { status: 400 });
+    }
+
+    // Google Maps の特別処理
+    if (
+      url.hostname.includes("google.com") &&
+      url.pathname.includes("/maps/")
+    ) {
+      console.log(
+        "[link-preview] Google Maps detected, extracting location info"
+      );
+
+      // URLから地名を抽出
+      const locationTitle = extractLocationFromGoogleMapsUrl(url);
+
+      // 地名に基づいて画像を取得
+      const locationImage = await getLocationImage(locationTitle);
+
+      return NextResponse.json({
+        url: url.toString(),
+        title: locationTitle || "Google Maps",
+        image: locationImage,
+      });
+    }
+
+    // Google Maps の短縮URLの特別処理
+    if (
+      url.hostname.includes("maps.app.goo.gl") ||
+      url.hostname.includes("goo.gl")
+    ) {
+      console.log(
+        "[link-preview] Google Maps short URL detected, resolving and extracting location"
+      );
+
+      // 短縮URLを解決してから地名を抽出
+      try {
+        const resolvedUrl = await resolveShortUrl(url.toString());
+        if (resolvedUrl) {
+          const resolvedUrlObj = new URL(resolvedUrl);
+          const locationTitle =
+            extractLocationFromGoogleMapsUrl(resolvedUrlObj);
+          const locationImage = await getLocationImage(locationTitle);
+
+          return NextResponse.json({
+            url: url.toString(),
+            title: locationTitle || "Google Maps",
+            image: locationImage,
+          });
+        }
+      } catch (e) {
+        console.log("[link-preview] Failed to resolve short URL:", e);
+      }
+
+      return NextResponse.json({
+        url: url.toString(),
+        title: "Google Maps",
+        image: undefined,
+      });
     }
 
     console.log("[link-preview] fetching:", url.toString());
@@ -119,18 +325,32 @@ export async function GET(req: NextRequest) {
         "[link-preview] fetch failed, returning fallback:",
         res.status
       );
+      // 404やアクセスエラーの場合は、URLの最後の部分をタイトルとして使用
+      const pathParts = url.pathname
+        .split("/")
+        .filter((part) => part.length > 0);
+      const lastPart = pathParts[pathParts.length - 1];
+      const title = lastPart ? decodeURIComponent(lastPart) : url.hostname;
+
       return NextResponse.json({
         url: url.toString(),
-        title: url.toString(),
-        image: `${url.origin}/favicon.ico`,
+        title: title,
+        image: undefined, // 画像は表示しない
       });
     }
     if (!contentType.includes("text/html")) {
       console.log("[link-preview] non-html content, returning fallback");
+      // 非HTMLコンテンツの場合も、URLの最後の部分をタイトルとして使用
+      const pathParts = url.pathname
+        .split("/")
+        .filter((part) => part.length > 0);
+      const lastPart = pathParts[pathParts.length - 1];
+      const title = lastPart ? decodeURIComponent(lastPart) : url.hostname;
+
       return NextResponse.json({
         url: url.toString(),
-        title: url.toString(),
-        image: `${url.origin}/favicon.ico`,
+        title: title,
+        image: undefined, // 画像は表示しない
       });
     }
     const html = await res.text();
@@ -140,9 +360,8 @@ export async function GET(req: NextRequest) {
       title: meta.title,
       hasImage: !!meta.image,
     });
-    // 画像が無い場合は favicon を最後の手段として提示
-    const origin = new URL(url.toString()).origin;
-    const image = meta.image || `${origin}/favicon.ico`;
+    // 画像が無い場合は画像なし（エラーを避けるため）
+    const image = meta.image || undefined;
     const result = { url: url.toString(), title: meta.title, image };
     console.log("[link-preview] final result:", result);
     return NextResponse.json(result);
@@ -153,10 +372,17 @@ export async function GET(req: NextRequest) {
     if (target) {
       try {
         const url = new URL(target);
+        // エラー時も、URLの最後の部分をタイトルとして使用
+        const pathParts = url.pathname
+          .split("/")
+          .filter((part) => part.length > 0);
+        const lastPart = pathParts[pathParts.length - 1];
+        const title = lastPart ? decodeURIComponent(lastPart) : url.hostname;
+
         return NextResponse.json({
           url: url.toString(),
-          title: url.toString(),
-          image: `${url.origin}/favicon.ico`,
+          title: title,
+          image: undefined, // 画像は表示しない
         });
       } catch {
         return NextResponse.json({ error: "internal error" }, { status: 500 });

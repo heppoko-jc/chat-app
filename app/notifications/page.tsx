@@ -236,12 +236,34 @@ export default function Notifications() {
                                     URL
                                   </div>
                                   <div className="flex-1 min-w-0 overflow-hidden">
-                                    <p className="text-sm font-bold text-gray-800 truncate">
-                                      {msg.linkTitle || msg.message}
-                                    </p>
-                                    <p className="text-xs text-gray-500 truncate">
-                                      {msg.message}
-                                    </p>
+                                    {msg.linkTitle &&
+                                    (msg.message.includes(" ") ||
+                                      msg.message.includes("　") ||
+                                      msg.message.match(
+                                        /^(https?:\/\/[a-zA-Z0-9\-._~:/?#[\]@!$&'()*+,;=%]+)([^a-zA-Z0-9\-._~:/?#[\]@!$&'()*+,;=%].+)$/
+                                      )) ? (
+                                      // リンク+テキストの場合
+                                      <>
+                                        <p className="text-sm font-bold text-gray-800">
+                                          {msg.linkTitle}
+                                        </p>
+                                        <p className="text-xs text-gray-500 truncate mt-1">
+                                          {msg.message
+                                            .replace(
+                                              /^(https?:\/\/[a-zA-Z0-9\-._~:/?#[\]@!$&'()*+,;=%]+)/,
+                                              ""
+                                            )
+                                            .trim()}
+                                        </p>
+                                      </>
+                                    ) : (
+                                      // 通常のリンクの場合
+                                      <>
+                                        <p className="text-sm font-bold text-gray-800">
+                                          {msg.linkTitle || msg.message}
+                                        </p>
+                                      </>
+                                    )}
                                   </div>
                                 </div>
                               ) : (
@@ -333,12 +355,34 @@ export default function Notifications() {
                                     URL
                                   </div>
                                   <div className="flex-1 min-w-0 overflow-hidden">
-                                    <p className="text-sm font-bold text-gray-800 truncate">
-                                      {msg.linkTitle || msg.message}
-                                    </p>
-                                    <p className="text-xs text-gray-500 truncate">
-                                      {msg.message}
-                                    </p>
+                                    {msg.linkTitle &&
+                                    (msg.message.includes(" ") ||
+                                      msg.message.includes("　") ||
+                                      msg.message.match(
+                                        /^(https?:\/\/[a-zA-Z0-9\-._~:/?#[\]@!$&'()*+,;=%]+)([^a-zA-Z0-9\-._~:/?#[\]@!$&'()*+,;=%].+)$/
+                                      )) ? (
+                                      // リンク+テキストの場合
+                                      <>
+                                        <p className="text-sm font-bold text-gray-800">
+                                          {msg.linkTitle}
+                                        </p>
+                                        <p className="text-xs text-gray-500 truncate mt-1">
+                                          {msg.message
+                                            .replace(
+                                              /^(https?:\/\/[a-zA-Z0-9\-._~:/?#[\]@!$&'()*+,;=%]+)/,
+                                              ""
+                                            )
+                                            .trim()}
+                                        </p>
+                                      </>
+                                    ) : (
+                                      // 通常のリンクの場合
+                                      <>
+                                        <p className="text-sm font-bold text-gray-800">
+                                          {msg.linkTitle || msg.message}
+                                        </p>
+                                      </>
+                                    )}
                                   </div>
                                 </div>
                               ) : (

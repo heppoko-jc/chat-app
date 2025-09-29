@@ -99,6 +99,7 @@ export default function Main() {
     url: string;
     title: string;
     image?: string;
+    additionalText?: string;
   } | null>(null);
 
   const [selectedMessageLinkData, setSelectedMessageLinkData] = useState<{
@@ -112,7 +113,66 @@ export default function Main() {
     new Set()
   );
 
+  // より厳密なURL検出のための正規表現
   const urlRegex = useMemo(() => /(https?:\/\/[^\s]+)/i, []);
+  // リンク+テキストの検出：URLの後に明確なスペースとテキストがある場合
+  const linkWithTextRegex = useMemo(
+    () => /(https?:\/\/[^\s]+)\s+([^\s].+)/i,
+    []
+  );
+
+  // URLの境界をより正確に検出する関数
+  const extractUrlAndText = (input: string) => {
+    console.log("[extractUrlAndText] Input:", input);
+
+    // 全角スペースを半角スペースに変換
+    const normalizedInput = input.replace(/　/g, " ");
+    console.log("[extractUrlAndText] Normalized input:", normalizedInput);
+
+    // スペースありの場合をチェック
+    const spaceMatch = normalizedInput.match(/^(https?:\/\/[^\s]+)\s+(.+)$/i);
+    if (spaceMatch) {
+      const url = spaceMatch[1];
+      const text = spaceMatch[2];
+      console.log(
+        "[extractUrlAndText] Space detected - URL:",
+        url,
+        "Text:",
+        text
+      );
+      return { url, text };
+    }
+
+    // スペースなしの場合をチェック（URLの後に直接テキストが続く場合）
+    // より厳密なURLパターンを使用
+    const directMatch = normalizedInput.match(
+      /^(https?:\/\/[a-zA-Z0-9\-._~:/?#[\]@!$&'()*+,;=%]+)([^a-zA-Z0-9\-._~:/?#[\]@!$&'()*+,;=%].+)$/
+    );
+    if (directMatch && directMatch[2]) {
+      const url = directMatch[1];
+      const text = directMatch[2];
+      console.log(
+        "[extractUrlAndText] Direct text detected - URL:",
+        url,
+        "Text:",
+        text
+      );
+      return { url, text };
+    }
+
+    // URLのみの場合
+    const urlOnlyMatch = normalizedInput.match(
+      /^(https?:\/\/[a-zA-Z0-9\-._~:/?#[\]@!$&'()*+,;=%]+)$/
+    );
+    if (urlOnlyMatch) {
+      const url = urlOnlyMatch[1];
+      console.log("[extractUrlAndText] URL only - URL:", url);
+      return { url, text: null };
+    }
+
+    console.log("[extractUrlAndText] No URL found");
+    return null;
+  };
 
   // 入力がURLを含む場合、プレビューを取得
   useEffect(() => {
@@ -120,17 +180,86 @@ export default function Main() {
     // 先頭の @ や空白を除去してから URL を抽出（Xやメモアプリ風の貼り付け対策）
     const cleaned = (inputMessage || "").replace(/^[@\s]+/, "");
     console.log("[main] cleaned input:", cleaned);
-    const m = cleaned.match(urlRegex);
-    const url = m?.[0];
-    console.log("[main] matched URL:", url);
-    
-    // URLが見つからない場合は即座にプレビューをクリア
-    if (!url) {
+
+    // 新しいURL検出ロジックを使用
+    const urlAndText = extractUrlAndText(cleaned);
+    console.log("[main] URL and text extraction:", {
+      input: cleaned,
+      result: urlAndText,
+    });
+
+    if (urlAndText && urlAndText.text) {
+      const url = urlAndText.url;
+      const text = urlAndText.text;
+      console.log("[main] Link with text detected - URL:", url, "Text:", text);
+
+      // リンク+テキストの場合は、まずリンクのメタデータを取得
+      setLinkPreview({
+        url,
+        title: "Loading...",
+        image: undefined,
+        additionalText: text,
+      });
+
+      // リンクのメタデータを取得
+      (async () => {
+        try {
+          // キャッシュを無効化するためにタイムスタンプを追加
+          const res = await fetch(
+            `/api/link-preview?url=${encodeURIComponent(url)}&t=${Date.now()}`
+          );
+          if (res.ok) {
+            const data = await res.json();
+            console.log("[main] Link metadata received:", data);
+            setLinkPreview({
+              url,
+              title: data.title || url,
+              image: data.image,
+              additionalText: text,
+            });
+          } else {
+            setLinkPreview({
+              url,
+              title: url,
+              image: undefined,
+              additionalText: text,
+            });
+          }
+        } catch (error) {
+          console.error("[main] Error fetching link metadata:", error);
+          setLinkPreview({
+            url,
+            title: url,
+            image: undefined,
+            additionalText: text,
+          });
+        }
+      })();
+      return;
+    }
+
+    // 通常のURL検出（リンク+テキストでない場合）
+    let url: string | null = null;
+
+    if (urlAndText && !urlAndText.text) {
+      url = urlAndText.url;
+      console.log("[main] Single URL detected:", url);
+    } else if (urlAndText && urlAndText.text) {
+      // リンク+テキストの場合は既に処理済み
+      return;
+    } else {
+      // URLが見つからない場合は即座にプレビューをクリア
       console.log("[main] no URL found, clearing preview");
       setLinkPreview(null);
       return;
     }
-    
+
+    // 現在のlinkPreviewのURLと比較して、同じ場合は何もしない
+    if (linkPreview && linkPreview.url === url) {
+      console.log("[main] same URL, skipping fetch");
+      return;
+    }
+
     // 新しいURLの場合は即座にローディング状態を設定
     console.log("[main] new URL detected, setting loading state");
     setLinkPreview({
@@ -138,16 +267,25 @@ export default function Main() {
       title: "Loading...",
       image: undefined,
     });
-    
+
     console.log("[main] starting fetch for:", url);
     let aborted = false;
     (async () => {
       try {
         const res = await fetch(
-          `/api/link-preview?url=${encodeURIComponent(url)}`
+          `/api/link-preview?url=${encodeURIComponent(url!)}`
         );
         console.log("[main] fetch response:", res.status, res.ok);
         if (!aborted) {
+          // レスポンス受信時に再度URLをチェック（競合状態を防ぐ）
+          const currentCleaned = (inputMessage || "").replace(/^[@\s]+/, "");
+          const currentUrl = extractUrlAndText(currentCleaned)?.url;
+
+          if (currentUrl !== url) {
+            console.log("[main] URL changed during fetch, ignoring result");
+            return;
+          }
+
           if (!res.ok) {
             // 失敗時はno title/no photoを表示
             console.log("[main] fetch failed, showing no data preview");
@@ -160,6 +298,12 @@ export default function Main() {
           }
           const data = await res.json();
           console.log("[main] fetch success, data:", data);
+          console.log(
+            "[main] Setting linkPreview with title:",
+            data.title,
+            "image:",
+            data.image
+          );
           setLinkPreview({
             url: data.url || url,
             title: data.title || "no title",
@@ -169,18 +313,24 @@ export default function Main() {
       } catch (e) {
         console.log("[main] fetch error:", e);
         if (!aborted) {
-          setLinkPreview({
-            url,
-            title: "no title",
-            image: undefined,
-          });
+          // エラー時もURLをチェック
+          const currentCleaned = (inputMessage || "").replace(/^[@\s]+/, "");
+          const currentUrl = extractUrlAndText(currentCleaned)?.url;
+
+          if (currentUrl === url) {
+            setLinkPreview({
+              url,
+              title: "no title",
+              image: undefined,
+            });
+          }
         }
       }
     })();
     return () => {
       aborted = true;
     };
-  }, [inputMessage, urlRegex]);
+  }, [inputMessage]);
 
   // ポップアップ・キュー
   const [matchQueue, setMatchQueue] = useState<MatchQueueItem[]>([]);
@@ -400,6 +550,13 @@ export default function Main() {
   const handleLinkAction = (action: "open" | "select") => {
     if (!selectedMessageLinkData) return;
 
+    console.log("[handleLinkAction] Action:", action);
+    console.log(
+      "[handleLinkAction] selectedMessageLinkData:",
+      selectedMessageLinkData
+    );
+    console.log("[handleLinkAction] URL to open:", selectedMessageLinkData.url);
+
     if (action === "open") {
       // リンク先を開く
       window.open(selectedMessageLinkData.url, "_blank");
@@ -451,7 +608,39 @@ export default function Main() {
       setSelectedMessage(message);
       setIsInputMode(false);
 
-      // リンクの場合はメタデータを取得してから次のステップに進む
+      // リンク+テキストの場合は特別な処理
+      const urlAndText = extractUrlAndText(message);
+      if (urlAndText && urlAndText.text) {
+        console.log(
+          "[main] Link with text detected in handleMessageIconClick:",
+          urlAndText
+        );
+        // リンク+テキストの場合は、リンク部分のみをメタデータ取得対象とする
+        const linkMessage = urlAndText.url;
+        try {
+          console.log("[main] リンクメタデータを取得中:", linkMessage);
+          const res = await fetch(
+            `/api/link-preview?url=${encodeURIComponent(linkMessage)}`
+          );
+          if (res.ok) {
+            const data = await res.json();
+            console.log("[main] 取得したメタデータ:", data);
+            const linkData = {
+              url: data.url || linkMessage,
+              title: data.title || linkMessage,
+              image: data.image,
+            };
+            setSelectedMessageLinkData(linkData);
+            console.log("[main] リンクメタデータ設定完了:", linkData);
+          }
+        } catch (error) {
+          console.error("[main] リンクメタデータ取得エラー:", error);
+        }
+        setStep("select-recipients");
+        return;
+      }
+
+      // 通常のリンクの場合はメタデータを取得してから次のステップに進む
       if (message.startsWith("http")) {
         try {
           console.log("[main] リンクメタデータを取得中:", message);
@@ -503,19 +692,74 @@ export default function Main() {
 
   // 送信
   const handleSend = async () => {
-    if (!selectedMessage) return;
+    console.log("[main] handleSend called:", {
+      selectedMessage,
+      selectedRecipientIds: selectedRecipientIds.length,
+      currentUserId,
+      isSending,
+    });
+
+    if (!selectedMessage) {
+      console.log("[main] No selected message");
+      return;
+    }
     if (selectedRecipientIds.length === 0) {
+      console.log("[main] No recipients selected");
       setStep("select-recipients");
       return;
     }
-    if (!currentUserId || isSending) return;
+    if (!currentUserId || isSending) {
+      console.log("[main] Cannot send:", { currentUserId, isSending });
+      return;
+    }
 
-    // リンクの場合、メタデータが設定されているか確認
+    // リンク+テキストの場合の処理
+    let messageToSend = selectedMessage;
     let finalLinkData = selectedMessageLinkData;
-    if (
+
+    // リンク+テキストかどうかを判定
+    const urlAndText = extractUrlAndText(selectedMessage);
+    console.log("[main] URL and text analysis:", {
+      selectedMessage,
+      urlAndText,
+      selectedMessageLinkData,
+    });
+
+    if (urlAndText && urlAndText.text) {
+      // リンク+テキストの場合は、そのまま送信
+      messageToSend = selectedMessage;
+      console.log("[main] Link with text message:", messageToSend);
+      console.log(
+        "[main] Using selectedMessageLinkData:",
+        selectedMessageLinkData
+      );
+
+      // メタデータが設定されていない場合は再取得
+      if (!selectedMessageLinkData || !selectedMessageLinkData.title) {
+        console.log("[main] メタデータが未設定、再取得中...");
+        try {
+          const res = await fetch(
+            `/api/link-preview?url=${encodeURIComponent(urlAndText.url)}`
+          );
+          if (res.ok) {
+            const data = await res.json();
+            finalLinkData = {
+              url: data.url || urlAndText.url,
+              title: data.title || urlAndText.url,
+              image: data.image,
+            };
+            setSelectedMessageLinkData(finalLinkData);
+            console.log("[main] メタデータ再取得完了:", finalLinkData);
+          }
+        } catch (error) {
+          console.error("[main] メタデータ再取得エラー:", error);
+        }
+      }
+    } else if (
       selectedMessage.startsWith("http") &&
       (!selectedMessageLinkData || !selectedMessageLinkData.title)
     ) {
+      // 通常のリンクの場合、メタデータが設定されているか確認
       console.log("[main] 送信前メタデータ再取得:", selectedMessage);
       try {
         const res = await fetch(
@@ -538,12 +782,11 @@ export default function Main() {
 
     setIsSending(true);
     setSentMessageInfo({
-      message: selectedMessage,
+      message: messageToSend,
       recipients: [...selectedRecipientIds],
     });
     setIsSent(true);
 
-    const messageToSend = selectedMessage;
     const recipientsToSend = [...selectedRecipientIds];
 
     // UI リセット
@@ -602,12 +845,11 @@ export default function Main() {
       };
 
       console.log("[main] 送信データ:", {
-        message: messageToSend,
-        linkTitle: finalLinkData?.title,
-        linkImage: finalLinkData?.image,
+        requestData,
+        finalLinkData,
+        selectedMessageLinkData,
+        urlAndText,
         isLink: messageToSend.startsWith("http"),
-        finalLinkData: finalLinkData,
-        originalSelectedMessageLinkData: selectedMessageLinkData,
       });
       const matchResponse = await axios.post("/api/match-message", requestData);
 
@@ -783,11 +1025,18 @@ export default function Main() {
                       selectedMessageLinkData.image ? "hidden" : ""
                     }`}
                   >
-                    URL
+                    {selectedMessageLinkData.image
+                      ? "URL"
+                      : selectedMessageLinkData.title &&
+                        selectedMessageLinkData.title !== "Google Maps"
+                      ? "🗺️"
+                      : "no photo"}
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-bold text-orange-800 truncate">
-                      {selectedMessageLinkData.title}
+                      {linkPreview?.additionalText
+                        ? `${selectedMessageLinkData.title} ${linkPreview.additionalText}`
+                        : selectedMessageLinkData.title}
                     </p>
                     <p className="text-xs text-orange-600 truncate">
                       {selectedMessageLinkData.url}
@@ -867,11 +1116,18 @@ export default function Main() {
                   selectedMessageLinkData.image ? "hidden" : ""
                 }`}
               >
-                URL
+                {selectedMessageLinkData.image
+                  ? "URL"
+                  : selectedMessageLinkData.title &&
+                    selectedMessageLinkData.title !== "Google Maps"
+                  ? "🗺️"
+                  : "no photo"}
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-bold text-gray-800 truncate">
-                  {selectedMessageLinkData.title}
+                  {linkPreview?.additionalText
+                    ? `${selectedMessageLinkData.title} ${linkPreview.additionalText}`
+                    : selectedMessageLinkData.title}
                 </p>
                 <p className="text-xs text-gray-500 truncate">
                   {selectedMessageLinkData.url}
@@ -915,14 +1171,23 @@ export default function Main() {
           DEBUG: step={step}, linkPreview={linkPreview ? "exists" : "null"}
           {linkPreview && (
             <div>
+              URL: {linkPreview.url}
+              <br />
               title: {linkPreview.title}
               <br />
               image: {linkPreview.image ? "exists" : "null"}
+              <br />
+              additionalText: {linkPreview.additionalText || "none"}
               <br />
               imageLoadErrors:{" "}
               {Array.from(imageLoadErrors).join(", ") || "none"}
             </div>
           )}
+          <div>
+            inputMessage: {inputMessage}
+            <br />
+            allMessageOptions count: {allMessageOptions.length}
+          </div>
         </div>
         <div
           className="flex w-full h-full transition-transform duration-300 will-change-transform"
@@ -1011,14 +1276,15 @@ export default function Main() {
                           linkData.image ? "hidden" : ""
                         }`}
                       >
-                        {linkData.image ? "URL" : "no photo"}
+                        {linkData.image
+                          ? "URL"
+                          : linkData.title && linkData.title !== "Google Maps"
+                          ? "🗺️"
+                          : "no photo"}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-bold text-gray-800 truncate">
+                        <p className="text-sm font-bold text-gray-800">
                           {linkData.title}
-                        </p>
-                        <p className="text-xs text-gray-500 truncate">
-                          {linkData.url}
                         </p>
                         <p className="text-xs text-orange-600 mt-1">
                           このリンクをことばとして選ぶ
@@ -1037,11 +1303,33 @@ export default function Main() {
                     <button
                       key={msg.id}
                       onClick={() => {
+                        // リンク+テキストの場合はURL部分のみを抽出
+                        console.log(
+                          "[handleMessageIconClick] msg.content:",
+                          msg.content
+                        );
+                        const urlMatch = msg.content.match(
+                          /^(https?:\/\/[a-zA-Z0-9\-._~:/?#[\]@!$&'()*+,;=%]+)/
+                        );
+                        const urlOnly = urlMatch ? urlMatch[1] : msg.content;
+                        console.log(
+                          "[handleMessageIconClick] urlMatch:",
+                          urlMatch
+                        );
+                        console.log(
+                          "[handleMessageIconClick] urlOnly:",
+                          urlOnly
+                        );
+
                         const linkData = {
-                          url: msg.content,
+                          url: urlOnly,
                           title: msg.linkTitle || msg.content,
                           image: msg.linkImage,
                         };
+                        console.log(
+                          "[handleMessageIconClick] linkData:",
+                          linkData
+                        );
                         setSelectedMessageLinkData(linkData);
                         handleSelectMessage(msg.content, linkData);
                       }}
@@ -1096,15 +1384,41 @@ export default function Main() {
                           msg.linkImage ? "hidden" : ""
                         }`}
                       >
-                        URL
+                        {msg.linkImage
+                          ? "URL"
+                          : msg.linkTitle && msg.linkTitle !== "Google Maps"
+                          ? "🗺️"
+                          : "no photo"}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <p className="text-sm font-bold text-gray-800 truncate">
-                          {msg.linkTitle || msg.content}
-                        </p>
-                        <p className="text-xs text-gray-500 truncate">
-                          {msg.content}
-                        </p>
+                        {msg.linkTitle &&
+                        (msg.content.includes(" ") ||
+                          msg.content.includes("　") ||
+                          msg.content.match(
+                            /^(https?:\/\/[a-zA-Z0-9\-._~:/?#[\]@!$&'()*+,;=%]+)([^a-zA-Z0-9\-._~:/?#[\]@!$&'()*+,;=%].+)$/
+                          )) ? (
+                          // リンク+テキストの場合
+                          <>
+                            <p className="text-sm font-bold text-gray-800">
+                              {msg.linkTitle}
+                            </p>
+                            <p className="text-xs text-gray-500 truncate mt-1">
+                              {msg.content
+                                .replace(
+                                  /^(https?:\/\/[a-zA-Z0-9\-._~:/?#[\]@!$&'()*+,;=%]+)/,
+                                  ""
+                                )
+                                .trim()}
+                            </p>
+                          </>
+                        ) : (
+                          // 通常のリンクまたはテキストの場合
+                          <>
+                            <p className="text-sm font-bold text-gray-800">
+                              {msg.linkTitle || msg.content}
+                            </p>
+                          </>
+                        )}
                         <p className="text-xs text-orange-600 mt-1">
                           {msg.count}人がシェアしました
                         </p>

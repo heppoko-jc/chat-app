@@ -61,12 +61,44 @@ export async function POST(req: NextRequest) {
     });
 
     if (message.startsWith("http") && (!linkTitle || !linkImage)) {
-      console.log(`[match-message] リンクメタデータを取得中: ${message}`);
+      // リンク+テキストの場合はリンク部分のみを抽出
+      // 全角スペースを半角スペースに変換してからURL抽出
+      const normalizedMessage = message.replace(/　/g, " ");
+      let urlToFetch = message;
+
+      // スペースありの場合をチェック
+      const spaceMatch = normalizedMessage.match(
+        /^(https?:\/\/[^\s]+)\s+(.+)$/i
+      );
+      if (spaceMatch) {
+        urlToFetch = spaceMatch[1];
+        console.log(`[match-message] スペースあり - URL: ${urlToFetch}`);
+      } else {
+        // スペースなしの場合をチェック（URLの後に直接テキストが続く場合）
+        const directMatch = normalizedMessage.match(
+          /^(https?:\/\/[a-zA-Z0-9\-._~:/?#[\]@!$&'()*+,;=%]+)([^a-zA-Z0-9\-._~:/?#[\]@!$&'()*+,;=%].+)$/
+        );
+        if (directMatch && directMatch[2]) {
+          urlToFetch = directMatch[1];
+          console.log(
+            `[match-message] スペースなし - URL: ${urlToFetch}, Text: ${directMatch[2]}`
+          );
+        } else {
+          // URLのみの場合
+          const urlOnlyMatch = normalizedMessage.match(
+            /^(https?:\/\/[a-zA-Z0-9\-._~:/?#[\]@!$&'()*+,;=%]+)$/
+          );
+          urlToFetch = urlOnlyMatch ? urlOnlyMatch[1] : message;
+          console.log(`[match-message] URLのみ - URL: ${urlToFetch}`);
+        }
+      }
+
+      console.log(`[match-message] リンクメタデータを取得中: ${urlToFetch}`);
       try {
         const previewResponse = await fetch(
           `${
             process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000"
-          }/api/link-preview?url=${encodeURIComponent(message)}`
+          }/api/link-preview?url=${encodeURIComponent(urlToFetch)}`
         );
         console.log(
           `[match-message] プレビューAPI応答: ${previewResponse.status}`
