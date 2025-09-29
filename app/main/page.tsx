@@ -113,14 +113,6 @@ export default function Main() {
     new Set()
   );
 
-  // より厳密なURL検出のための正規表現
-  const urlRegex = useMemo(() => /(https?:\/\/[^\s]+)/i, []);
-  // リンク+テキストの検出：URLの後に明確なスペースとテキストがある場合
-  const linkWithTextRegex = useMemo(
-    () => /(https?:\/\/[^\s]+)\s+([^\s].+)/i,
-    []
-  );
-
   // URLの境界をより正確に検出する関数
   const extractUrlAndText = (input: string) => {
     console.log("[extractUrlAndText] Input:", input);
