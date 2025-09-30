@@ -95,35 +95,39 @@ function extractLocationFromGoogleMapsUrl(url: URL): string | null {
           decodedLocation
         );
 
-        // 長い住所の場合は、店舗名を抽出
-        if (decodedLocation.length > 50) {
-          // 店舗名のパターンを検索（例：ATELIER KOHTA、虎ノ門横丁など）
-          const shopNamePatterns = [
-            /([A-Z][A-Z\s]+[A-Z])/, // 大文字の店舗名（例：ATELIER KOHTA）
-            /([^0-9]+店)/, // 〜店で終わる名前
-            /([^0-9]+横丁)/, // 〜横丁で終わる名前
-            /([^0-9]+ビル)/, // 〜ビルで終わる名前
-          ];
+        // 場所の名前のみを抽出する関数
+        const extractPlaceName = (fullAddress: string): string => {
+          // 郵便番号を除去（例：〒100-0001 や 100-0001）
+          let cleaned = fullAddress.replace(/〒?\d{3}-?\d{4}\s*/, '');
+          
+          // 都道府県を除去
+          cleaned = cleaned.replace(/^(東京都|大阪府|京都府|北海道|青森県|岩手県|宮城県|秋田県|山形県|福島県|茨城県|栃木県|群馬県|埼玉県|千葉県|神奈川県|新潟県|富山県|石川県|福井県|山梨県|長野県|岐阜県|静岡県|愛知県|三重県|滋賀県|兵庫県|奈良県|和歌山県|鳥取県|島根県|岡山県|広島県|山口県|徳島県|香川県|愛媛県|高知県|福岡県|佐賀県|長崎県|熊本県|大分県|宮崎県|鹿児島県|沖縄県)\s*/, '');
+          
+          // 市区町村を除去（一般的なパターン）
+          cleaned = cleaned.replace(/^[^市区町村]+(市|区|町|村)\s*/, '');
+          
+          // 住所の数字部分を除去（例：1-1-1, 2-2-1など）
+          cleaned = cleaned.replace(/^\d+-\d+-\d+\s*/, '');
+          cleaned = cleaned.replace(/^\d+-\d+\s*/, '');
+          cleaned = cleaned.replace(/^\d+\s*/, '');
+          
+          // さらに詳細な住所パターンを除去
+          // 例：千代田1-1-1 → 千代田
+          cleaned = cleaned.replace(/^([^0-9]+)\d+-\d+-\d+\s*/, '$1');
+          cleaned = cleaned.replace(/^([^0-9]+)\d+-\d+\s*/, '$1');
+          cleaned = cleaned.replace(/^([^0-9]+)\d+\s*/, '$1');
+          
+          // 最後の手段：カンマや句読点で分割して最後の部分（店舗名）を取得
+          const parts = cleaned.split(/[,，、]/);
+          const placeName = parts[parts.length - 1].trim();
+          
+          // 空の場合は元の文字列を返す
+          return placeName || fullAddress;
+        };
 
-          for (const pattern of shopNamePatterns) {
-            const match = decodedLocation.match(pattern);
-            if (match && match[1]) {
-              const shopName = match[1].trim();
-              console.log("[link-preview] Found shop name:", shopName);
-              return shopName;
-            }
-          }
-
-          // パターンが見つからない場合は、最初の部分を取得
-          const parts = decodedLocation.split(/[,，]/);
-          if (parts.length > 1) {
-            const shortName = parts[0].trim();
-            console.log("[link-preview] Shortened location:", shortName);
-            return shortName;
-          }
-        }
-
-        return decodedLocation;
+        const placeName = extractPlaceName(decodedLocation);
+        console.log("[link-preview] Extracted place name:", placeName);
+        return placeName;
       }
     }
 
@@ -133,17 +137,38 @@ function extractLocationFromGoogleMapsUrl(url: URL): string | null {
       const decodedQ = decodeURIComponent(q);
       console.log("[link-preview] Extracted location from query:", decodedQ);
 
-      // 長い住所の場合は短縮
-      if (decodedQ.length > 50) {
-        const parts = decodedQ.split(/[,，]/);
-        if (parts.length > 1) {
-          const shortName = parts[0].trim();
-          console.log("[link-preview] Shortened query location:", shortName);
-          return shortName;
-        }
-      }
+      // 場所の名前のみを抽出
+      const extractPlaceName = (fullAddress: string): string => {
+        // 郵便番号を除去
+        let cleaned = fullAddress.replace(/〒?\d{3}-?\d{4}\s*/, '');
+        
+        // 都道府県を除去
+        cleaned = cleaned.replace(/^(東京都|大阪府|京都府|北海道|青森県|岩手県|宮城県|秋田県|山形県|福島県|茨城県|栃木県|群馬県|埼玉県|千葉県|神奈川県|新潟県|富山県|石川県|福井県|山梨県|長野県|岐阜県|静岡県|愛知県|三重県|滋賀県|兵庫県|奈良県|和歌山県|鳥取県|島根県|岡山県|広島県|山口県|徳島県|香川県|愛媛県|高知県|福岡県|佐賀県|長崎県|熊本県|大分県|宮崎県|鹿児島県|沖縄県)\s*/, '');
+        
+        // 市区町村を除去
+        cleaned = cleaned.replace(/^[^市区町村]+(市|区|町|村)\s*/, '');
+        
+        // 住所の数字部分を除去（例：1-1-1, 2-2-1など）
+        cleaned = cleaned.replace(/^\d+-\d+-\d+\s*/, '');
+        cleaned = cleaned.replace(/^\d+-\d+\s*/, '');
+        cleaned = cleaned.replace(/^\d+\s*/, '');
+        
+        // さらに詳細な住所パターンを除去
+        // 例：千代田1-1-1 → 千代田
+        cleaned = cleaned.replace(/^([^0-9]+)\d+-\d+-\d+\s*/, '$1');
+        cleaned = cleaned.replace(/^([^0-9]+)\d+-\d+\s*/, '$1');
+        cleaned = cleaned.replace(/^([^0-9]+)\d+\s*/, '$1');
+        
+          // 最後の手段：カンマや句読点で分割して最後の部分（店舗名）を取得
+          const parts = cleaned.split(/[,，、]/);
+          const placeName = parts[parts.length - 1].trim();
+          
+          return placeName || fullAddress;
+      };
 
-      return decodedQ;
+      const placeName = extractPlaceName(decodedQ);
+      console.log("[link-preview] Extracted place name from query:", placeName);
+      return placeName;
     }
 
     // @lat,lng,zoom の形式の場合
