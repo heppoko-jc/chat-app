@@ -173,6 +173,9 @@ export default function Main() {
     const cleaned = (inputMessage || "").replace(/^[@\s]+/, "");
     console.log("[main] cleaned input:", cleaned);
 
+    // まず状態をリセット
+    setLinkPreview(null);
+
     // 新しいURL検出ロジックを使用
     const urlAndText = extractUrlAndText(cleaned);
     console.log("[main] URL and text extraction:", {
@@ -197,8 +200,9 @@ export default function Main() {
       (async () => {
         try {
           // キャッシュを無効化するためにタイムスタンプを追加
+          const cacheBuster = Date.now() + Math.random();
           const res = await fetch(
-            `/api/link-preview?url=${encodeURIComponent(url)}&t=${Date.now()}`
+            `/api/link-preview?url=${encodeURIComponent(url)}&t=${cacheBuster}`
           );
           if (res.ok) {
             const data = await res.json();
@@ -264,8 +268,9 @@ export default function Main() {
     let aborted = false;
     (async () => {
       try {
+        const cacheBuster = Date.now() + Math.random();
         const res = await fetch(
-          `/api/link-preview?url=${encodeURIComponent(url!)}`
+          `/api/link-preview?url=${encodeURIComponent(url!)}&t=${cacheBuster}`
         );
         console.log("[main] fetch response:", res.status, res.ok);
         if (!aborted) {

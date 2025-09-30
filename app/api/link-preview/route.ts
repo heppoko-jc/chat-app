@@ -236,18 +236,24 @@ export async function GET(req: NextRequest) {
       console.log(
         "[link-preview] Google Maps detected, extracting location info"
       );
+      console.log("[link-preview] Google Maps URL:", url.toString());
 
       // URLから地名を抽出
       const locationTitle = extractLocationFromGoogleMapsUrl(url);
+      console.log("[link-preview] Extracted location title:", locationTitle);
 
       // 地名に基づいて画像を取得
       const locationImage = await getLocationImage(locationTitle);
+      console.log("[link-preview] Generated location image:", locationImage);
 
-      return NextResponse.json({
+      const result = {
         url: url.toString(),
         title: locationTitle || "Google Maps",
         image: locationImage,
-      });
+      };
+      console.log("[link-preview] Google Maps result:", result);
+
+      return NextResponse.json(result);
     }
 
     // Google Maps の短縮URLの特別処理
