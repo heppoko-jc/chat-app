@@ -579,25 +579,10 @@ export default function Main() {
         new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     );
 
-  // リンクプレビューをことばリストに統合
+  // リンクプレビューは送信待機バーに表示するため、メッセージリストには含めない
   const allMessageOptions = useMemo(() => {
-    const options = [...messageOptions];
-
-    // リンクプレビューがある場合は先頭に追加
-    if (linkPreview && step === "select-message") {
-      options.unshift({
-        id: `link-preview-${Date.now()}`,
-        content: linkPreview.url,
-        createdBy: currentUserId || "",
-        createdAt: new Date().toISOString(),
-        count: 0,
-        isLinkPreview: true,
-        linkData: linkPreview,
-      } as PresetMessage & { isLinkPreview: boolean; linkData: { url: string; title: string; image?: string } });
-    }
-
-    return options;
-  }, [messageOptions, linkPreview, step, currentUserId]);
+    return [...messageOptions];
+  }, [messageOptions]);
 
   const handleMessageIconClick = async () => {
     if (isInputMode && inputMessage.trim()) {
@@ -720,15 +705,26 @@ export default function Main() {
     let messageToSend = selectedMessage;
     let finalLinkData = selectedMessageLinkData;
 
-    // リンク+テキストかどうかを判定
-    const urlAndText = extractUrlAndText(selectedMessage);
-    console.log("[main] URL and text analysis:", {
-      selectedMessage,
-      urlAndText,
-      selectedMessageLinkData,
-    });
+    // リンクプレビューが送信待機バーに表示されている場合の処理
+    if (linkPreview && !selectedMessage) {
+      // リンクプレビューから送信する場合
+      messageToSend = linkPreview.url + (linkPreview.additionalText ? ` ${linkPreview.additionalText}` : '');
+      finalLinkData = {
+        url: linkPreview.url,
+        title: linkPreview.title,
+        image: linkPreview.image,
+      };
+      console.log("[main] Sending from linkPreview:", { messageToSend, finalLinkData });
+    } else {
+      // 通常のメッセージ送信処理
+      const urlAndText = extractUrlAndText(selectedMessage);
+      console.log("[main] URL and text analysis:", {
+        selectedMessage,
+        urlAndText,
+        selectedMessageLinkData,
+      });
 
-    if (urlAndText && urlAndText.text) {
+      if (urlAndText && urlAndText.text) {
       // リンク+テキストの場合は、そのまま送信
       messageToSend = selectedMessage;
       console.log("[main] Link with text message:", messageToSend);
@@ -799,6 +795,7 @@ export default function Main() {
     setIsInputMode(false);
     setInputMessage("");
     setSelectedMessageLinkData(null);
+    setLinkPreview(null);
 
     try {
       const isPreset = presetMessages.some(
@@ -897,7 +894,7 @@ export default function Main() {
     }
   };
 
-  const canSend = !!selectedMessage && selectedRecipientIds.length > 0;
+  const canSend = (!!selectedMessage || !!linkPreview) && selectedRecipientIds.length > 0;
 
   // レイアウト定数
   const HEADER_H = 132;
@@ -979,27 +976,81 @@ export default function Main() {
         <div className="flex-1 flex flex-col justify-between h-full overflow-x-auto pr-2">
           {!selectedMessage ||
           !messageOptions.some((m) => m.content === selectedMessage) ? (
-            <input
-              type="text"
-              value={inputMessage}
-              onChange={(e) => setInputMessage(e.target.value)}
-              placeholder="Aa..."
-              className="flex-1 px-3 py-2 rounded-xl border border-orange-200 text-base bg-white shadow-sm focus:ring-2 focus:ring-orange-200 outline-none transition"
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && inputMessage.trim()) {
-                  setSelectedMessage(inputMessage.trim());
-                  setIsInputMode(false);
-                  setStep("select-recipients");
-                }
-              }}
-              onBlur={() => {
-                if (inputMessage.trim()) {
-                  setSelectedMessage(inputMessage.trim());
-                  setIsInputMode(false);
-                  setStep("select-recipients");
-                }
-              }}
-            />
+            // リンクプレビューがある場合はプレビューを表示、ない場合は入力フィールド
+            linkPreview ? (
+              <div className="flex items-center gap-3 flex-1">
+                {/* リンクプレビュー */}
+                <div className="flex items-center gap-2 flex-1 min-w-0">
+                  {linkPreview.image ? (
+                    <Image
+                      src={linkPreview.image}
+                      alt={linkPreview.title}
+                      width={32}
+                      height={32}
+                      className="w-8 h-8 object-cover rounded-lg border border-orange-200 flex-shrink-0"
+                    />
+                  ) : (
+                    <div className="w-8 h-8 rounded-lg bg-orange-100 border border-orange-200 flex items-center justify-center text-orange-600 font-bold text-xs flex-shrink-0">
+                      {linkPreview.title && linkPreview.title !== "Google Maps" ? "URL" : "🗺️"}
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-gray-800 truncate">
+                      {linkPreview.title}
+                    </p>
+                    {linkPreview.additionalText && (
+                      <p className="text-xs text-gray-500 truncate">
+                        {linkPreview.additionalText}
+                      </p>
+                    )}
+                  </div>
+                </div>
+                {/* コメント入力フィールド */}
+                <input
+                  type="text"
+                  value={inputMessage}
+                  onChange={(e) => setInputMessage(e.target.value)}
+                  placeholder="コメントを追加..."
+                  className="flex-1 px-3 py-2 rounded-xl border border-orange-200 text-base bg-white shadow-sm focus:ring-2 focus:ring-orange-200 outline-none transition"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && inputMessage.trim()) {
+                      setSelectedMessage(inputMessage.trim());
+                      setIsInputMode(false);
+                      setStep("select-recipients");
+                    }
+                  }}
+                  onBlur={() => {
+                    if (inputMessage.trim()) {
+                      setSelectedMessage(inputMessage.trim());
+                      setIsInputMode(false);
+                      setStep("select-recipients");
+                    }
+                  }}
+                />
+              </div>
+            ) : (
+              <input
+                type="text"
+                value={inputMessage}
+                onChange={(e) => setInputMessage(e.target.value)}
+                placeholder="Aa..."
+                className="flex-1 px-3 py-2 rounded-xl border border-orange-200 text-base bg-white shadow-sm focus:ring-2 focus:ring-orange-200 outline-none transition"
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && inputMessage.trim()) {
+                    setSelectedMessage(inputMessage.trim());
+                    setIsInputMode(false);
+                    setStep("select-recipients");
+                  }
+                }}
+                onBlur={() => {
+                  if (inputMessage.trim()) {
+                    setSelectedMessage(inputMessage.trim());
+                    setIsInputMode(false);
+                    setStep("select-recipients");
+                  }
+                }}
+              />
+            )
           ) : (
             <div
               onClick={() => setSelectedMessage(null)}
@@ -1169,29 +1220,6 @@ export default function Main() {
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
       >
-        {/* デバッグ用：linkPreview状態の表示 */}
-        <div className="px-6 pt-2 text-xs text-gray-500">
-          DEBUG: step={step}, linkPreview={linkPreview ? "exists" : "null"}
-          {linkPreview && (
-            <div>
-              URL: {linkPreview.url}
-              <br />
-              title: {linkPreview.title}
-              <br />
-              image: {linkPreview.image ? "exists" : "null"}
-              <br />
-              additionalText: {linkPreview.additionalText || "none"}
-              <br />
-              imageLoadErrors:{" "}
-              {Array.from(imageLoadErrors).join(", ") || "none"}
-            </div>
-          )}
-          <div>
-            inputMessage: {inputMessage}
-            <br />
-            allMessageOptions count: {allMessageOptions.length}
-          </div>
-        </div>
         <div
           className="flex w-full h-full transition-transform duration-300 will-change-transform"
           style={{
@@ -1211,11 +1239,11 @@ export default function Main() {
           >
             <div className="flex flex-col gap-3">
               {allMessageOptions.map((msg) => {
-                // リンクプレビューの場合の特別な表示
-                if (
+                // リンクプレビューは送信待機バーに表示するため、ここでは表示しない
+                if (false && (
                   (msg as PresetMessage & { isLinkPreview?: boolean })
                     .isLinkPreview
-                ) {
+                )) {
                   const linkData = (
                     msg as PresetMessage & {
                       linkData: { url: string; title: string; image?: string };
@@ -1596,4 +1624,5 @@ export default function Main() {
       <FixedTabBar />
     </>
   );
+}
 }
