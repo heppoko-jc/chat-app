@@ -605,6 +605,10 @@ export default function Main() {
       setSelectedMessage(message);
       setIsInputMode(false);
 
+      // 状態をリセット（重要！）
+      setSelectedMessageLinkData(null);
+      setLinkPreview(null);
+
       // リンク+テキストの場合は特別な処理
       const urlAndText = extractUrlAndText(message);
       if (urlAndText && urlAndText.text) {
@@ -616,8 +620,9 @@ export default function Main() {
         const linkMessage = urlAndText.url;
         try {
           console.log("[main] リンクメタデータを取得中:", linkMessage);
+          const cacheBuster = Date.now() + Math.random();
           const res = await fetch(
-            `/api/link-preview?url=${encodeURIComponent(linkMessage)}`
+            `/api/link-preview?url=${encodeURIComponent(linkMessage)}&t=${cacheBuster}`
           );
           if (res.ok) {
             const data = await res.json();
@@ -641,8 +646,9 @@ export default function Main() {
       if (message.startsWith("http")) {
         try {
           console.log("[main] リンクメタデータを取得中:", message);
+          const cacheBuster = Date.now() + Math.random();
           const res = await fetch(
-            `/api/link-preview?url=${encodeURIComponent(message)}`
+            `/api/link-preview?url=${encodeURIComponent(message)}&t=${cacheBuster}`
           );
           if (res.ok) {
             const data = await res.json();
@@ -1300,6 +1306,10 @@ export default function Main() {
                     <button
                       key={msg.id}
                       onClick={() => {
+                        // 状態をリセット（重要！）
+                        setSelectedMessageLinkData(null);
+                        setLinkPreview(null);
+                        
                         // リンク+テキストの場合はURL部分のみを抽出
                         console.log(
                           "[handleMessageIconClick] msg.content:",
