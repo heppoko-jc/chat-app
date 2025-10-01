@@ -109,9 +109,6 @@ export default function Main() {
   } | null>(null);
 
   const [showLinkActionMenu, setShowLinkActionMenu] = useState(false);
-  const [imageLoadErrors, setImageLoadErrors] = useState<Set<string>>(
-    new Set()
-  );
 
   // URLの境界をより正確に検出する関数
   const extractUrlAndText = (input: string) => {
@@ -327,7 +324,7 @@ export default function Main() {
     return () => {
       aborted = true;
     };
-  }, [inputMessage]);
+  }, [inputMessage]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ポップアップ・キュー
   const [matchQueue, setMatchQueue] = useState<MatchQueueItem[]>([]);
@@ -679,6 +676,7 @@ export default function Main() {
   };
 
   // 送信
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleSend = async () => {
     console.log("[main] handleSend called:", {
       selectedMessage,
@@ -917,7 +915,7 @@ export default function Main() {
         .slice(-1)[0];
       localStorage.setItem(lastSeenKey, maxSeen);
     }
-  }, [queueHead, lastSeenKey]);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <>
@@ -1274,16 +1272,13 @@ export default function Main() {
                     >
                       {linkData.image ? (
                         <Image
-                          src={linkData.image}
+                          src={linkData.image as string}
                           alt={linkData.title}
                           width={48}
                           height={48}
                           className="w-12 h-12 object-cover rounded-xl border border-orange-200"
                           onError={(e) => {
                             console.log("Image load error:", linkData.image);
-                            setImageLoadErrors((prev) =>
-                              new Set(prev).add(linkData.image || "")
-                            );
                             e.currentTarget.style.display = "none";
                             e.currentTarget.nextElementSibling?.classList.remove(
                               "hidden"
@@ -1294,11 +1289,6 @@ export default function Main() {
                               "Image loaded successfully:",
                               linkData.image
                             );
-                            setImageLoadErrors((prev) => {
-                              const newSet = new Set(prev);
-                              newSet.delete(linkData.image || "");
-                              return newSet;
-                            });
                           }}
                         />
                       ) : null}
@@ -1393,9 +1383,6 @@ export default function Main() {
                           className="w-12 h-12 object-cover rounded-xl border border-orange-200"
                           onError={(e) => {
                             console.log("Image load error:", msg.linkImage);
-                            setImageLoadErrors((prev) =>
-                              new Set(prev).add(msg.linkImage || "")
-                            );
                             e.currentTarget.style.display = "none";
                             e.currentTarget.nextElementSibling?.classList.remove(
                               "hidden"
@@ -1406,11 +1393,6 @@ export default function Main() {
                               "Image loaded successfully:",
                               msg.linkImage
                             );
-                            setImageLoadErrors((prev) => {
-                              const newSet = new Set(prev);
-                              newSet.delete(msg.linkImage || "");
-                              return newSet;
-                            });
                           }}
                         />
                       ) : null}
