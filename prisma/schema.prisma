@@ -12,16 +12,16 @@ model User {
   name              String
   email             String             @unique
   password          String
-  bio               String?
   createdAt         DateTime           @default(now())
+  bio               String?
   chats1            Chat[]             @relation("ChatUser1")
   chats2            Chat[]             @relation("ChatUser2")
   matchedPairs1     MatchPair[]        @relation("MatchPairUser1")
   matchedPairs2     MatchPair[]        @relation("MatchPairUser2")
-  receivedMessages  SentMessage[]      @relation("ReceivedMessages")
-  sentMessages      SentMessage[]      @relation("SentMessages")
   messagesSent      Message[]          @relation("UserMessages")
   pushSubscriptions PushSubscription[] @relation("UserSubscriptions")
+  receivedMessages  SentMessage[]      @relation("ReceivedMessages")
+  sentMessages      SentMessage[]      @relation("SentMessages")
 }
 
 model SentMessage {
@@ -29,11 +29,11 @@ model SentMessage {
   senderId   String
   receiverId String
   message    String
-  linkTitle  String?  // リンクのタイトル
-  linkImage  String?  // リンクの画像URL
   createdAt  DateTime @default(now())
+  linkImage  String?
+  linkTitle  String?
   receiver   User     @relation("ReceivedMessages", fields: [receiverId], references: [id])
-  sender     User     @relation("SentMessages",   fields: [senderId],   references: [id])
+  sender     User     @relation("SentMessages", fields: [senderId], references: [id])
 }
 
 model MatchPair {
@@ -62,7 +62,7 @@ model Message {
   senderId  String
   content   String
   createdAt DateTime @default(now())
-  chat      Chat     @relation(fields: [chatId],   references: [id])
+  chat      Chat     @relation(fields: [chatId], references: [id])
   sender    User     @relation("UserMessages", fields: [senderId], references: [id])
 }
 
@@ -73,7 +73,6 @@ model PushSubscription {
   subscription Json
   isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
-
   user         User     @relation("UserSubscriptions", fields: [userId], references: [id])
 
   @@index([userId])
@@ -82,9 +81,9 @@ model PushSubscription {
 model PresetMessage {
   id        String   @id @default(uuid())
   content   String
-  createdBy String   // ユーザーID（匿名の場合もあり）
+  createdBy String
   createdAt DateTime @default(now())
-  count     Int      @default(0) // 送信回数
-  linkTitle String?  // リンクのタイトル
-  linkImage String?  // リンクの画像URL
+  count     Int      @default(0)
+  linkImage String?
+  linkTitle String?
 }
