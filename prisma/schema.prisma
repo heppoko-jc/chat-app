@@ -83,7 +83,11 @@ model PresetMessage {
   content   String
   createdBy String
   createdAt DateTime @default(now())
-  count     Int      @default(0)
+  count     Int      @default(0) // 送信回数
+  senderCount Int    @default(0) // 送信者数
   linkImage String?
   linkTitle String?
+  comment   String?  // ユーザーコメント
+  type      String   @default("text") // "text" | "url"
+  lastSentAt DateTime @default(now()) // 最後に送信された時刻
 }

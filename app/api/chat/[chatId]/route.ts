@@ -33,7 +33,12 @@ export async function GET(req: NextRequest) {
     const segments = pathname.split("/");
     const chatId = segments[segments.length - 1];
 
+    console.log(
+      `GET /api/chat/[chatId] - pathname: ${pathname}, chatId: ${chatId}`
+    );
+
     if (!chatId) {
+      console.log("Chat ID not provided");
       return NextResponse.json(
         { error: "Chat ID が指定されていません" },
         { status: 400 }
@@ -50,7 +55,13 @@ export async function GET(req: NextRequest) {
       },
     });
 
+    console.log(
+      `Chat lookup result for ${chatId}:`,
+      chat ? "found" : "not found"
+    );
+
     if (!chat) {
+      console.log(`Chat ${chatId} not found in database`);
       return NextResponse.json(
         { error: "指定されたチャットが見つかりません" },
         { status: 404 }
@@ -107,8 +118,14 @@ export async function POST(req: NextRequest) {
     // → Socket.IO でリアルタイム配信（接続完了を待ってから emit）
     try {
       const socket = ioClient(SOCKET_URL, { transports: ["websocket"] });
-      await new Promise<void>((resolve) => socket.on("connect", () => resolve()));
-      socket.emit("sendMessage", { chatId, toUserId: receiverId, message: newMessage });
+      await new Promise<void>((resolve) =>
+        socket.on("connect", () => resolve())
+      );
+      socket.emit("sendMessage", {
+        chatId,
+        toUserId: receiverId,
+        message: newMessage,
+      });
       setTimeout(() => socket.disconnect(), 50);
     } catch (e) {
       console.error("⚠️ Socket.IO relay failed:", e);

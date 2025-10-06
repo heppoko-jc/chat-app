@@ -16,15 +16,19 @@ import axios from "axios";
 // チャットごとのメッセージキャッシュ
 type ChatMap = Record<string, Message[]>;
 
-// プリセットメッセージ型
+// マッチメッセージ型（マッチングに使用されるメッセージのテンプレート）
 export type PresetMessage = {
   id: string;
   content: string;
   createdBy: string;
   createdAt: string;
-  count: number;
-  linkTitle?: string;
-  linkImage?: string;
+  count: number; // 送信回数
+  senderCount: number; // 送信者数
+  linkImage?: string | null;
+  linkTitle?: string | null;
+  comment?: string | null;
+  type?: string;
+  lastSentAt: string; // 最後に送信された時刻
 };
 
 // Contextの型定義
@@ -34,7 +38,11 @@ type ChatContextType = {
   chatList: ChatItem[] | null;
   setChatList: React.Dispatch<React.SetStateAction<ChatItem[] | null>>;
   isPreloading: boolean;
+<<<<<<< HEAD
   presetMessages: PresetMessage[];
+=======
+  presetMessages: PresetMessage[]; // マッチメッセージリスト
+>>>>>>> 65c6352 (URLマッチメッセージ、3日時間制限、「_人がシェアしました」、マッチメッセージリストの時制表示などを実装)
   setPresetMessages: React.Dispatch<React.SetStateAction<PresetMessage[]>>;
 };
 
@@ -88,7 +96,11 @@ export function ChatDataProvider({ children }: { children: ReactNode }) {
   const [chatData, setChatData] = useState<ChatMap>({});
   const [chatList, setChatList] = useState<ChatItem[] | null>(null);
   const [isPreloading, setIsPreloading] = useState(true);
+<<<<<<< HEAD
   const [presetMessages, setPresetMessages] = useState<PresetMessage[]>([]);
+=======
+  const [presetMessages, setPresetMessages] = useState<PresetMessage[]>([]); // マッチメッセージリスト
+>>>>>>> 65c6352 (URLマッチメッセージ、3日時間制限、「_人がシェアしました」、マッチメッセージリストの時制表示などを実装)
 
   // アプリ起動時にチャットリストとチャットデータをプリフェッチ
   useEffect(() => {
@@ -101,7 +113,11 @@ export function ChatDataProvider({ children }: { children: ReactNode }) {
 
     const preloadData = async () => {
       try {
+<<<<<<< HEAD
         // プリセットメッセージも取得
+=======
+        // マッチメッセージも取得
+>>>>>>> 65c6352 (URLマッチメッセージ、3日時間制限、「_人がシェアしました」、マッチメッセージリストの時制表示などを実装)
         const presetRes = await fetch("/api/preset-message");
         if (presetRes.ok) {
           const presetData: PresetMessage[] = await presetRes.json();
@@ -127,12 +143,27 @@ export function ChatDataProvider({ children }: { children: ReactNode }) {
         setChatList(formattedChatList);
 
         // 3. 各チャットのメッセージを並行取得（chat は ChatItem 型）
+<<<<<<< HEAD
         const chatDataPromises = formattedChatList.map(
           async (chat: ChatItem) => {
             try {
               const messagesRes = await axios.get<Message[]>(
                 `/api/chat/${chat.chatId}`
               );
+=======
+        const chatDataPromises = formattedChatList
+          .filter((chat: ChatItem) => !chat.chatId.startsWith("dummy-")) // ダミーチャットを除外
+          .map(async (chat: ChatItem) => {
+            try {
+              console.log(`Fetching messages for chat ${chat.chatId}`);
+              console.log(`Full URL: /api/chat/${chat.chatId}`);
+              const messagesRes = await axios.get<Message[]>(
+                `/api/chat/${chat.chatId}`
+              );
+              console.log(
+                `Successfully fetched ${messagesRes.data.length} messages for chat ${chat.chatId}`
+              );
+>>>>>>> 65c6352 (URLマッチメッセージ、3日時間制限、「_人がシェアしました」、マッチメッセージリストの時制表示などを実装)
               const formattedMessages = messagesRes.data.map((msg) => ({
                 ...msg,
                 formattedDate: new Date(msg.createdAt).toLocaleString("ja-JP", {
@@ -148,10 +179,26 @@ export function ChatDataProvider({ children }: { children: ReactNode }) {
                 `チャット ${chat.chatId} のメッセージ取得エラー:`,
                 error
               );
+<<<<<<< HEAD
               return { chatId: chat.chatId, messages: [] as Message[] };
             }
           }
         );
+=======
+              if (axios.isAxiosError(error)) {
+                console.error(`Axios error details for chat ${chat.chatId}:`, {
+                  status: error.response?.status,
+                  statusText: error.response?.statusText,
+                  data: error.response?.data,
+                  url: error.config?.url,
+                  chatId: chat.chatId,
+                });
+              }
+              // チャットが存在しない場合は空のメッセージ配列を返す
+              return { chatId: chat.chatId, messages: [] as Message[] };
+            }
+          });
+>>>>>>> 65c6352 (URLマッチメッセージ、3日時間制限、「_人がシェアしました」、マッチメッセージリストの時制表示などを実装)
 
         const chatDataResults = await Promise.all(chatDataPromises);
         const newChatData: ChatMap = {};
