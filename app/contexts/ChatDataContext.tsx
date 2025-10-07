@@ -9,8 +9,8 @@ import {
   ReactNode,
   useEffect,
 } from "react";
-import type { Message } from "@/app/chat/[chatId]/page";
-import type { ChatItem } from "@/app/chat-list/page"; // ← ChatItem 型を使う
+import type { Message } from "../chat/[chatId]/page";
+import type { ChatItem } from "../chat-list/page"; // ← ChatItem 型を使う
 import axios from "axios";
 
 // チャットごとのメッセージキャッシュ
@@ -38,11 +38,7 @@ type ChatContextType = {
   chatList: ChatItem[] | null;
   setChatList: React.Dispatch<React.SetStateAction<ChatItem[] | null>>;
   isPreloading: boolean;
-<<<<<<< HEAD
-  presetMessages: PresetMessage[];
-=======
   presetMessages: PresetMessage[]; // マッチメッセージリスト
->>>>>>> 65c6352 (URLマッチメッセージ、3日時間制限、「_人がシェアしました」、マッチメッセージリストの時制表示などを実装)
   setPresetMessages: React.Dispatch<React.SetStateAction<PresetMessage[]>>;
 };
 
@@ -96,11 +92,7 @@ export function ChatDataProvider({ children }: { children: ReactNode }) {
   const [chatData, setChatData] = useState<ChatMap>({});
   const [chatList, setChatList] = useState<ChatItem[] | null>(null);
   const [isPreloading, setIsPreloading] = useState(true);
-<<<<<<< HEAD
-  const [presetMessages, setPresetMessages] = useState<PresetMessage[]>([]);
-=======
   const [presetMessages, setPresetMessages] = useState<PresetMessage[]>([]); // マッチメッセージリスト
->>>>>>> 65c6352 (URLマッチメッセージ、3日時間制限、「_人がシェアしました」、マッチメッセージリストの時制表示などを実装)
 
   // アプリ起動時にチャットリストとチャットデータをプリフェッチ
   useEffect(() => {
@@ -113,11 +105,7 @@ export function ChatDataProvider({ children }: { children: ReactNode }) {
 
     const preloadData = async () => {
       try {
-<<<<<<< HEAD
-        // プリセットメッセージも取得
-=======
         // マッチメッセージも取得
->>>>>>> 65c6352 (URLマッチメッセージ、3日時間制限、「_人がシェアしました」、マッチメッセージリストの時制表示などを実装)
         const presetRes = await fetch("/api/preset-message");
         if (presetRes.ok) {
           const presetData: PresetMessage[] = await presetRes.json();
@@ -143,14 +131,6 @@ export function ChatDataProvider({ children }: { children: ReactNode }) {
         setChatList(formattedChatList);
 
         // 3. 各チャットのメッセージを並行取得（chat は ChatItem 型）
-<<<<<<< HEAD
-        const chatDataPromises = formattedChatList.map(
-          async (chat: ChatItem) => {
-            try {
-              const messagesRes = await axios.get<Message[]>(
-                `/api/chat/${chat.chatId}`
-              );
-=======
         const chatDataPromises = formattedChatList
           .filter((chat: ChatItem) => !chat.chatId.startsWith("dummy-")) // ダミーチャットを除外
           .map(async (chat: ChatItem) => {
@@ -163,7 +143,6 @@ export function ChatDataProvider({ children }: { children: ReactNode }) {
               console.log(
                 `Successfully fetched ${messagesRes.data.length} messages for chat ${chat.chatId}`
               );
->>>>>>> 65c6352 (URLマッチメッセージ、3日時間制限、「_人がシェアしました」、マッチメッセージリストの時制表示などを実装)
               const formattedMessages = messagesRes.data.map((msg) => ({
                 ...msg,
                 formattedDate: new Date(msg.createdAt).toLocaleString("ja-JP", {
@@ -179,12 +158,6 @@ export function ChatDataProvider({ children }: { children: ReactNode }) {
                 `チャット ${chat.chatId} のメッセージ取得エラー:`,
                 error
               );
-<<<<<<< HEAD
-              return { chatId: chat.chatId, messages: [] as Message[] };
-            }
-          }
-        );
-=======
               if (axios.isAxiosError(error)) {
                 console.error(`Axios error details for chat ${chat.chatId}:`, {
                   status: error.response?.status,
@@ -198,7 +171,6 @@ export function ChatDataProvider({ children }: { children: ReactNode }) {
               return { chatId: chat.chatId, messages: [] as Message[] };
             }
           });
->>>>>>> 65c6352 (URLマッチメッセージ、3日時間制限、「_人がシェアしました」、マッチメッセージリストの時制表示などを実装)
 
         const chatDataResults = await Promise.all(chatDataPromises);
         const newChatData: ChatMap = {};

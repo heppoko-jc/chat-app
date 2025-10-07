@@ -5,9 +5,9 @@
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import { useParams, useRouter } from "next/navigation";
 import axios from "axios";
-import socket from "@/app/socket";
+import socket from "../../socket";
 import Image from "next/image";
-import { useChatData } from "@/app/contexts/ChatDataContext";
+import { useChatData } from "../../contexts/ChatDataContext";
 
 type BadgeCapableNavigator = Navigator & {
   serviceWorker?: {
