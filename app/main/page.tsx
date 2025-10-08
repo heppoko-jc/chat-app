@@ -56,14 +56,48 @@ type MatchQueueItem = {
 // ── キュー重複排除＋成立時刻昇順マージ（常に MatchQueueItem[] を返す）
 const keyOf = (i: MatchQueueItem) =>
   `${i.matchId ?? ""}|${i.matchedUser.id}|${i.message}|${i.matchedAt}`;
+
+// 表示済みマッチIDを管理する関数
+const getShownMatchesKey = (userId: string) => `shown-matches-${userId}`;
+
+const getShownMatches = (userId: string): Set<string> => {
+  try {
+    const stored = localStorage.getItem(getShownMatchesKey(userId));
+    return stored ? new Set(JSON.parse(stored)) : new Set();
+  } catch {
+    return new Set();
+  }
+};
+
+const addShownMatch = (userId: string, matchKey: string) => {
+  try {
+    const shown = getShownMatches(userId);
+    shown.add(matchKey);
+    // 最新1000件のみ保持（メモリ節約）
+    const array = Array.from(shown);
+    const limited = array.slice(-1000);
+    localStorage.setItem(getShownMatchesKey(userId), JSON.stringify(limited));
+  } catch (e) {
+    console.error("Failed to save shown match:", e);
+  }
+};
+
 const mergeQueue = (
   prev: MatchQueueItem[],
-  incoming: MatchQueueItem[]
+  incoming: MatchQueueItem[],
+  userId: string | null
 ): MatchQueueItem[] => {
   const map = new Map<string, MatchQueueItem>();
   for (const p of prev) map.set(keyOf(p), p);
   for (const n of incoming) map.set(keyOf(n), n);
-  return [...map.values()].sort(
+
+  // 表示済みマッチをフィルタリング
+  const shownMatches = userId ? getShownMatches(userId) : new Set();
+  const filtered = [...map.values()].filter(
+    (item) => !shownMatches.has(keyOf(item))
+  );
+
+  return filtered.sort(
     (a, b) => new Date(a.matchedAt).getTime() - new Date(b.matchedAt).getTime()
   );
 };
@@ -445,7 +479,7 @@ export default function Main() {
           (a, b) =>
             new Date(a.matchedAt).getTime() - new Date(b.matchedAt).getTime()
         );
-        setMatchQueue((prev) => mergeQueue(prev, incoming));
+        setMatchQueue((prev) => mergeQueue(prev, incoming, currentUserId));
       }
     } catch (e) {
       console.error("未表示マッチの取得失敗:", e);
@@ -492,7 +526,7 @@ export default function Main() {
           matchedUser: { id: data.matchedUserId, name: data.matchedUserName },
           chatId: data.chatId,
         };
-        setMatchQueue((prev) => mergeQueue(prev, [item]));
+        setMatchQueue((prev) => mergeQueue(prev, [item], currentUserId));
       }
 
       // 表示情報の同期
@@ -877,7 +911,9 @@ export default function Main() {
                 matchedUser: { id: matchedUser.id, name: matchedUser.name },
                 chatId: matchResponse.data.chatId,
               };
-              setMatchQueue((prev) => mergeQueue(prev, [selfItem]));
+              setMatchQueue((prev) =>
+                mergeQueue(prev, [selfItem], currentUserId)
+              );
             }
           }
           await Promise.all([
@@ -924,6 +960,12 @@ export default function Main() {
   // ポップアップを閉じたとき：先頭を剥がし、しきい値を進める
   const handleClosePopup = useCallback(() => {
     if (!queueHead) return;
+
+    // 表示済みマッチとして記録
+    if (currentUserId) {
+      addShownMatch(currentUserId, keyOf(queueHead));
+    }
+
     setMatchQueue((prev) => prev.slice(1));
     if (lastSeenKey) {
       const prevSeen = localStorage.getItem(lastSeenKey);
@@ -935,7 +977,7 @@ export default function Main() {
         .slice(-1)[0];
       localStorage.setItem(lastSeenKey, maxSeen);
     }
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [queueHead, currentUserId, lastSeenKey]);
 
   return (
     <>

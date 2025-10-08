@@ -30,12 +30,22 @@ export default function MatchNotification({
     setIsAnimating(isVisible);
   }, [isVisible]);
 
-  const handleClose = () => {
+  const handleClose = (e?: React.MouseEvent) => {
+    // イベント伝播を止める
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     // アニメーション待ちをやめて即時に親へ閉じる指示（灰色オーバーレイ残留を防ぐ）
     onClose();
   };
 
-  const handleOpenChat = async () => {
+  const handleOpenChat = async (e?: React.MouseEvent) => {
+    // イベント伝播を止める
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     try {
       const partnerId = matchedUser?.id;
       if (!partnerId) {
@@ -85,7 +95,12 @@ export default function MatchNotification({
     // オーバーレイ自体のクリックで閉じる
     <div
       className="fixed inset-0 flex items-center justify-center bg-black/50 z-50"
-      onClick={handleClose}
+      onClick={(e) => {
+        // オーバーレイ自体がクリックされた場合のみ閉じる
+        if (e.target === e.currentTarget) {
+          handleClose(e);
+        }
+      }}
       role="dialog"
       aria-modal="true"
     >
@@ -95,8 +110,6 @@ export default function MatchNotification({
           transform transition-all duration-300 ease-out
           ${isAnimating ? "scale-100 opacity-100" : "scale-95 opacity-0"}
         `}
-        // 内側クリックは閉じない
-        onClick={(e) => e.stopPropagation()}
       >
         {/* ヘッダー */}
         <div className="text-center mb-4">
@@ -146,13 +159,13 @@ export default function MatchNotification({
         {/* アクションボタン */}
         <div className="flex gap-3">
           <button
-            onClick={handleOpenChat}
+            onClick={(e) => handleOpenChat(e)}
             className="flex-1 bg-gradient-to-r from-orange-400 to-orange-500 text-white py-3 rounded-2xl font-semibold transition-transform duration-200 ease-out active:scale-95"
           >
             チャットを開く
           </button>
           <button
-            onClick={handleClose}
+            onClick={(e) => handleClose(e)}
             className="px-4 py-3 text-gray-500 font-semibold transition-transform duration-200 ease-out active:scale-95"
           >
             閉じる
