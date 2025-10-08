@@ -604,9 +604,7 @@ export default function Main() {
           console.log("[main] リンクメタデータを取得中:", linkMessage);
           const cacheBuster = Date.now() + Math.random();
           const res = await fetch(
-            `/api/link-preview?url=${encodeURIComponent(
-              linkMessage
-            )}&t=${cacheBuster}`
+            `/api/link-preview?url=${encodeURIComponent(linkMessage)}&t=${cacheBuster}`
           );
           if (res.ok) {
             const data = await res.json();
@@ -632,9 +630,7 @@ export default function Main() {
           console.log("[main] リンクメタデータを取得中:", message);
           const cacheBuster = Date.now() + Math.random();
           const res = await fetch(
-            `/api/link-preview?url=${encodeURIComponent(
-              message
-            )}&t=${cacheBuster}`
+            `/api/link-preview?url=${encodeURIComponent(message)}&t=${cacheBuster}`
           );
           if (res.ok) {
             const data = await res.json();
@@ -681,7 +677,7 @@ export default function Main() {
 
   // 送信
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  const handleSend = useCallback(async () => {
+  const handleSend = async () => {
     console.log("[main] handleSend called:", {
       selectedMessage,
       selectedRecipientIds: selectedRecipientIds.length,
@@ -710,18 +706,13 @@ export default function Main() {
     // リンクプレビューが送信待機バーに表示されている場合の処理
     if (linkPreview && !selectedMessage) {
       // リンクプレビューから送信する場合
-      messageToSend =
-        linkPreview.url +
-        (linkPreview.additionalText ? ` ${linkPreview.additionalText}` : "");
+      messageToSend = linkPreview.url + (linkPreview.additionalText ? ` ${linkPreview.additionalText}` : '');
       finalLinkData = {
         url: linkPreview.url,
         title: linkPreview.title,
         image: linkPreview.image,
       };
-      console.log("[main] Sending from linkPreview:", {
-        messageToSend,
-        finalLinkData,
-      });
+      console.log("[main] Sending from linkPreview:", { messageToSend, finalLinkData });
     } else {
       // 通常のメッセージ送信処理
       const urlAndText = extractUrlAndText(selectedMessage);
@@ -732,187 +723,176 @@ export default function Main() {
       });
 
       if (urlAndText && urlAndText.text) {
-        // リンク+テキストの場合は、そのまま送信
-        messageToSend = selectedMessage;
-        console.log("[main] Link with text message:", messageToSend);
-        console.log(
-          "[main] Using selectedMessageLinkData:",
-          selectedMessageLinkData
-        );
+      // リンク+テキストの場合は、そのまま送信
+      messageToSend = selectedMessage;
+      console.log("[main] Link with text message:", messageToSend);
+      console.log(
+        "[main] Using selectedMessageLinkData:",
+        selectedMessageLinkData
+      );
 
-        // メタデータが設定されていない場合は再取得
-        if (!selectedMessageLinkData || !selectedMessageLinkData.title) {
-          console.log("[main] メタデータが未設定、再取得中...");
-          try {
-            const res = await fetch(
-              `/api/link-preview?url=${encodeURIComponent(urlAndText.url)}`
-            );
-            if (res.ok) {
-              const data = await res.json();
-              finalLinkData = {
-                url: data.url || urlAndText.url,
-                title: data.title || urlAndText.url,
-                image: data.image,
-              };
-              setSelectedMessageLinkData(finalLinkData);
-              console.log("[main] メタデータ再取得完了:", finalLinkData);
-            }
-          } catch (error) {
-            console.error("[main] メタデータ再取得エラー:", error);
-          }
-        }
-      } else if (
-        selectedMessage.startsWith("http") &&
-        (!selectedMessageLinkData || !selectedMessageLinkData.title)
-      ) {
-        // 通常のリンクの場合、メタデータが設定されているか確認
-        console.log("[main] 送信前メタデータ再取得:", selectedMessage);
+      // メタデータが設定されていない場合は再取得
+      if (!selectedMessageLinkData || !selectedMessageLinkData.title) {
+        console.log("[main] メタデータが未設定、再取得中...");
         try {
           const res = await fetch(
-            `/api/link-preview?url=${encodeURIComponent(selectedMessage)}`
+            `/api/link-preview?url=${encodeURIComponent(urlAndText.url)}`
           );
           if (res.ok) {
             const data = await res.json();
             finalLinkData = {
-              url: data.url || selectedMessage,
-              title: data.title || selectedMessage,
+              url: data.url || urlAndText.url,
+              title: data.title || urlAndText.url,
               image: data.image,
             };
             setSelectedMessageLinkData(finalLinkData);
-            console.log("[main] 送信前メタデータ再取得完了:", finalLinkData);
+            console.log("[main] メタデータ再取得完了:", finalLinkData);
           }
         } catch (error) {
-          console.error("[main] 送信前メタデータ再取得エラー:", error);
+          console.error("[main] メタデータ再取得エラー:", error);
         }
       }
-
-      setIsSending(true);
-      setSentMessageInfo({
-        message: messageToSend,
-        recipients: [...selectedRecipientIds],
-      });
-      setIsSent(true);
-
-      const recipientsToSend = [...selectedRecipientIds];
-
-      // UI リセット
-      setSelectedMessage(null);
-      setSelectedRecipientIds([]);
-      setStep("select-message");
-      setIsInputMode(false);
-      setInputMessage("");
-      setSelectedMessageLinkData(null);
-      setLinkPreview(null);
-
+    } else if (
+      selectedMessage.startsWith("http") &&
+      (!selectedMessageLinkData || !selectedMessageLinkData.title)
+    ) {
+      // 通常のリンクの場合、メタデータが設定されているか確認
+      console.log("[main] 送信前メタデータ再取得:", selectedMessage);
       try {
-        const isPreset = presetMessages.some(
-          (m) => m.content === messageToSend && (m.count ?? 0) > 0
+        const res = await fetch(
+          `/api/link-preview?url=${encodeURIComponent(selectedMessage)}`
         );
-        if (!isPreset) {
-          const res = await fetch("/api/preset-message", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              content: messageToSend,
-              createdBy: currentUserId,
-              linkTitle: finalLinkData?.title,
-              linkImage: finalLinkData?.image,
-            }),
-          });
-          if (res.ok) {
-            const created: PresetMessage = await res.json();
-            setPresetMessages((prev) =>
-              sortByNewest([{ ...created, count: 1 }, ...prev])
-            );
-          } else {
-            alert("ことばの登録に失敗しました");
-            setIsSending(false);
-            setIsSent(false);
-            setSentMessageInfo(null);
-            return;
-          }
-        } else {
-          setPresetMessages((prev) =>
-            sortByNewest(
-              prev.map((m) =>
-                m.content === messageToSend
-                  ? { ...m, count: (m.count ?? 0) + 1 }
-                  : m
-              )
-            )
-          );
+        if (res.ok) {
+          const data = await res.json();
+          finalLinkData = {
+            url: data.url || selectedMessage,
+            title: data.title || selectedMessage,
+            image: data.image,
+          };
+          setSelectedMessageLinkData(finalLinkData);
+          console.log("[main] 送信前メタデータ再取得完了:", finalLinkData);
         }
-
-        const requestData = {
-          senderId: currentUserId,
-          receiverIds: recipientsToSend,
-          message: messageToSend,
-          linkTitle: finalLinkData?.title,
-          linkImage: finalLinkData?.image,
-        };
-
-        console.log("[main] 送信データ:", {
-          requestData,
-          finalLinkData,
-          selectedMessageLinkData,
-          urlAndText,
-          isLink: messageToSend.startsWith("http"),
-        });
-        const matchResponse = await axios.post(
-          "/api/match-message",
-          requestData
-        );
-
-        // 成立 → 自分側も即キューに積む（後送/先送どちらでも）
-        if (matchResponse.data.message === "Match created!") {
-          const matchedUserId = recipientsToSend.find(
-            (id) => matchResponse.data.matchedUserId === id
-          );
-          if (matchedUserId) {
-            const matchedUser = users.find((u) => u.id === matchedUserId);
-            if (matchedUser) {
-              const selfItem: MatchQueueItem = {
-                matchedAt: new Date().toISOString(),
-                message: messageToSend,
-                matchedUser: { id: matchedUser.id, name: matchedUser.name },
-                chatId: matchResponse.data.chatId,
-              };
-              setMatchQueue((prev) => mergeQueue(prev, [selfItem]));
-            }
-          }
-          await Promise.all([
-            fetchPresetMessages(),
-            fetchChatList(currentUserId),
-          ]);
-        } else {
-          // マッチが成立しなかった場合でもことばリストを更新
-          await fetchPresetMessages();
-        }
-
-        if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
-        setTimeout(() => {
-          setIsSent(false);
-          setSentMessageInfo(null);
-        }, 4000);
       } catch (error) {
-        console.error("送信エラー:", error);
-        alert("メッセージの送信に失敗しました");
-        setIsSent(false);
-        setSentMessageInfo(null);
-      } finally {
-        setIsSending(false);
+        console.error("[main] 送信前メタデータ再取得エラー:", error);
       }
     }
-  }, [
-    selectedMessage,
-    selectedRecipientIds,
-    currentUserId,
-    isSending,
-    selectedMessageLinkData,
-  ]);
 
-  const canSend =
-    (!!selectedMessage || !!linkPreview) && selectedRecipientIds.length > 0;
+    setIsSending(true);
+    setSentMessageInfo({
+      message: messageToSend,
+      recipients: [...selectedRecipientIds],
+    });
+    setIsSent(true);
+
+    const recipientsToSend = [...selectedRecipientIds];
+
+    // UI リセット
+    setSelectedMessage(null);
+    setSelectedRecipientIds([]);
+    setStep("select-message");
+    setIsInputMode(false);
+    setInputMessage("");
+    setSelectedMessageLinkData(null);
+    setLinkPreview(null);
+
+    try {
+      const isPreset = presetMessages.some(
+        (m) => m.content === messageToSend && (m.count ?? 0) > 0
+      );
+      if (!isPreset) {
+        const res = await fetch("/api/preset-message", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            content: messageToSend,
+            createdBy: currentUserId,
+            linkTitle: finalLinkData?.title,
+            linkImage: finalLinkData?.image,
+          }),
+        });
+        if (res.ok) {
+          const created: PresetMessage = await res.json();
+          setPresetMessages((prev) =>
+            sortByNewest([{ ...created, count: 1 }, ...prev])
+          );
+        } else {
+          alert("ことばの登録に失敗しました");
+          setIsSending(false);
+          setIsSent(false);
+          setSentMessageInfo(null);
+          return;
+        }
+      } else {
+        setPresetMessages((prev) =>
+          sortByNewest(
+            prev.map((m) =>
+              m.content === messageToSend
+                ? { ...m, count: (m.count ?? 0) + 1 }
+                : m
+            )
+          )
+        );
+      }
+
+      const requestData = {
+        senderId: currentUserId,
+        receiverIds: recipientsToSend,
+        message: messageToSend,
+        linkTitle: finalLinkData?.title,
+        linkImage: finalLinkData?.image,
+      };
+
+      console.log("[main] 送信データ:", {
+        requestData,
+        finalLinkData,
+        selectedMessageLinkData,
+        urlAndText,
+        isLink: messageToSend.startsWith("http"),
+      });
+      const matchResponse = await axios.post("/api/match-message", requestData);
+
+      // 成立 → 自分側も即キューに積む（後送/先送どちらでも）
+      if (matchResponse.data.message === "Match created!") {
+        const matchedUserId = recipientsToSend.find(
+          (id) => matchResponse.data.matchedUserId === id
+        );
+        if (matchedUserId) {
+          const matchedUser = users.find((u) => u.id === matchedUserId);
+          if (matchedUser) {
+            const selfItem: MatchQueueItem = {
+              matchedAt: new Date().toISOString(),
+              message: messageToSend,
+              matchedUser: { id: matchedUser.id, name: matchedUser.name },
+              chatId: matchResponse.data.chatId,
+            };
+            setMatchQueue((prev) => mergeQueue(prev, [selfItem]));
+          }
+        }
+        await Promise.all([
+          fetchPresetMessages(),
+          fetchChatList(currentUserId),
+        ]);
+      } else {
+        // マッチが成立しなかった場合でもことばリストを更新
+        await fetchPresetMessages();
+      }
+
+      if (navigator.vibrate) navigator.vibrate([200, 100, 200]);
+      setTimeout(() => {
+        setIsSent(false);
+        setSentMessageInfo(null);
+      }, 4000);
+    } catch (error) {
+      console.error("送信エラー:", error);
+      alert("メッセージの送信に失敗しました");
+      setIsSent(false);
+      setSentMessageInfo(null);
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  const canSend = (!!selectedMessage || !!linkPreview) && selectedRecipientIds.length > 0;
 
   // レイアウト定数
   const HEADER_H = 132;
@@ -1009,9 +989,7 @@ export default function Main() {
                     />
                   ) : (
                     <div className="w-8 h-8 rounded-lg bg-orange-100 border border-orange-200 flex items-center justify-center text-orange-600 font-bold text-xs flex-shrink-0">
-                      {linkPreview.title && linkPreview.title !== "Google Maps"
-                        ? "URL"
-                        : "🗺️"}
+                      {linkPreview.title && linkPreview.title !== "Google Maps" ? "URL" : "🗺️"}
                     </div>
                   )}
                   <div className="flex-1 min-w-0">
@@ -1260,18 +1238,13 @@ export default function Main() {
             <div className="flex flex-col gap-3">
               {allMessageOptions.map((msg) => {
                 // リンクプレビューは送信待機バーに表示するため、ここでは表示しない
-                if (
-                  false &&
+                if (false && (
                   (msg as PresetMessage & { isLinkPreview?: boolean })
                     .isLinkPreview
-                ) {
+                )) {
                   const linkData = (
                     msg as PresetMessage & {
-                      linkData: {
-                        url: string;
-                        title: string;
-                        image?: string;
-                      };
+                      linkData: { url: string; title: string; image?: string };
                     }
                   ).linkData;
                   return (
@@ -1354,7 +1327,7 @@ export default function Main() {
                         // 状態をリセット（重要！）
                         setSelectedMessageLinkData(null);
                         setLinkPreview(null);
-
+                        
                         // リンク+テキストの場合はURL部分のみを抽出
                         console.log(
                           "[handleMessageIconClick] msg.content:",
@@ -1376,7 +1349,7 @@ export default function Main() {
                         const linkData = {
                           url: urlOnly,
                           title: msg.linkTitle || msg.content,
-                          image: msg.linkImage || undefined,
+                          image: msg.linkImage,
                         };
                         console.log(
                           "[handleMessageIconClick] linkData:",
@@ -1634,3 +1607,4 @@ export default function Main() {
     </>
   );
 }
+
