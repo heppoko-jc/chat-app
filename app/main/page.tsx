@@ -133,8 +133,9 @@ export default function Main() {
     url: string;
     title: string;
     image?: string;
-    additionalText?: string;
   } | null>(null);
+
+  const [linkComment, setLinkComment] = useState<string>("");
 
   const [selectedMessageLinkData, setSelectedMessageLinkData] = useState<{
     url: string;
@@ -206,6 +207,7 @@ export default function Main() {
 
     // まず状態をリセット
     setLinkPreview(null);
+    setLinkComment("");
 
     // 新しいURL検出ロジックを使用
     const urlAndText = extractUrlAndText(cleaned);
@@ -219,12 +221,14 @@ export default function Main() {
       const text = urlAndText.text;
       console.log("[main] Link with text detected - URL:", url, "Text:", text);
 
+      // コメント部分を別の状態で管理
+      setLinkComment(text);
+
       // リンク+テキストの場合は、まずリンクのメタデータを取得
       setLinkPreview({
         url,
         title: "Loading...",
         image: undefined,
-        additionalText: text,
       });
 
       // リンクのメタデータを取得
@@ -242,14 +246,12 @@ export default function Main() {
               url,
               title: data.title || url,
               image: data.image,
-              additionalText: text,
             });
           } else {
             setLinkPreview({
               url,
               title: url,
               image: undefined,
-              additionalText: text,
             });
           }
         } catch (error) {
@@ -258,7 +260,6 @@ export default function Main() {
             url,
             title: url,
             image: undefined,
-            additionalText: text,
           });
         }
       })();
@@ -278,12 +279,7 @@ export default function Main() {
       // URLが見つからない場合は即座にプレビューをクリア
       console.log("[main] no URL found, clearing preview");
       setLinkPreview(null);
-      return;
-    }
-
-    // 現在のlinkPreviewのURLと比較して、同じ場合は何もしない
-    if (linkPreview && linkPreview.url === url) {
-      console.log("[main] same URL, skipping fetch");
+      setLinkComment("");
       return;
     }
 
@@ -624,6 +620,7 @@ export default function Main() {
       // 状態をリセット（重要！）
       setSelectedMessageLinkData(null);
       setLinkPreview(null);
+      setLinkComment("");
 
       // リンク+テキストの場合は特別な処理
       const urlAndText = extractUrlAndText(message);
@@ -744,9 +741,7 @@ export default function Main() {
     // リンクプレビューが送信待機バーに表示されている場合の処理
     if (linkPreview && !selectedMessage) {
       // リンクプレビューから送信する場合
-      messageToSend =
-        linkPreview.url +
-        (linkPreview.additionalText ? ` ${linkPreview.additionalText}` : "");
+      messageToSend = linkPreview.url + (linkComment ? ` ${linkComment}` : "");
       finalLinkData = {
         url: linkPreview.url,
         title: linkPreview.title,
@@ -837,6 +832,7 @@ export default function Main() {
       setInputMessage("");
       setSelectedMessageLinkData(null);
       setLinkPreview(null);
+      setLinkComment("");
 
       try {
         const isPreset = presetMessages.some(
@@ -1060,9 +1056,9 @@ export default function Main() {
                     <p className="text-sm font-bold text-gray-800 truncate">
                       {linkPreview.title}
                     </p>
-                    {linkPreview.additionalText && (
+                    {linkComment && (
                       <p className="text-xs text-gray-500 truncate">
-                        {linkPreview.additionalText}
+                        {linkComment}
                       </p>
                     )}
                   </div>
@@ -1070,20 +1066,28 @@ export default function Main() {
                 {/* コメント入力フィールド */}
                 <input
                   type="text"
-                  value={inputMessage}
-                  onChange={(e) => setInputMessage(e.target.value)}
+                  value={linkComment}
+                  onChange={(e) => {
+                    // コメントだけを更新（linkPreviewには触らない）
+                    setLinkComment(e.target.value);
+                  }}
                   placeholder="コメントを追加..."
                   className="flex-1 px-3 py-2 rounded-xl border border-orange-200 text-base bg-white shadow-sm focus:ring-2 focus:ring-orange-200 outline-none transition"
                   onKeyDown={(e) => {
-                    if (e.key === "Enter" && inputMessage.trim()) {
-                      setSelectedMessage(inputMessage.trim());
+                    if (e.key === "Enter") {
+                      const fullMessage =
+                        linkPreview.url +
+                        (linkComment ? ` ${linkComment}` : "");
+                      setSelectedMessage(fullMessage);
                       setIsInputMode(false);
                       setStep("select-recipients");
                     }
                   }}
                   onBlur={() => {
-                    if (inputMessage.trim()) {
-                      setSelectedMessage(inputMessage.trim());
+                    const fullMessage =
+                      linkPreview.url + (linkComment ? ` ${linkComment}` : "");
+                    if (fullMessage.trim()) {
+                      setSelectedMessage(fullMessage);
                       setIsInputMode(false);
                       setStep("select-recipients");
                     }
@@ -1150,8 +1154,8 @@ export default function Main() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-bold text-orange-800 truncate">
-                      {linkPreview?.additionalText
-                        ? `${selectedMessageLinkData.title} ${linkPreview.additionalText}`
+                      {linkComment
+                        ? `${selectedMessageLinkData.title} ${linkComment}`
                         : selectedMessageLinkData.title}
                     </p>
                     <p className="text-xs text-orange-600 truncate">
@@ -1241,8 +1245,8 @@ export default function Main() {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-bold text-gray-800 truncate">
-                  {linkPreview?.additionalText
-                    ? `${selectedMessageLinkData.title} ${linkPreview.additionalText}`
+                  {linkComment
+                    ? `${selectedMessageLinkData.title} ${linkComment}`
                     : selectedMessageLinkData.title}
                 </p>
                 <p className="text-xs text-gray-500 truncate">
@@ -1396,6 +1400,7 @@ export default function Main() {
                         // 状態をリセット（重要！）
                         setSelectedMessageLinkData(null);
                         setLinkPreview(null);
+                        setLinkComment("");
 
                         // リンク+テキストの場合はURL部分のみを抽出
                         console.log(
