@@ -749,6 +749,9 @@ export default function Main() {
       setStep("select-recipients");
     } else if (selectedMessage) {
       setStep("select-recipients");
+    } else if (!selectedMessage && selectedRecipientIds.length > 0) {
+      // メッセージが未選択で送信先が選択されている場合、メッセージリストに遷移
+      setStep("select-message");
     }
   };
 
