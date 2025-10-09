@@ -143,7 +143,14 @@ export default function Main() {
     image?: string;
   } | null>(null);
 
+  const [selectedMessageContent, setSelectedMessageContent] = useState<
+    string | null
+  >(null);
+
   const [showLinkActionMenu, setShowLinkActionMenu] = useState(false);
+
+  // IME入力中かどうかを追跡
+  const [isComposing, setIsComposing] = useState(false);
 
   // URLの境界をより正確に検出する関数
   const extractUrlAndText = (input: string) => {
@@ -201,6 +208,7 @@ export default function Main() {
   // 入力がURLを含む場合、プレビューを取得
   useEffect(() => {
     console.log("[main] inputMessage changed:", inputMessage);
+
     // 先頭の @ や空白を除去してから URL を抽出（Xやメモアプリ風の貼り付け対策）
     const cleaned = (inputMessage || "").replace(/^[@\s]+/, "");
     console.log("[main] cleaned input:", cleaned);
@@ -587,9 +595,28 @@ export default function Main() {
       setShowLinkActionMenu(false);
     } else if (action === "select") {
       // ことばとして選択
-      setSelectedMessage(selectedMessageLinkData.url);
+      // 保存されている元のメッセージからコメント部分を抽出
+      let commentText = "";
+      if (selectedMessageContent) {
+        const urlAndText = extractUrlAndText(selectedMessageContent);
+        if (urlAndText && urlAndText.text) {
+          commentText = urlAndText.text;
+        }
+      }
+
+      // 送信待機バーにlinkPreviewとコメントを表示
+      setLinkPreview({
+        url: selectedMessageLinkData.url,
+        title: selectedMessageLinkData.title,
+        image: selectedMessageLinkData.image,
+      });
+      setLinkComment(commentText);
+
+      // selectedMessageはクリアして、linkPreviewとlinkCommentで管理
+      setSelectedMessage(null);
       setInputMessage("");
       setShowLinkActionMenu(false);
+      setIsInputMode(true);
     }
   };
   const toggleRecipient = (id: string) => {
@@ -612,6 +639,21 @@ export default function Main() {
   }, [messageOptions]);
 
   const handleMessageIconClick = async () => {
+    // linkPreviewが設定されている場合の処理
+    if (linkPreview) {
+      const fullMessage =
+        linkPreview.url + (linkComment ? ` ${linkComment}` : "");
+      setSelectedMessage(fullMessage);
+      setSelectedMessageLinkData({
+        url: linkPreview.url,
+        title: linkPreview.title,
+        image: linkPreview.image,
+      });
+      setIsInputMode(false);
+      setStep("select-recipients");
+      return;
+    }
+
     if (isInputMode && inputMessage.trim()) {
       const message = inputMessage.trim();
       setSelectedMessage(message);
@@ -1034,7 +1076,7 @@ export default function Main() {
           !messageOptions.some((m) => m.content === selectedMessage) ? (
             // リンクプレビューがある場合はプレビューを表示、ない場合は入力フィールド
             linkPreview ? (
-              <div className="flex items-center gap-3 flex-1">
+              <div className="flex items-center gap-2 flex-1">
                 {/* リンクプレビュー */}
                 <div className="flex items-center gap-2 flex-1 min-w-0">
                   {linkPreview.image ? (
@@ -1056,13 +1098,26 @@ export default function Main() {
                     <p className="text-sm font-bold text-gray-800 truncate">
                       {linkPreview.title}
                     </p>
-                    {linkComment && (
-                      <p className="text-xs text-gray-500 truncate">
-                        {linkComment}
-                      </p>
-                    )}
                   </div>
                 </div>
+                {/* バツボタン */}
+                <button
+                  onClick={() => {
+                    // リンクプレビューと関連する全ての状態をクリア
+                    setLinkPreview(null);
+                    setLinkComment("");
+                    setSelectedMessage(null);
+                    setSelectedMessageLinkData(null);
+                    setSelectedMessageContent(null);
+                    setInputMessage("");
+                    setIsInputMode(false);
+                    setSelectedRecipientIds([]);
+                    setStep("select-message");
+                  }}
+                  className="flex-shrink-0 w-6 h-6 rounded-full bg-gray-200 hover:bg-gray-300 flex items-center justify-center transition-colors"
+                >
+                  <span className="text-gray-600 text-sm font-bold">✕</span>
+                </button>
                 {/* コメント入力フィールド */}
                 <input
                   type="text"
@@ -1071,25 +1126,15 @@ export default function Main() {
                     // コメントだけを更新（linkPreviewには触らない）
                     setLinkComment(e.target.value);
                   }}
+                  onCompositionStart={() => setIsComposing(true)}
+                  onCompositionEnd={() => {
+                    setIsComposing(false);
+                  }}
                   placeholder="コメントを追加..."
                   className="flex-1 px-3 py-2 rounded-xl border border-orange-200 text-base bg-white shadow-sm focus:ring-2 focus:ring-orange-200 outline-none transition"
                   onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      const fullMessage =
-                        linkPreview.url +
-                        (linkComment ? ` ${linkComment}` : "");
-                      setSelectedMessage(fullMessage);
-                      setIsInputMode(false);
-                      setStep("select-recipients");
-                    }
-                  }}
-                  onBlur={() => {
-                    const fullMessage =
-                      linkPreview.url + (linkComment ? ` ${linkComment}` : "");
-                    if (fullMessage.trim()) {
-                      setSelectedMessage(fullMessage);
-                      setIsInputMode(false);
-                      setStep("select-recipients");
+                    if (e.key === "Enter" && !isComposing) {
+                      e.currentTarget.blur();
                     }
                   }}
                 />
@@ -1154,12 +1199,10 @@ export default function Main() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-bold text-orange-800 truncate">
-                      {linkComment
-                        ? `${selectedMessageLinkData.title} ${linkComment}`
-                        : selectedMessageLinkData.title}
+                      {selectedMessageLinkData.title}
                     </p>
                     <p className="text-xs text-orange-600 truncate">
-                      {selectedMessageLinkData.url}
+                      {selectedMessage}
                     </p>
                   </div>
                 </div>
@@ -1245,12 +1288,10 @@ export default function Main() {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-bold text-gray-800 truncate">
-                  {linkComment
-                    ? `${selectedMessageLinkData.title} ${linkComment}`
-                    : selectedMessageLinkData.title}
+                  {selectedMessageLinkData.title}
                 </p>
                 <p className="text-xs text-gray-500 truncate">
-                  {selectedMessageLinkData.url}
+                  {selectedMessageContent || selectedMessageLinkData.url}
                 </p>
               </div>
             </div>
@@ -1430,6 +1471,7 @@ export default function Main() {
                           linkData
                         );
                         setSelectedMessageLinkData(linkData);
+                        setSelectedMessageContent(msg.content);
                         handleSelectMessage(msg.content, linkData);
                       }}
                       className={`w-full flex items-center gap-3 text-left px-5 py-3 rounded-3xl shadow-md border border-orange-100 hover:bg-orange-100 active:scale-95 font-medium text-base ${
