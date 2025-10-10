@@ -41,13 +41,20 @@ export async function GET(req: NextRequest) {
       isMatched: matchedPairs.some(
         (match) =>
           match.message === msg.message &&
-          (match.user1.id === msg.receiver.id || match.user2.id === msg.receiver.id)
+          (match.user1.id === msg.receiver.id ||
+            match.user2.id === msg.receiver.id)
       ),
     }));
 
-    return NextResponse.json({ sentMessages: updatedSentMessages, matchedPairs });
+    return NextResponse.json({
+      sentMessages: updatedSentMessages,
+      matchedPairs,
+    });
   } catch (error) {
     console.error("🚨 通知データ取得エラー:", error);
-    return NextResponse.json({ error: "Failed to fetch notifications" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Failed to fetch notifications" },
+      { status: 500 }
+    );
   }
 }

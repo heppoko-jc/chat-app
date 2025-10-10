@@ -176,8 +176,27 @@ export async function POST(req: NextRequest) {
       where: { content: message },
     });
     if (existingPresetMessage) {
+      // この送信者が過去にこのメッセージを送信した記録があるかチェック
+      const pastSentMessage = await prisma.sentMessage.findFirst({
+        where: {
+          senderId: senderId,
+          message: message,
+        },
+      });
+
+      console.log(`[match-message] 送信者判定:`, {
+        senderId,
+        message,
+        pastSentMessage: !!pastSentMessage,
+        currentSenderCount: existingPresetMessage.senderCount,
+      });
+
       const updateData = {
         count: existingPresetMessage.count + 1,
+        // 過去に送信記録がない場合のみsenderCountを増加
+        senderCount: pastSentMessage
+          ? existingPresetMessage.senderCount
+          : existingPresetMessage.senderCount + 1,
         lastSentAt: new Date(), // メッセージ送信時に必ず時刻をリセット
         // リンクメタデータが提供された場合は更新
         ...(finalLinkTitle && { linkTitle: finalLinkTitle }),
@@ -194,6 +213,7 @@ export async function POST(req: NextRequest) {
         content: message,
         createdBy: senderId,
         count: 1,
+        senderCount: 1, // 新規作成時は送信者数も1
         linkTitle: finalLinkTitle || null,
         linkImage: finalLinkImage || null,
       };

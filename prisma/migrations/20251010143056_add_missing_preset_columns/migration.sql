@@ -1,0 +1,5 @@
+-- AlterTable
+ALTER TABLE "public"."PresetMessage" ADD COLUMN     "comment" TEXT,
+ADD COLUMN     "lastSentAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ADD COLUMN     "senderCount" INTEGER NOT NULL DEFAULT 0,
+ADD COLUMN     "type" TEXT NOT NULL DEFAULT 'text';

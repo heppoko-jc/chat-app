@@ -440,15 +440,8 @@ export default function Notifications() {
                     });
                     setSentMessages((prev) => prev.filter((m) => m.id !== id));
 
-                    // メインページの presetMessages のカウントを更新
-                    setPresetMessages((prev) => {
-                      const updated = prev.map((p) =>
-                        p.content === cancelPopup.message
-                          ? { ...p, count: Math.max(0, p.count - 1) }
-                          : p
-                      );
-                      return updated.filter((p) => p.count > 0);
-                    });
+                    // サーバー側でカウントが適切に管理されるため、
+                    // フロントエンド側での手動調整は不要
                   } catch {
                     alert("取り消しに失敗しました");
                   }

@@ -8,6 +8,9 @@ const prisma = new PrismaClient();
 export async function GET() {
   try {
     const messages = await prisma.presetMessage.findMany({
+      where: {
+        count: { gt: 0 }, // カウントが0より大きいメッセージのみ取得
+      },
       orderBy: { lastSentAt: "desc" },
       select: {
         id: true,
@@ -15,6 +18,7 @@ export async function GET() {
         createdBy: true,
         createdAt: true,
         count: true,
+        senderCount: true,
         linkTitle: true,
         linkImage: true,
         lastSentAt: true,
@@ -23,7 +27,18 @@ export async function GET() {
     return NextResponse.json(messages);
   } catch (err) {
     console.error("GET /api/preset-message failed:", err);
-    return NextResponse.json({ error: "取得に失敗しました" }, { status: 500 });
+    console.error("Error details:", {
+      message: err instanceof Error ? err.message : "Unknown error",
+      stack: err instanceof Error ? err.stack : undefined,
+      name: err instanceof Error ? err.name : undefined,
+    });
+    return NextResponse.json(
+      {
+        error: "取得に失敗しました",
+        details: err instanceof Error ? err.message : "Unknown error",
+      },
+      { status: 500 }
+    );
   }
 }
 
@@ -49,8 +64,20 @@ export async function POST(req: NextRequest) {
     });
 
     if (existingMessage) {
+      // この送信者が過去にこのメッセージを送信した記録があるかチェック
+      const pastSentMessage = await prisma.sentMessage.findFirst({
+        where: {
+          senderId: createdBy,
+          message: content,
+        },
+      });
+
       const updateData = {
         count: existingMessage.count + 1,
+        // 過去に送信記録がない場合のみsenderCountを増加
+        senderCount: pastSentMessage
+          ? existingMessage.senderCount
+          : existingMessage.senderCount + 1,
         lastSentAt: new Date(),
         // リンクメタデータが提供された場合は更新
         ...(linkTitle && { linkTitle }),
@@ -69,6 +96,7 @@ export async function POST(req: NextRequest) {
       content,
       createdBy,
       count: 1,
+      senderCount: 1, // 新規作成時は送信者数も1
       linkTitle: linkTitle || null,
       linkImage: linkImage || null,
     };
