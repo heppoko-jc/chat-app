@@ -8,7 +8,7 @@ const prisma = new PrismaClient();
 export async function GET() {
   try {
     const messages = await prisma.presetMessage.findMany({
-      orderBy: { createdAt: "desc" },
+      orderBy: { lastSentAt: "desc" },
       select: {
         id: true,
         content: true,
@@ -17,6 +17,7 @@ export async function GET() {
         count: true,
         linkTitle: true,
         linkImage: true,
+        lastSentAt: true,
       },
     });
     return NextResponse.json(messages);
@@ -50,6 +51,7 @@ export async function POST(req: NextRequest) {
     if (existingMessage) {
       const updateData = {
         count: existingMessage.count + 1,
+        lastSentAt: new Date(),
         // リンクメタデータが提供された場合は更新
         ...(linkTitle && { linkTitle }),
         ...(linkImage && { linkImage }),

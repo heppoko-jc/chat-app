@@ -38,10 +38,40 @@ function getBgColor(name: string) {
   return `hsl(${h}, 70%, 80%)`;
 }
 
-// 「最新順」：createdAt desc
+// 最後に送信された時刻を「何分前、何時間前、何日前」で表示する関数
+function formatLastSentAt(lastSentAt: string): string {
+  const now = new Date();
+  const sentDate = new Date(lastSentAt);
+  const diffMs = now.getTime() - sentDate.getTime();
+  const diffMinutes = Math.floor(diffMs / (1000 * 60));
+  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+
+  if (diffMinutes < 1) {
+    return "たった今";
+  } else if (diffMinutes < 60) {
+    return `${diffMinutes}分前`;
+  } else if (diffHours < 24) {
+    return `${diffHours}時間前`;
+  } else if (diffDays < 7) {
+    return `${diffDays}日前`;
+  } else if (diffDays < 30) {
+    const weeks = Math.floor(diffDays / 7);
+    return `${weeks}週間前`;
+  } else if (diffDays < 365) {
+    const months = Math.floor(diffDays / 30);
+    return `${months}ヶ月前`;
+  } else {
+    const years = Math.floor(diffDays / 365);
+    return `${years}年前`;
+  }
+}
+
+// 「最新送信順」：lastSentAt desc
 const sortByNewest = (arr: PresetMessage[]) =>
   [...arr].sort(
-    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    (a, b) =>
+      new Date(b.lastSentAt).getTime() - new Date(a.lastSentAt).getTime()
   );
 
 // ── ポップアップ・キュー要素
@@ -375,7 +405,7 @@ export default function Main() {
     [currentUserId]
   );
 
-  // プリセットことば（最新順）
+  // プリセットマッチメッセージ（最新順）
   const fetchPresetMessages = useCallback(async () => {
     try {
       const res = await axios.get<PresetMessage[]>("/api/preset-message");
@@ -594,7 +624,7 @@ export default function Main() {
       window.open(selectedMessageLinkData.url, "_blank");
       setShowLinkActionMenu(false);
     } else if (action === "select") {
-      // ことばとして選択
+      // マッチメッセージとして選択
       // 保存されている元のメッセージからコメント部分を抽出
       let commentText = "";
       if (selectedMessageContent) {
@@ -625,12 +655,12 @@ export default function Main() {
     );
   };
 
-  // 表示用：count>0 & 「最新順」
+  // 表示用：count>0 & 「最新送信順」
   const messageOptions = presetMessages
     .filter((m) => (m.count ?? 0) > 0)
     .sort(
       (a, b) =>
-        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        new Date(b.lastSentAt).getTime() - new Date(a.lastSentAt).getTime()
     );
 
   // リンクプレビューは送信待機バーに表示するため、メッセージリストには含めない
@@ -900,7 +930,7 @@ export default function Main() {
               sortByNewest([{ ...created, count: 1 }, ...prev])
             );
           } else {
-            alert("ことばの登録に失敗しました");
+            alert("マッチメッセージの登録に失敗しました");
             setIsSending(false);
             setIsSent(false);
             setSentMessageInfo(null);
@@ -962,7 +992,7 @@ export default function Main() {
             fetchChatList(currentUserId),
           ]);
         } else {
-          // マッチが成立しなかった場合でもことばリストを更新
+          // マッチが成立しなかった場合でもマッチメッセージリストを更新
           await fetchPresetMessages();
         }
 
@@ -1310,7 +1340,7 @@ export default function Main() {
                 onClick={() => handleLinkAction("select")}
                 className="w-full bg-orange-200 hover:bg-orange-300 text-orange-800 font-bold py-3 px-4 rounded-xl transition"
               >
-                このリンクをことばとして選ぶ
+                このリンクをマッチメッセージとして選ぶ
               </button>
               <button
                 onClick={() => setShowLinkActionMenu(false)}
@@ -1425,7 +1455,7 @@ export default function Main() {
                           {linkData.title}
                         </p>
                         <p className="text-xs text-orange-600 mt-1">
-                          このリンクをことばとして選ぶ
+                          このリンクをマッチメッセージとして選ぶ
                         </p>
                       </div>
                     </button>
@@ -1558,6 +1588,9 @@ export default function Main() {
                         <p className="text-xs text-orange-600 mt-1">
                           {msg.count}人がシェアしました
                         </p>
+                        <p className="text-xs text-gray-400 mt-0.5">
+                          {formatLastSentAt(msg.lastSentAt)}
+                        </p>
                       </div>
                     </button>
                   );
@@ -1568,7 +1601,7 @@ export default function Main() {
                   <button
                     key={msg.id}
                     onClick={() => handleSelectMessage(msg.content)}
-                    className={`w-full flex justify-between items-center text-left px-5 py-3 rounded-3xl shadow-md border border-orange-100 hover:bg-orange-100 active:scale-95 font-medium text-base ${
+                    className={`w-full flex flex-col text-left px-5 py-3 rounded-3xl shadow-md border border-orange-100 hover:bg-orange-100 active:scale-95 font-medium text-base ${
                       selectedMessage === msg.content
                         ? "font-bold text-orange-700 bg-orange-200 border-orange-300 shadow-lg"
                         : "text-gray-700 bg-white"
@@ -1583,9 +1616,14 @@ export default function Main() {
                     <span className="whitespace-pre-wrap break-words">
                       {msg.content}
                     </span>
-                    <span className="text-xs text-gray-500 ml-2 whitespace-nowrap">
-                      {msg.count}人がシェアしました
-                    </span>
+                    <div className="flex justify-between items-center mt-2">
+                      <span className="text-xs text-orange-600">
+                        {msg.count}人がシェアしました
+                      </span>
+                      <span className="text-xs text-gray-400">
+                        {formatLastSentAt(msg.lastSentAt)}
+                      </span>
+                    </div>
                   </button>
                 );
               })}
@@ -1687,7 +1725,7 @@ export default function Main() {
               step === "select-message" ? "bg-orange-200 shadow" : ""
             }`}
           >
-            ことばリスト
+            マッチメッセージ
           </button>
           <button
             onClick={() => setStep("select-recipients")}

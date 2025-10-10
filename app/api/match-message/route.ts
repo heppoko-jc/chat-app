@@ -170,6 +170,40 @@ export async function POST(req: NextRequest) {
       // なければ次の候補ユーザーへ（マッチはまだ）
     }
 
+    // PresetMessage の集計（マッチ成立/不成立に関係なく実行）
+    console.log(`[match-message] PresetMessage処理開始: ${message}`);
+    const existingPresetMessage = await prisma.presetMessage.findFirst({
+      where: { content: message },
+    });
+    if (existingPresetMessage) {
+      const updateData = {
+        count: existingPresetMessage.count + 1,
+        lastSentAt: new Date(), // メッセージ送信時に必ず時刻をリセット
+        // リンクメタデータが提供された場合は更新
+        ...(finalLinkTitle && { linkTitle: finalLinkTitle }),
+        ...(finalLinkImage && { linkImage: finalLinkImage }),
+      };
+      console.log(`[match-message] 既存PresetMessage更新:`, updateData);
+      await prisma.presetMessage.update({
+        where: { id: existingPresetMessage.id },
+        data: updateData,
+      });
+      console.log(`[match-message] PresetMessage更新完了`);
+    } else {
+      const createData = {
+        content: message,
+        createdBy: senderId,
+        count: 1,
+        linkTitle: finalLinkTitle || null,
+        linkImage: finalLinkImage || null,
+      };
+      console.log(`[match-message] 新規PresetMessage作成:`, createData);
+      await prisma.presetMessage.create({
+        data: createData,
+      });
+      console.log(`[match-message] PresetMessage作成完了`);
+    }
+
     // 2) マッチ成立時の処理
     if (matchedUserId) {
       // ユーザー情報
@@ -183,39 +217,6 @@ export async function POST(req: NextRequest) {
       });
       if (!senderUser || !matchedUser) {
         throw new Error("User not found");
-      }
-
-      // PresetMessage の集計
-      console.log(`[match-message] PresetMessage処理開始: ${message}`);
-      const existingPresetMessage = await prisma.presetMessage.findFirst({
-        where: { content: message },
-      });
-      if (existingPresetMessage) {
-        const updateData = {
-          count: existingPresetMessage.count + 1,
-          // リンクメタデータが提供された場合は更新
-          ...(finalLinkTitle && { linkTitle: finalLinkTitle }),
-          ...(finalLinkImage && { linkImage: finalLinkImage }),
-        };
-        console.log(`[match-message] 既存PresetMessage更新:`, updateData);
-        await prisma.presetMessage.update({
-          where: { id: existingPresetMessage.id },
-          data: updateData,
-        });
-        console.log(`[match-message] PresetMessage更新完了`);
-      } else {
-        const createData = {
-          content: message,
-          createdBy: senderId,
-          count: 1,
-          linkTitle: finalLinkTitle || null,
-          linkImage: finalLinkImage || null,
-        };
-        console.log(`[match-message] 新規PresetMessage作成:`, createData);
-        await prisma.presetMessage.create({
-          data: createData,
-        });
-        console.log(`[match-message] PresetMessage作成完了`);
       }
 
       // 直近の二重作成を避けるため、マッチ作成前に最終確認（同一ペア & message の直近マッチが直近N秒にないか）
