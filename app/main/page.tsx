@@ -910,43 +910,8 @@ export default function Main() {
       setLinkComment("");
 
       try {
-        const isPreset = presetMessages.some(
-          (m) => m.content === messageToSend && (m.count ?? 0) > 0
-        );
-        if (!isPreset) {
-          const res = await fetch("/api/preset-message", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              content: messageToSend,
-              createdBy: currentUserId,
-              linkTitle: finalLinkData?.title,
-              linkImage: finalLinkData?.image,
-            }),
-          });
-          if (res.ok) {
-            const created: PresetMessage = await res.json();
-            setPresetMessages((prev) =>
-              sortByNewest([{ ...created, count: 1 }, ...prev])
-            );
-          } else {
-            alert("マッチメッセージの登録に失敗しました");
-            setIsSending(false);
-            setIsSent(false);
-            setSentMessageInfo(null);
-            return;
-          }
-        } else {
-          setPresetMessages((prev) =>
-            sortByNewest(
-              prev.map((m) =>
-                m.content === messageToSend
-                  ? { ...m, count: (m.count ?? 0) + 1 }
-                  : m
-              )
-            )
-          );
-        }
+        // /api/match-message 内でPresetMessageの処理を行うため、
+        // ここでは事前のPresetMessage作成やカウント増加は行わない
 
         const requestData = {
           senderId: currentUserId,
