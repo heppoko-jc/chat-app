@@ -1047,12 +1047,11 @@ export default function Main() {
         </div>
 
         <p className="text-[15px] text-gray-700 text-center leading-snug mt-1 font-medium">
-          同じことばを送り合ってマッチできるかな？
+          同じメッセージを送り合えるかな？
           <br />
-          あなたは現在、マッチの可能性が
+          メッセージは3日で消滅します。現在マッチの可能性が
           <span className="text-orange-500 font-bold mx-1">{matchCount}</span>
-          件あります
-          {/* 取り消されたメッセージは自動的に除外される */}
+          件あります。
         </p>
       </div>
 

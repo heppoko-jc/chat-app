@@ -16,6 +16,7 @@ interface SentMessage {
   linkImage?: string;
   createdAt: string;
   isMatched: boolean;
+  isExpired?: boolean;
 }
 
 interface ApiResponse {
@@ -281,6 +282,11 @@ export default function Notifications() {
                                 {formatDate(msg.createdAt)}
                               </span>
                             )}
+                            {msg.isExpired && (
+                              <span className="text-xs px-2 py-1 rounded-full bg-gray-200 text-gray-600 font-semibold whitespace-nowrap">
+                                72時間期限切れ
+                              </span>
+                            )}
                             <button
                               onClick={() => setCancelPopup(msg)}
                               className="p-2 transition-transform duration-200 ease-out active:scale-90"
@@ -393,11 +399,16 @@ export default function Notifications() {
                               )}
                             </div>
                           </div>
-                          {/* 日付＋“マッチ済”バッジ（More なし） */}
+                          {/* 日付＋"マッチ済"バッジ（More なし） */}
                           <div className="flex items-center gap-2 flex-none shrink-0">
                             {formatDate(msg.createdAt) && (
                               <span className="text-xs text-gray-500 whitespace-nowrap">
                                 {formatDate(msg.createdAt)}
+                              </span>
+                            )}
+                            {msg.isExpired && (
+                              <span className="text-xs px-2 py-1 rounded-full bg-gray-200 text-gray-600 font-semibold whitespace-nowrap">
+                                72時間期限切れ
                               </span>
                             )}
                             <span className="text-xs px-2 py-1 rounded-full bg-green-100 text-green-600 font-semibold">

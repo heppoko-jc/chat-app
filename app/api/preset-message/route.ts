@@ -7,9 +7,12 @@ const prisma = new PrismaClient();
 
 export async function GET() {
   try {
+    const threeDaysAgo = new Date(Date.now() - 72 * 60 * 60 * 1000);
+
     const messages = await prisma.presetMessage.findMany({
       where: {
-        count: { gt: 0 }, // カウントが0より大きいメッセージのみ取得
+        count: { gt: 0 },
+        lastSentAt: { gte: threeDaysAgo }, // 72時間以内のメッセージのみ取得
       },
       orderBy: { lastSentAt: "desc" },
       select: {
