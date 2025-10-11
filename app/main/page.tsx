@@ -31,7 +31,7 @@ function getInitials(name: string) {
     .toUpperCase();
 }
 function getBgColor(name: string) {
-  let hash = 0;データベー
+  let hash = 0;
   for (let i = 0; i < name.length; i++)
     hash = name.charCodeAt(i) + ((hash << 5) - hash);
   const h = hash % 360;
