@@ -1049,7 +1049,7 @@ export default function Main() {
         <p className="text-[15px] text-gray-700 text-center leading-snug mt-1 font-medium">
           同じメッセージを送り合えるかな？
           <br />
-          メッセージは3日で消滅します。現在マッチの可能性が
+          マッチの期限は三日間、現在マッチの可能性が
           <span className="text-orange-500 font-bold mx-1">{matchCount}</span>
           件あります。
         </p>
