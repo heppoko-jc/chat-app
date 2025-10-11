@@ -10,6 +10,7 @@ const prisma = new PrismaClient();
  * ヘッダー userId をもとに、
  * 自分が受信したメッセージのうち、まだマッチしていないものの件数を返す
  * （取り消されたメッセージは自動的に除外される）
+ * （最終送信から72時間以上経過したメッセージも除外される）
  */
 export async function GET(req: NextRequest) {
   const userId = req.headers.get("userId");
@@ -31,6 +32,9 @@ export async function GET(req: NextRequest) {
       },
     });
 
+    // 72時間前の時刻
+    const threeDaysAgo = new Date(Date.now() - 72 * 60 * 60 * 1000);
+
     let unmatchedCount = 0;
 
     for (const receivedMessage of unmatchedMessages) {
@@ -45,9 +49,22 @@ export async function GET(req: NextRequest) {
         },
       });
 
-      // マッチが存在しない場合のみカウント
+      // マッチが存在しない場合のみカウント対象とする
       if (!matchExists) {
-        unmatchedCount++;
+        // さらに、このメッセージがPresetMessageに存在し、期限切れでないかチェック
+        const presetMessage = await prisma.presetMessage.findFirst({
+          where: {
+            content: receivedMessage.message,
+          },
+          select: {
+            lastSentAt: true,
+          },
+        });
+
+        // PresetMessageに存在し、かつ最終送信が72時間以内の場合のみカウント
+        if (presetMessage && presetMessage.lastSentAt >= threeDaysAgo) {
+          unmatchedCount++;
+        }
       }
     }
 

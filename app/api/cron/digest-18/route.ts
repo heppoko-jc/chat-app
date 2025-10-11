@@ -6,6 +6,7 @@ import webpush, { PushSubscription as WebPushSubscription } from "web-push";
 const prisma = new PrismaClient();
 
 // メイン画面と同じロジック：マッチしていない受信メッセージの件数を取得
+// 72時間以上経過したメッセージは除外
 async function getUnmatchedMessageCount(userId: string): Promise<number> {
   try {
     // 自分が受信したメッセージのうち、マッチしていないものをカウント
@@ -21,6 +22,9 @@ async function getUnmatchedMessageCount(userId: string): Promise<number> {
       },
     });
 
+    // 72時間前の時刻
+    const threeDaysAgo = new Date(Date.now() - 72 * 60 * 60 * 1000);
+
     let unmatchedCount = 0;
 
     for (const receivedMessage of unmatchedMessages) {
@@ -35,9 +39,22 @@ async function getUnmatchedMessageCount(userId: string): Promise<number> {
         },
       });
 
-      // マッチが存在しない場合のみカウント
+      // マッチが存在しない場合のみカウント対象とする
       if (!matchExists) {
-        unmatchedCount++;
+        // さらに、このメッセージがPresetMessageに存在し、期限切れでないかチェック
+        const presetMessage = await prisma.presetMessage.findFirst({
+          where: {
+            content: receivedMessage.message,
+          },
+          select: {
+            lastSentAt: true,
+          },
+        });
+
+        // PresetMessageに存在し、かつ最終送信が72時間以内の場合のみカウント
+        if (presetMessage && presetMessage.lastSentAt >= threeDaysAgo) {
+          unmatchedCount++;
+        }
       }
     }
 
