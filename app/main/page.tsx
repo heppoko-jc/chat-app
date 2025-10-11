@@ -1551,7 +1551,7 @@ export default function Main() {
                           </>
                         )}
                         <p className="text-xs text-orange-600 mt-1">
-                          {msg.count}人がシェアしました
+                          {msg.senderCount}人がシェアしました
                         </p>
                         <p className="text-xs text-gray-400 mt-0.5">
                           {formatLastSentAt(msg.lastSentAt)}
@@ -1583,7 +1583,7 @@ export default function Main() {
                     </span>
                     <div className="flex justify-between items-center mt-2">
                       <span className="text-xs text-orange-600">
-                        {msg.count}人がシェアしました
+                        {msg.senderCount}人がシェアしました
                       </span>
                       <span className="text-xs text-gray-400">
                         {formatLastSentAt(msg.lastSentAt)}
