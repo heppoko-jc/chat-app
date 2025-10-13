@@ -881,14 +881,71 @@ export default function Chat() {
       ) {
         const m = matches[mi];
         ensureDateBar(m.matchedAt);
+
+        const matchKey = `${m.message}-${m.matchedAt}`;
+        const linkPreview = matchLinkPreviews[matchKey];
+
         result.push(
           <div
             key={`match-before-${mi}-${m.matchedAt}`}
             className="flex justify-center my-2"
           >
-            <span className="bg-orange-100 text-orange-600 text-xs px-3 py-1 rounded-full shadow font-bold">
-              マッチしたことば: 「{m.message}」
-            </span>
+            <div className="bg-orange-100 text-orange-600 text-xs px-3 py-1 rounded-full shadow font-bold max-w-[80%]">
+              <span className="text-orange-600 font-bold">
+                マッチしたことば:
+              </span>
+              {linkPreview ? (
+                // リンクプレビュー表示
+                <div className="flex items-center gap-2 mt-1">
+                  {linkPreview.image ? (
+                    <Image
+                      src={linkPreview.image}
+                      alt={linkPreview.title}
+                      width={24}
+                      height={24}
+                      className="w-6 h-6 object-cover rounded border border-orange-200 flex-shrink-0"
+                      onError={(e) => {
+                        e.currentTarget.style.display = "none";
+                        e.currentTarget.nextElementSibling?.classList.remove(
+                          "hidden"
+                        );
+                      }}
+                    />
+                  ) : null}
+                  <div
+                    className={`w-6 h-6 rounded bg-orange-200 border border-orange-300 flex items-center justify-center text-orange-700 font-bold text-xs flex-shrink-0 ${
+                      linkPreview.image ? "hidden" : ""
+                    }`}
+                  >
+                    URL
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-bold text-orange-700 truncate">
+                      {linkPreview.title}
+                    </p>
+                    {(() => {
+                      const urlAndText = extractUrlAndText(m.message);
+                      return urlAndText && urlAndText.text ? (
+                        <p className="text-xs text-orange-600 truncate mt-0.5">
+                          {urlAndText.text}
+                        </p>
+                      ) : null;
+                    })()}
+                  </div>
+                </div>
+              ) : isLinkMessage(m.message) ? (
+                // リンクメッセージだがプレビューがない場合（ローディング中など）
+                <div className="mt-1 flex items-center gap-2">
+                  <div className="w-4 h-4 border-2 border-orange-300 border-t-orange-500 rounded-full animate-spin flex-shrink-0"></div>
+                  <span className="text-xs text-orange-600">
+                    リンク情報を取得中...
+                  </span>
+                </div>
+              ) : (
+                // 通常のメッセージ表示
+                <div className="mt-1">「{m.message}」</div>
+              )}
+            </div>
           </div>
         );
         mi++;
