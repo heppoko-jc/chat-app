@@ -510,25 +510,29 @@ export default function Chat() {
         if (aborted) return;
 
         // フォーマット処理を非同期化（メインスレッドをブロックしない）
-        requestIdleCallback(
-          () => {
-            if (aborted) return;
-            const formatted = res.data.map((msg) => ({
-              ...msg,
-              formattedDate: new Date(msg.createdAt).toLocaleString("ja-JP", {
-                month: "2-digit",
-                day: "2-digit",
-                hour: "2-digit",
-                minute: "2-digit",
-              }),
-            }));
-            formatted.forEach((m) => seenIdsRef.current.add(m.id));
-            setMessages(formatted);
-            setChatData((prev) => ({ ...prev, [id]: formatted }));
-            scrollToBottom();
-          },
-          { timeout: 1000 }
-        );
+        const processMessages = () => {
+          if (aborted) return;
+          const formatted = res.data.map((msg) => ({
+            ...msg,
+            formattedDate: new Date(msg.createdAt).toLocaleString("ja-JP", {
+              month: "2-digit",
+              day: "2-digit",
+              hour: "2-digit",
+              minute: "2-digit",
+            }),
+          }));
+          formatted.forEach((m) => seenIdsRef.current.add(m.id));
+          setMessages(formatted);
+          setChatData((prev) => ({ ...prev, [id]: formatted }));
+          scrollToBottom();
+        };
+
+        // requestIdleCallback の polyfill（Safari対応）
+        if (typeof requestIdleCallback !== "undefined") {
+          requestIdleCallback(processMessages, { timeout: 1000 });
+        } else {
+          setTimeout(processMessages, 0);
+        }
       } catch (e) {
         console.error("🚨 メッセージ取得エラー:", e);
       }
