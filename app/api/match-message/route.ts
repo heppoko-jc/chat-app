@@ -176,27 +176,26 @@ export async function POST(req: NextRequest) {
       where: { content: message },
     });
     if (existingPresetMessage) {
-      // この送信者が過去にこのメッセージを送信した記録があるかチェック
-      const pastSentMessage = await prisma.sentMessage.findFirst({
-        where: {
-          senderId: senderId,
-          message: message,
-        },
+      // 実際のユニーク送信者数を動的に計算（より確実な方法）
+      const uniqueSenders = await prisma.sentMessage.findMany({
+        where: { message: message },
+        select: { senderId: true },
+        distinct: ["senderId"],
       });
+      const actualSenderCount = uniqueSenders.length;
 
       console.log(`[match-message] 送信者判定:`, {
         senderId,
         message,
-        pastSentMessage: !!pastSentMessage,
+        actualSenderCount,
         currentSenderCount: existingPresetMessage.senderCount,
+        uniqueSenders: uniqueSenders.map((s) => s.senderId),
       });
 
       const updateData = {
         count: existingPresetMessage.count + 1,
-        // 過去に送信記録がない場合のみsenderCountを増加
-        senderCount: pastSentMessage
-          ? existingPresetMessage.senderCount
-          : existingPresetMessage.senderCount + 1,
+        // 実際のユニーク送信者数を使用
+        senderCount: actualSenderCount,
         lastSentAt: new Date(), // メッセージ送信時に必ず時刻をリセット
         // リンクメタデータが提供された場合は更新
         ...(finalLinkTitle && { linkTitle: finalLinkTitle }),
