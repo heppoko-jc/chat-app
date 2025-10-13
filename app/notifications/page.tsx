@@ -62,6 +62,7 @@ export default function Notifications() {
   const [cancelPopup, setCancelPopup] = useState<SentMessage | null>(null);
   const [animateExit, setAnimateExit] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [linkPopup, setLinkPopup] = useState<SentMessage | null>(null);
 
   const touchStart = useRef<{ x: number; y: number; time: number } | null>(
     null
@@ -96,6 +97,25 @@ export default function Notifications() {
       }
     })();
   }, [userId]);
+
+  // ──────────── リンクをクリックした時の処理 ────────────
+  const handleMessageClick = (msg: SentMessage) => {
+    // リンクメッセージの場合はポップアップを表示
+    if (msg.linkTitle || msg.linkImage) {
+      setLinkPopup(msg);
+    }
+    // 通常のメッセージの場合は何もしない
+  };
+
+  const handleOpenLink = () => {
+    if (!linkPopup) return;
+    // URLを抽出
+    const urlMatch = linkPopup.message.match(/^(https?:\/\/[^\s]+)/);
+    if (urlMatch) {
+      window.open(urlMatch[1], "_blank");
+    }
+    setLinkPopup(null);
+  };
 
   // ──────────── 画面スワイプで戻る ────────────
   const handleTouchStart = (e: React.TouchEvent) => {
@@ -191,10 +211,12 @@ export default function Notifications() {
                       {unmatchedMessages.map((msg) => (
                         <li
                           key={msg.id}
+                          onClick={() => handleMessageClick(msg)}
                           className="
                             list-none flex items-center justify-between p-3
                             bg-white shadow rounded-3xl
                             transition-all duration-300 ease-out active:scale-90
+                            cursor-pointer
                           "
                         >
                           {/* アイコン＋送信相手＋テキスト */}
@@ -288,7 +310,10 @@ export default function Notifications() {
                               </span>
                             )}
                             <button
-                              onClick={() => setCancelPopup(msg)}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setCancelPopup(msg);
+                              }}
                               className="p-2 transition-transform duration-200 ease-out active:scale-90"
                               aria-label="more"
                             >
@@ -316,9 +341,12 @@ export default function Notifications() {
                       {matchedMessages.map((msg) => (
                         <li
                           key={msg.id}
+                          onClick={() => handleMessageClick(msg)}
                           className="
                             list-none flex items-center justify-between p-3
                             bg-white shadow rounded-3xl
+                            cursor-pointer
+                            transition-all duration-300 ease-out active:scale-90
                           "
                         >
                           {/* アイコン＋送信相手＋テキスト */}
@@ -472,6 +500,70 @@ export default function Notifications() {
                 "
               >
                 もどる
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── リンクアクションポップアップ ─── */}
+      {linkPopup && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black/50 z-50">
+          <div className="bg-white rounded-2xl p-6 mx-4 max-w-sm w-full">
+            <div className="flex items-center gap-3 mb-4">
+              {linkPopup.linkImage ? (
+                <Image
+                  src={linkPopup.linkImage}
+                  alt={linkPopup.linkTitle || linkPopup.message}
+                  width={48}
+                  height={48}
+                  className="w-12 h-12 object-cover rounded-xl border border-orange-200"
+                  onError={(e) => {
+                    e.currentTarget.style.display = "none";
+                    e.currentTarget.nextElementSibling?.classList.remove(
+                      "hidden"
+                    );
+                  }}
+                />
+              ) : null}
+              <div
+                className={`w-12 h-12 rounded-xl bg-orange-100 border border-orange-200 flex items-center justify-center text-orange-600 font-bold text-xs ${
+                  linkPopup.linkImage ? "hidden" : ""
+                }`}
+              >
+                URL
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold text-gray-800 truncate">
+                  {linkPopup.linkTitle || linkPopup.message}
+                </p>
+                {linkPopup.linkTitle &&
+                  (linkPopup.message.includes(" ") ||
+                    linkPopup.message.includes("　")) && (
+                    <p className="text-xs text-gray-500 truncate">
+                      {linkPopup.message
+                        .replace(
+                          /^(https?:\/\/[a-zA-Z0-9\-._~:/?#[\]@!$&'()*+,;=%]+)/,
+                          ""
+                        )
+                        .trim()}
+                    </p>
+                  )}
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <button
+                onClick={handleOpenLink}
+                className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 px-4 rounded-xl transition"
+              >
+                リンク先へ
+              </button>
+              <button
+                onClick={() => setLinkPopup(null)}
+                className="w-full bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-3 px-4 rounded-xl transition"
+              >
+                キャンセル
               </button>
             </div>
           </div>
