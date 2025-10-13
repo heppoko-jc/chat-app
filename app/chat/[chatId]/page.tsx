@@ -903,37 +903,40 @@ export default function Chat() {
         <div
           key={msg.id}
           data-msg-row="1"
-          className={`flex items-end ${
+          className={`flex items-end gap-1 ${
             isMe ? "justify-end" : "justify-start"
-          } w-full`}
+          } w-full mb-1`}
         >
           {!isMe && (
             <div
-              className="w-9 h-9 rounded-full flex items-center justify-center text-white font-bold text-base mr-2 shadow"
+              className="w-9 h-9 rounded-full flex items-center justify-center text-white font-bold text-base mr-2 shadow flex-shrink-0"
               style={{ backgroundColor: getBgColor(msg.sender.name) }}
             >
               {getInitials(msg.sender.name)}
             </div>
           )}
-          <div className="flex flex-col items-end max-w-[70%]">
-            <div
-              className={`relative px-4 py-2 text-sm rounded-2xl shadow-md ${
-                isMe
-                  ? "bg-green-400 text-white rounded-br-md bubble-right"
-                  : "bg-white text-black rounded-bl-md bubble-left border border-gray-200"
-              }`}
-              style={{ wordBreak: "break-word", whiteSpace: "pre-wrap" }}
-            >
-              {msg.content}
-            </div>
-            <span
-              className={`text-[10px] mt-1 ${
-                isMe ? "text-green-500" : "text-gray-400"
-              }`}
-            >
+          {/* 自分のメッセージの場合、タイムスタンプを左に */}
+          {isMe && (
+            <span className="text-[10px] text-gray-400 self-end mb-1 flex-shrink-0">
               {msg.formattedDate}
             </span>
+          )}
+          <div
+            className={`relative px-4 py-2 text-sm rounded-2xl shadow-md max-w-[70%] ${
+              isMe
+                ? "bg-green-400 text-white rounded-br-md bubble-right"
+                : "bg-white text-black rounded-bl-md bubble-left border border-gray-200"
+            }`}
+            style={{ wordBreak: "break-word", whiteSpace: "pre-wrap" }}
+          >
+            {msg.content}
           </div>
+          {/* 相手のメッセージの場合、タイムスタンプを右に */}
+          {!isMe && (
+            <span className="text-[10px] text-gray-400 self-end mb-1 flex-shrink-0">
+              {msg.formattedDate}
+            </span>
+          )}
         </div>
       );
     }
@@ -1042,14 +1045,14 @@ export default function Chat() {
   }
 
   return (
-    <div
-      className="flex flex-col bg-[#f6f8fa] overflow-hidden w-screen"
-      style={{
-        height: "100dvh", // 動的ビューポート高さ（iOS対応）
-      }}
-    >
-      {/* ヘッダー：シンプルな固定 */}
-      <header className="flex-shrink-0 bg-white px-4 py-3 flex items-center border-b z-10">
+    <div className="flex flex-col bg-[#f6f8fa] h-screen overflow-hidden w-screen">
+      {/* ヘッダー：固定位置で常に表示 */}
+      <header
+        className="fixed left-0 right-0 bg-white px-4 py-3 flex items-center border-b z-50 shadow-sm"
+        style={{
+          top: "env(safe-area-inset-top, 0px)", // 常に画面上部に固定
+        }}
+      >
         <button
           onClick={() => router.push("/chat-list")}
           className="mr-3 focus:outline-none"
@@ -1159,16 +1162,17 @@ export default function Chat() {
         </div>
       </header>
 
-      {/* メッセージ一覧：flexで自然に伸縮 */}
+      {/* メッセージ一覧：ヘッダーの下で自然にスクロール */}
       <main
         ref={mainRef}
         className="flex-1 overflow-y-auto overflow-x-hidden px-2 scrollbar-hide"
         style={{
           overscrollBehavior: "contain",
           WebkitOverflowScrolling: "touch",
+          paddingTop: "calc(72px + env(safe-area-inset-top, 0px))", // ヘッダー高さ + safe-area
         }}
       >
-        <div className="flex flex-col gap-1 py-4">
+        <div className="flex flex-col gap-0.5 py-2">
           {renderMessagesWithDate(messages)}
         </div>
       </main>
