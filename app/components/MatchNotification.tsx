@@ -2,9 +2,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import Image from "next/image";
-import axios from "axios";
 import {
   extractUrlAndText,
   fetchLinkMetadata,
@@ -27,7 +25,6 @@ export default function MatchNotification({
   matchedUser,
   message,
 }: MatchNotificationProps) {
-  const router = useRouter();
   const [isAnimating, setIsAnimating] = useState(false);
   const [linkPreview, setLinkPreview] = useState<{
     url: string;
@@ -83,55 +80,6 @@ export default function MatchNotification({
     }
     // アニメーション待ちをやめて即時に親へ閉じる指示（灰色オーバーレイ残留を防ぐ）
     onClose();
-  };
-
-  const handleOpenChat = async (e?: React.MouseEvent) => {
-    // イベント伝播を止める
-    if (e) {
-      e.preventDefault();
-      e.stopPropagation();
-    }
-    try {
-      const partnerId = matchedUser?.id;
-      if (!partnerId) {
-        handleClose();
-        router.push("/chat-list");
-        return;
-      }
-      const userId =
-        typeof window !== "undefined" ? localStorage.getItem("userId") : null;
-      if (!userId) {
-        handleClose();
-        router.push("/chat-list");
-        return;
-      }
-      // 画面導線に依らず、開く時点でチャットリストの強調/新着を解除できるように先に通知しておく
-      try {
-        // partnerId から ensure で得る chatId とは異なる可能性があるため、
-        // ここではチャットIDが未確定。遷移後にチャット画面側でも確実に解除する実装と併用する。
-        window.dispatchEvent(new CustomEvent("match-opened", { detail: {} }));
-      } catch {}
-      // チャット部屋を確実に用意して遷移
-      const res = await axios.post<{ chatId: string }>(
-        "/api/chat/ensure",
-        { partnerId },
-        { headers: { userId } }
-      );
-      // chatId が確定したので、念のためもう一度正しい chatId で解除通知
-      try {
-        window.dispatchEvent(
-          new CustomEvent("match-opened", {
-            detail: { chatId: res.data.chatId },
-          })
-        );
-      } catch {}
-      handleClose();
-      router.push(`/chat/${res.data.chatId}`);
-    } catch (e) {
-      console.error("[MatchNotification] open chat failed:", e);
-      handleClose();
-      router.push("/chat-list");
-    }
   };
 
   if (!isVisible) return null;
@@ -254,16 +202,10 @@ export default function MatchNotification({
         </div>
 
         {/* アクションボタン */}
-        <div className="flex gap-3">
-          <button
-            onClick={(e) => handleOpenChat(e)}
-            className="flex-1 bg-gradient-to-r from-orange-400 to-orange-500 text-white py-3 rounded-2xl font-semibold transition-transform duration-200 ease-out active:scale-95"
-          >
-            チャットを開く
-          </button>
+        <div className="flex justify-center">
           <button
             onClick={(e) => handleClose(e)}
-            className="px-4 py-3 text-gray-500 font-semibold transition-transform duration-200 ease-out active:scale-95"
+            className="w-full bg-gradient-to-r from-orange-400 to-orange-500 text-white py-3 rounded-2xl font-semibold transition-transform duration-200 ease-out active:scale-95"
           >
             閉じる
           </button>
