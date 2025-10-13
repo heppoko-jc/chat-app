@@ -5,8 +5,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import axios from "axios";
+import Image from "next/image";
 import FixedTabBar from "../components/FixedTabBar";
 import socket, { setSocketUserId } from "../socket";
+import {
+  extractUrlAndText,
+  fetchLinkMetadata,
+  isLinkMessage,
+} from "../lib/link-utils";
 
 // ===== バッジ用の軽量ユーティリティ（型安全・any なし） =====
 type BadgeCapableNavigator = Navigator & {
@@ -132,6 +138,9 @@ export default function ChatList() {
   const [isOpenedMatchStateLoaded, setIsOpenedMatchStateLoaded] =
     useState(false);
   const [newMatchChats, setNewMatchChats] = useState<Set<string>>(new Set());
+  const [chatLinkPreviews, setChatLinkPreviews] = useState<
+    Record<string, { url: string; title: string; image?: string } | null>
+  >({});
 
   // 未読合計（バッジ同期に使用）
   const unreadTotal = useMemo(
@@ -286,6 +295,50 @@ export default function ChatList() {
       JSON.stringify(nextMap)
     );
   }, [chats, isOpenedMatchStateLoaded, userId]);
+
+  // チャットリストのリンクメタデータを取得
+  useEffect(() => {
+    const fetchChatLinkMetadata = async () => {
+      console.log(
+        "🔍 Fetching chat list link metadata for",
+        chats.length,
+        "chats"
+      );
+      const newPreviews: Record<
+        string,
+        { url: string; title: string; image?: string } | null
+      > = {};
+
+      for (const chat of chats) {
+        if (isLinkMessage(chat.matchMessage)) {
+          const urlAndText = extractUrlAndText(chat.matchMessage);
+          if (urlAndText) {
+            try {
+              console.log(
+                "🔍 Fetching metadata for chat",
+                chat.chatId,
+                ":",
+                urlAndText.url
+              );
+              const metadata = await fetchLinkMetadata(urlAndText.url);
+              console.log("🔍 Chat metadata received:", metadata);
+              newPreviews[chat.chatId] = metadata;
+            } catch (error) {
+              console.error("Error fetching chat link metadata:", error);
+              newPreviews[chat.chatId] = null;
+            }
+          }
+        }
+      }
+
+      console.log("🔍 Setting chat link previews:", newPreviews);
+      setChatLinkPreviews((prev) => ({ ...prev, ...newPreviews }));
+    };
+
+    if (chats.length > 0) {
+      fetchChatLinkMetadata();
+    }
+  }, [chats]);
 
   // チャット画面からの強調解除通知
   useEffect(() => {
@@ -534,19 +587,95 @@ export default function ChatList() {
                         )}
                       </div>
                     </div>
-                    <p
-                      className={`text-sm truncate mb-1 font-medium ${
-                        shouldShowMatchHighlight
-                          ? "text-orange-700 font-semibold"
-                          : isMatched
-                          ? "text-gray-600"
-                          : "text-gray-400"
-                      }`}
-                    >
-                      {isMatched
-                        ? `「${chat.matchMessage}」`
-                        : "まだマッチしていません"}
-                    </p>
+                    <div className="mb-1">
+                      {isMatched ? (
+                        chatLinkPreviews[chat.chatId] ? (
+                          // リンクプレビュー表示
+                          <div className="flex items-center gap-2">
+                            {chatLinkPreviews[chat.chatId]?.image ? (
+                              <Image
+                                src={chatLinkPreviews[chat.chatId]!.image!}
+                                alt={chatLinkPreviews[chat.chatId]!.title}
+                                width={20}
+                                height={20}
+                                className="w-5 h-5 object-cover rounded border border-orange-200 flex-shrink-0"
+                                onError={(e) => {
+                                  e.currentTarget.style.display = "none";
+                                  e.currentTarget.nextElementSibling?.classList.remove(
+                                    "hidden"
+                                  );
+                                }}
+                              />
+                            ) : null}
+                            <div
+                              className={`w-5 h-5 rounded bg-orange-100 border border-orange-200 flex items-center justify-center text-orange-600 font-bold text-xs flex-shrink-0 ${
+                                chatLinkPreviews[chat.chatId]?.image
+                                  ? "hidden"
+                                  : ""
+                              }`}
+                            >
+                              URL
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p
+                                className={`text-xs font-bold truncate ${
+                                  shouldShowMatchHighlight
+                                    ? "text-orange-700"
+                                    : "text-gray-800"
+                                }`}
+                              >
+                                {chatLinkPreviews[chat.chatId]!.title}
+                              </p>
+                              {(() => {
+                                const urlAndText = extractUrlAndText(
+                                  chat.matchMessage
+                                );
+                                return urlAndText && urlAndText.text ? (
+                                  <p
+                                    className={`text-xs truncate ${
+                                      shouldShowMatchHighlight
+                                        ? "text-orange-600"
+                                        : "text-gray-500"
+                                    }`}
+                                  >
+                                    {urlAndText.text}
+                                  </p>
+                                ) : null;
+                              })()}
+                            </div>
+                          </div>
+                        ) : isLinkMessage(chat.matchMessage) ? (
+                          // リンクメッセージだがプレビューがない場合（ローディング中など）
+                          <div className="flex items-center gap-2">
+                            <div className="w-4 h-4 border-2 border-orange-300 border-t-orange-500 rounded-full animate-spin flex-shrink-0"></div>
+                            <span
+                              className={`text-xs ${
+                                shouldShowMatchHighlight
+                                  ? "text-orange-600"
+                                  : "text-gray-500"
+                              }`}
+                            >
+                              リンク情報を取得中...
+                            </span>
+                          </div>
+                        ) : (
+                          // 通常のメッセージ表示
+                          <p
+                            className={`text-sm truncate font-medium ${
+                              shouldShowMatchHighlight
+                                ? "text-orange-700 font-semibold"
+                                : "text-gray-600"
+                            }`}
+                          >
+                            「{chat.matchMessage}」
+                          </p>
+                        )
+                      ) : (
+                        <p className="text-sm text-gray-400">
+                          まだマッチしていません
+                        </p>
+                      )}
+                    </div>
                     <p className="text-sm text-gray-500 truncate">
                       {chat.latestMessage}
                     </p>

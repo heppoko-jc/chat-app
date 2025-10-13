@@ -8,6 +8,11 @@ import axios from "axios";
 import socket from "../../socket";
 import Image from "next/image";
 import { useChatData } from "../../contexts/ChatDataContext";
+import {
+  extractUrlAndText,
+  fetchLinkMetadata,
+  isLinkMessage,
+} from "../../lib/link-utils";
 
 type BadgeCapableNavigator = Navigator & {
   serviceWorker?: {
@@ -123,6 +128,14 @@ export default function Chat() {
   const [matchHistory, setMatchHistory] = useState<
     { message: string; matchedAt: string }[]
   >([]);
+  const [matchLinkPreviews, setMatchLinkPreviews] = useState<
+    Record<string, { url: string; title: string; image?: string } | null>
+  >({});
+  const [headerLinkPreview, setHeaderLinkPreview] = useState<{
+    url: string;
+    title: string;
+    image?: string;
+  } | null>(null);
 
   // ===== レイアウト参照 =====
   const mainRef = useRef<HTMLDivElement | null>(null);
@@ -229,17 +242,27 @@ export default function Chat() {
   // 一覧からヘッダー/マッチ履歴を初期化
   const chatInList = chatList?.find((c) => c.chatId === id);
   useEffect(() => {
-    if (!chatInList) return;
+    console.log("🔍 chatInList changed:", chatInList);
+    if (!chatInList) {
+      console.log("🔍 No chatInList found, skipping initialization");
+      return;
+    }
+
+    const matchHistoryFromList = chatInList.matchHistory || [];
+    console.log("🔍 matchHistory from chatList:", matchHistoryFromList);
+
     setMatchMessage(chatInList.matchMessage || "");
     setMatchMessageMatchedAt(chatInList.matchMessageMatchedAt || null);
-    setMatchHistory(
-      (chatInList.matchHistory || [])
-        .slice()
-        .sort(
-          (a, b) =>
-            new Date(a.matchedAt).getTime() - new Date(b.matchedAt).getTime()
-        )
-    );
+
+    const sortedHistory = matchHistoryFromList
+      .slice()
+      .sort(
+        (a, b) =>
+          new Date(a.matchedAt).getTime() - new Date(b.matchedAt).getTime()
+      );
+
+    console.log("🔍 Setting sorted matchHistory:", sortedHistory);
+    setMatchHistory(sortedHistory);
   }, [chatInList]);
 
   // ===== ルーム参加 & 受信購読（newMessage） =====
@@ -416,6 +439,78 @@ export default function Chat() {
       socket.off("matchEstablished", onMatchEstablished);
     };
   }, [id, chatList, messages, currentUserId, setChatList, scrollToBottom]);
+
+  // マッチ履歴のリンクメタデータを取得
+  useEffect(() => {
+    console.log("🔍 matchHistory changed:", matchHistory);
+
+    const fetchMatchLinkMetadata = async () => {
+      console.log("🔍 fetchMatchLinkMetadata started");
+      const newPreviews: Record<
+        string,
+        { url: string; title: string; image?: string } | null
+      > = {};
+
+      for (const match of matchHistory) {
+        console.log("🔍 Processing match:", match.message);
+        const isLink = isLinkMessage(match.message);
+        console.log("🔍 Is link message:", isLink);
+
+        if (isLink) {
+          const urlAndText = extractUrlAndText(match.message);
+          console.log("🔍 Extracted URL and text:", urlAndText);
+
+          if (urlAndText) {
+            try {
+              console.log("🔍 Fetching metadata for URL:", urlAndText.url);
+              const metadata = await fetchLinkMetadata(urlAndText.url);
+              console.log("🔍 Metadata received:", metadata);
+              newPreviews[`${match.message}-${match.matchedAt}`] = metadata;
+            } catch (error) {
+              console.error("Error fetching match link metadata:", error);
+              newPreviews[`${match.message}-${match.matchedAt}`] = null;
+            }
+          }
+        }
+      }
+
+      console.log("🔍 Setting new previews:", newPreviews);
+      setMatchLinkPreviews((prev) => ({ ...prev, ...newPreviews }));
+    };
+
+    if (matchHistory.length > 0) {
+      console.log("🔍 matchHistory has items, starting fetch");
+      fetchMatchLinkMetadata();
+    } else {
+      console.log("🔍 matchHistory is empty, skipping fetch");
+    }
+  }, [matchHistory]);
+
+  // ヘッダー用のリンクメタデータを取得
+  useEffect(() => {
+    if (!matchMessage) {
+      setHeaderLinkPreview(null);
+      return;
+    }
+
+    if (isLinkMessage(matchMessage)) {
+      console.log("🔍 Fetching header link metadata for:", matchMessage);
+      const urlAndText = extractUrlAndText(matchMessage);
+      if (urlAndText) {
+        fetchLinkMetadata(urlAndText.url)
+          .then((metadata) => {
+            console.log("🔍 Header metadata received:", metadata);
+            setHeaderLinkPreview(metadata);
+          })
+          .catch((error) => {
+            console.error("Error fetching header link metadata:", error);
+            setHeaderLinkPreview(null);
+          });
+      }
+    } else {
+      setHeaderLinkPreview(null);
+    }
+  }, [matchMessage]);
 
   // ===== 初回＆id変化時はサーバから最新を取得 =====
   useEffect(() => {
@@ -668,6 +763,10 @@ export default function Chat() {
 
   // ====== タイムライン描画 ======
   function renderMessagesWithDate(msgs: Message[]) {
+    console.log("🔍 renderMessagesWithDate called with:", {
+      msgs: msgs.length,
+      matchHistory: matchHistory.length,
+    });
     const result: React.ReactElement[] = [];
     let lastDate = "";
     const ensureDateBar = (iso: string) => {
@@ -691,16 +790,81 @@ export default function Chat() {
       );
 
     if (msgs.length === 0) {
+      console.log("🔍 No messages, rendering matches only:", matches.length);
       matches.forEach((m, idx) => {
         ensureDateBar(m.matchedAt);
+
+        const matchKey = `${m.message}-${m.matchedAt}`;
+        const linkPreview = matchLinkPreviews[matchKey];
+
+        console.log("🔍 Rendering match-only:", {
+          message: m.message,
+          matchKey,
+          linkPreview,
+          hasPreview: !!linkPreview,
+        });
+
         result.push(
           <div
             key={`match-only-${idx}-${m.matchedAt}`}
             className="flex justify-center my-2"
           >
-            <span className="bg-orange-100 text-orange-600 text-xs px-3 py-1 rounded-full shadow font-bold">
-              マッチしたことば: 「{m.message}」
-            </span>
+            <div className="bg-orange-100 text-orange-600 text-xs px-3 py-1 rounded-full shadow font-bold max-w-[80%]">
+              <span className="text-orange-600 font-bold">
+                マッチしたことば:
+              </span>
+              {linkPreview ? (
+                // リンクプレビュー表示
+                <div className="flex items-center gap-2 mt-1">
+                  {linkPreview.image ? (
+                    <Image
+                      src={linkPreview.image}
+                      alt={linkPreview.title}
+                      width={24}
+                      height={24}
+                      className="w-6 h-6 object-cover rounded border border-orange-200 flex-shrink-0"
+                      onError={(e) => {
+                        e.currentTarget.style.display = "none";
+                        e.currentTarget.nextElementSibling?.classList.remove(
+                          "hidden"
+                        );
+                      }}
+                    />
+                  ) : null}
+                  <div
+                    className={`w-6 h-6 rounded bg-orange-200 border border-orange-300 flex items-center justify-center text-orange-700 font-bold text-xs flex-shrink-0 ${
+                      linkPreview.image ? "hidden" : ""
+                    }`}
+                  >
+                    URL
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-bold text-orange-700 truncate">
+                      {linkPreview.title}
+                    </p>
+                    {(() => {
+                      const urlAndText = extractUrlAndText(m.message);
+                      return urlAndText && urlAndText.text ? (
+                        <p className="text-xs text-orange-600 truncate mt-0.5">
+                          {urlAndText.text}
+                        </p>
+                      ) : null;
+                    })()}
+                  </div>
+                </div>
+              ) : isLinkMessage(m.message) ? (
+                // リンクメッセージだがプレビューがない場合（ローディング中など）
+                <div className="mt-1 flex items-center gap-2">
+                  <div className="w-4 h-4 border-2 border-orange-300 border-t-orange-500 rounded-full animate-spin flex-shrink-0"></div>
+                  <span className="text-xs text-orange-600">
+                    リンク情報を取得中...
+                  </span>
+                </div>
+              ) : (
+                // 通常のメッセージ表示
+                <div className="mt-1">「{m.message}」</div>
+              )}
+            </div>
           </div>
         );
       });
@@ -770,17 +934,83 @@ export default function Chat() {
       );
     }
 
+    console.log("🔍 Starting match rendering loop:", {
+      matchesCount: matches.length,
+    });
     while (mi < matches.length) {
       const m = matches[mi];
+      console.log("🔍 Processing match in loop:", m);
       ensureDateBar(m.matchedAt);
+
+      const matchKey = `${m.message}-${m.matchedAt}`;
+      const linkPreview = matchLinkPreviews[matchKey];
+
+      console.log("🔍 Rendering match:", {
+        message: m.message,
+        matchKey,
+        linkPreview,
+        hasPreview: !!linkPreview,
+      });
+
       result.push(
         <div
           key={`match-after-${mi}-${m.matchedAt}`}
           className="flex justify-center my-2"
         >
-          <span className="bg-orange-100 text-orange-600 text-xs px-3 py-1 rounded-full shadow font-bold">
-            マッチしたことば: 「{m.message}」
-          </span>
+          <div className="bg-orange-100 text-orange-600 text-xs px-3 py-1 rounded-full shadow font-bold max-w-[80%]">
+            <span className="text-orange-600 font-bold">マッチしたことば:</span>
+            {linkPreview ? (
+              // リンクプレビュー表示
+              <div className="flex items-center gap-2 mt-1">
+                {linkPreview.image ? (
+                  <Image
+                    src={linkPreview.image}
+                    alt={linkPreview.title}
+                    width={24}
+                    height={24}
+                    className="w-6 h-6 object-cover rounded border border-orange-200 flex-shrink-0"
+                    onError={(e) => {
+                      e.currentTarget.style.display = "none";
+                      e.currentTarget.nextElementSibling?.classList.remove(
+                        "hidden"
+                      );
+                    }}
+                  />
+                ) : null}
+                <div
+                  className={`w-6 h-6 rounded bg-orange-200 border border-orange-300 flex items-center justify-center text-orange-700 font-bold text-xs flex-shrink-0 ${
+                    linkPreview.image ? "hidden" : ""
+                  }`}
+                >
+                  URL
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-bold text-orange-700 truncate">
+                    {linkPreview.title}
+                  </p>
+                  {(() => {
+                    const urlAndText = extractUrlAndText(m.message);
+                    return urlAndText && urlAndText.text ? (
+                      <p className="text-xs text-orange-600 truncate mt-0.5">
+                        {urlAndText.text}
+                      </p>
+                    ) : null;
+                  })()}
+                </div>
+              </div>
+            ) : isLinkMessage(m.message) ? (
+              // リンクメッセージだがプレビューがない場合（ローディング中など）
+              <div className="mt-1 flex items-center gap-2">
+                <div className="w-4 h-4 border-2 border-orange-300 border-t-orange-500 rounded-full animate-spin flex-shrink-0"></div>
+                <span className="text-xs text-orange-600">
+                  リンク情報を取得中...
+                </span>
+              </div>
+            ) : (
+              // 通常のメッセージ表示
+              <div className="mt-1">「{m.message}」</div>
+            )}
+          </div>
         </div>
       );
       mi++;
@@ -847,20 +1077,92 @@ export default function Chat() {
             <span className="text-base font-bold text-black">{headerName}</span>
           </div>
           {!!matchMessage && (
-            <span className="text-xs text-gray-500 mt-1">
-              「{matchMessage}」
-              {matchMessageMatchedAt
-                ? ` / ${new Date(matchMessageMatchedAt).toLocaleString(
-                    "ja-JP",
-                    {
-                      month: "2-digit",
-                      day: "2-digit",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    }
-                  )}`
-                : ""}
-            </span>
+            <div className="mt-1">
+              {headerLinkPreview ? (
+                // リンクプレビュー表示
+                <div className="flex items-center gap-2">
+                  {headerLinkPreview.image ? (
+                    <Image
+                      src={headerLinkPreview.image}
+                      alt={headerLinkPreview.title}
+                      width={20}
+                      height={20}
+                      className="w-5 h-5 object-cover rounded border border-orange-200 flex-shrink-0"
+                      onError={(e) => {
+                        e.currentTarget.style.display = "none";
+                        e.currentTarget.nextElementSibling?.classList.remove(
+                          "hidden"
+                        );
+                      }}
+                    />
+                  ) : null}
+                  <div
+                    className={`w-5 h-5 rounded bg-orange-100 border border-orange-200 flex items-center justify-center text-orange-600 font-bold text-xs flex-shrink-0 ${
+                      headerLinkPreview.image ? "hidden" : ""
+                    }`}
+                  >
+                    URL
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-bold text-gray-800 truncate">
+                      {headerLinkPreview.title}
+                    </p>
+                    {(() => {
+                      const urlAndText = extractUrlAndText(matchMessage);
+                      return urlAndText && urlAndText.text ? (
+                        <p className="text-xs text-gray-500 truncate">
+                          {urlAndText.text}
+                        </p>
+                      ) : null;
+                    })()}
+                  </div>
+                  {matchMessageMatchedAt && (
+                    <span className="text-xs text-gray-400 flex-shrink-0">
+                      {new Date(matchMessageMatchedAt).toLocaleString("ja-JP", {
+                        month: "2-digit",
+                        day: "2-digit",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </span>
+                  )}
+                </div>
+              ) : isLinkMessage(matchMessage) ? (
+                // リンクメッセージだがプレビューがない場合（ローディング中など）
+                <div className="flex items-center gap-2">
+                  <div className="w-4 h-4 border-2 border-gray-300 border-t-orange-500 rounded-full animate-spin flex-shrink-0"></div>
+                  <span className="text-xs text-gray-500">
+                    リンク情報を取得中...
+                  </span>
+                  {matchMessageMatchedAt && (
+                    <span className="text-xs text-gray-400 flex-shrink-0">
+                      {new Date(matchMessageMatchedAt).toLocaleString("ja-JP", {
+                        month: "2-digit",
+                        day: "2-digit",
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </span>
+                  )}
+                </div>
+              ) : (
+                // 通常のメッセージ表示
+                <span className="text-xs text-gray-500">
+                  「{matchMessage}」
+                  {matchMessageMatchedAt
+                    ? ` / ${new Date(matchMessageMatchedAt).toLocaleString(
+                        "ja-JP",
+                        {
+                          month: "2-digit",
+                          day: "2-digit",
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        }
+                      )}`
+                    : ""}
+                </span>
+              )}
+            </div>
           )}
         </div>
       </header>
