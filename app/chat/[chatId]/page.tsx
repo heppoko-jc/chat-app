@@ -88,23 +88,6 @@ type MatchPayload = {
   matchId?: string;
 };
 
-function isIOS(): boolean {
-  if (typeof navigator === "undefined") return false;
-  return /iP(hone|ad|od)/.test(navigator.userAgent);
-}
-function isStandalone(): boolean {
-  if (typeof window === "undefined") return false;
-  const mql =
-    window.matchMedia && window.matchMedia("(display-mode: standalone)");
-  const displayStandalone = mql ? mql.matches : false;
-  const nav = navigator as Navigator & { standalone?: boolean };
-  return displayStandalone || !!nav.standalone;
-}
-function getVisualViewport(): VisualViewport | undefined {
-  if (typeof window === "undefined") return undefined;
-  return window.visualViewport ?? undefined; // null を undefined に正規化
-}
-
 export default function Chat() {
   const router = useRouter();
   const params = useParams();
@@ -141,17 +124,6 @@ export default function Chat() {
   const mainRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
 
-  // JS 推定のキーボード高さ(px)
-  const [keyboardHeight, setKeyboardHeight] = useState(0);
-  // UA の自動ズラし量(px) = visualViewport.offsetTop
-  const [vvTop, setVvTop] = useState(0);
-
-  // ベースライン（最初の visualViewport.height）
-  const baseVvHeightRef = useRef<number | null>(null);
-  // iOS PWA のスパイク平滑化
-  const kbSamplesRef = useRef<number[]>([]);
-  const currentKbRef = useRef<number>(0);
-
   // 受信重複ガード
   const seenIdsRef = useRef<Set<string>>(new Set());
 
@@ -172,12 +144,20 @@ export default function Chat() {
   }, []);
 
   // ===== 最下行を確実に見せる =====
-  const scrollToBottom = useCallback(() => {
+  const scrollToBottom = useCallback((smooth = false) => {
     const main = mainRef.current;
     if (!main) return;
-    requestAnimationFrame(() => {
-      main.scrollTop = main.scrollHeight;
-    });
+
+    if (smooth) {
+      main.scrollTo({
+        top: main.scrollHeight,
+        behavior: "smooth",
+      });
+    } else {
+      requestAnimationFrame(() => {
+        main.scrollTop = main.scrollHeight;
+      });
+    }
   }, []);
 
   // 初期 seenID
@@ -512,35 +492,52 @@ export default function Chat() {
     }
   }, [matchMessage]);
 
-  // ===== 初回＆id変化時はサーバから最新を取得 =====
+  // ===== 初回＆id変化時はサーバから最新を取得（キャッシュ最適化） =====
   useEffect(() => {
     if (!id || id.startsWith("dummy-")) return;
+
+    // 既にキャッシュされたデータがあれば、それを使用して即座に表示
+    if (initialMessages && initialMessages.length > 0) {
+      setMessages(initialMessages);
+      scrollToBottom();
+      return; // API呼び出しをスキップして高速化
+    }
+
     let aborted = false;
     (async () => {
       try {
         const res = await axios.get<Message[]>(`/api/chat/${id}`);
         if (aborted) return;
-        const formatted = res.data.map((msg) => ({
-          ...msg,
-          formattedDate: new Date(msg.createdAt).toLocaleString("ja-JP", {
-            month: "2-digit",
-            day: "2-digit",
-            hour: "2-digit",
-            minute: "2-digit",
-          }),
-        }));
-        formatted.forEach((m) => seenIdsRef.current.add(m.id));
-        setMessages(formatted);
-        setChatData((prev) => ({ ...prev, [id]: formatted }));
-        scrollToBottom();
+
+        // フォーマット処理を非同期化（メインスレッドをブロックしない）
+        requestIdleCallback(
+          () => {
+            if (aborted) return;
+            const formatted = res.data.map((msg) => ({
+              ...msg,
+              formattedDate: new Date(msg.createdAt).toLocaleString("ja-JP", {
+                month: "2-digit",
+                day: "2-digit",
+                hour: "2-digit",
+                minute: "2-digit",
+              }),
+            }));
+            formatted.forEach((m) => seenIdsRef.current.add(m.id));
+            setMessages(formatted);
+            setChatData((prev) => ({ ...prev, [id]: formatted }));
+            scrollToBottom();
+          },
+          { timeout: 1000 }
+        );
       } catch (e) {
         console.error("🚨 メッセージ取得エラー:", e);
       }
     })();
+
     return () => {
       aborted = true;
     };
-  }, [id, setChatData, scrollToBottom]);
+  }, [id, initialMessages, setChatData, scrollToBottom]);
 
   // ===== 既読書き込み（★ 未読分だけバッジ減算を追加） =====
   useEffect(() => {
@@ -576,67 +573,6 @@ export default function Chat() {
     };
   }, [id, messages]);
 
-  // ===== visualViewport で JS 側のキーボード高さを推定 + offsetTop を保持 =====
-  const recomputeViewport = useCallback(() => {
-    const vv = getVisualViewport();
-    const layoutH = typeof window !== "undefined" ? window.innerHeight : 0;
-    const vvH = vv?.height ?? layoutH;
-    const top = vv?.offsetTop ?? 0;
-
-    // 初回に基準値を記録
-    if (baseVvHeightRef.current == null) {
-      baseVvHeightRef.current = vvH;
-    }
-
-    // 生の KB 推定
-    const kb1 = Math.max(0, layoutH - (vvH + top)); // overlay 正常系
-    const base = baseVvHeightRef.current ?? layoutH;
-    const kb2 = Math.max(0, base - vvH); // fallback
-    let kbRaw = Math.round(Math.max(kb1, kb2));
-
-    // iOS PWA のスパイク平滑化
-    const isIOSDevice = isIOS();
-    const isIOSStandalone = isStandalone();
-    if (isIOSDevice && isIOSStandalone) {
-      const MAX_KB_RATIO = 0.55;
-      const MAX_KB_PX = 420;
-      const HYSTERESIS_PX = 8;
-      if (vvH > 0 && layoutH > 0) {
-        const maxKb = Math.round(Math.min(layoutH * MAX_KB_RATIO, MAX_KB_PX));
-        kbRaw = Math.min(Math.max(kbRaw, 0), maxKb);
-      }
-      const prev = currentKbRef.current;
-      if (Math.abs(kbRaw - prev) < HYSTERESIS_PX) {
-        // ほぼ変化なし → 早期 return してブレを抑制
-        setVvTop(top);
-        return;
-      }
-      kbSamplesRef.current.push(kbRaw);
-      if (kbSamplesRef.current.length > 3) kbSamplesRef.current.shift();
-      const sorted = [...kbSamplesRef.current].sort((a, b) => a - b);
-      if (sorted.length >= 2) kbRaw = sorted[Math.floor(sorted.length / 2)];
-    }
-
-    currentKbRef.current = kbRaw;
-    setKeyboardHeight(kbRaw);
-    setVvTop(top);
-
-    requestAnimationFrame(scrollToBottom);
-  }, [scrollToBottom]);
-
-  useEffect(() => {
-    const vv = getVisualViewport();
-    if (!vv) return;
-    const handler = () => recomputeViewport();
-    vv.addEventListener("resize", handler);
-    vv.addEventListener("scroll", handler);
-    recomputeViewport(); // 初期一発
-    return () => {
-      vv.removeEventListener("resize", handler);
-      vv.removeEventListener("scroll", handler);
-    };
-  }, [recomputeViewport]);
-
   // テキスト変更時は自動リサイズ
   useEffect(() => {
     autoResizeTextarea();
@@ -647,7 +583,14 @@ export default function Chat() {
     setTimeout(() => {
       autoResizeTextarea();
       scrollToBottom();
-    }, 0);
+    }, 300); // キーボードアニメーション後にスクロール
+  };
+
+  // 入力欄ブラー時（キーボードが閉じた後のスクロール調整）
+  const handleBlur = () => {
+    setTimeout(() => {
+      scrollToBottom();
+    }, 300);
   };
 
   // ===== 送信 =====
@@ -1075,22 +1018,6 @@ export default function Chat() {
     return result;
   }
 
-  // 入力エリアの基準スペース（KB 非表示時の下余白）
-  const BASE_INPUT_BAR_SPACE_PX = 136;
-
-  // ★ “二重持ち上げ” を避ける補正式
-  //  - RAW: キーボード高さ（CSS env or JS）
-  //  - CORR: max(0, RAW - vvTop) … UAのズレ分を差し引く
-  const KB_RAW_EXPR = `max(env(keyboard-inset-height, 0px), var(--kb-js, 0px))`;
-  const KB_CORR_EXPR = `max(0px, calc(${KB_RAW_EXPR} - var(--vv-top, 0px)))`;
-
-  // CSS 変数注入（any 使わず型安全に）
-  const cssVars: React.CSSProperties & Record<"--kb-js" | "--vv-top", string> =
-    {
-      ["--kb-js"]: `${keyboardHeight}px`,
-      ["--vv-top"]: `${vvTop}px`,
-    };
-
   if (isPreloading && messages.length === 0) {
     return (
       <div className="flex flex-col bg-white h-screen">
@@ -1111,27 +1038,31 @@ export default function Chat() {
   }
 
   return (
-    <div className="flex flex-col bg-[#f6f8fa] h-screen overflow-x-hidden">
-      {/* ヘッダー：UAズレ(vvTop)に追従して常に見える */}
-      <header
-        className="fixed left-0 right-0 z-10 bg-white px-4 py-3 flex items-center border-b"
-        style={{ top: vvTop }}
-      >
+    <div
+      className="flex flex-col bg-[#f6f8fa] overflow-hidden w-screen"
+      style={{
+        height: "100dvh", // 動的ビューポート高さ（iOS対応）
+      }}
+    >
+      {/* ヘッダー：シンプルな固定 */}
+      <header className="flex-shrink-0 bg-white px-4 py-3 flex items-center border-b z-10">
         <button
           onClick={() => router.push("/chat-list")}
           className="mr-3 focus:outline-none"
         >
           <Image src="/icons/back.png" alt="Back" width={24} height={24} />
         </button>
-        <div className="flex flex-col">
+        <div className="flex flex-col flex-1 min-w-0">
           <div className="flex items-center">
             <div
-              className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-lg mr-2 shadow"
+              className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold text-lg mr-2 shadow flex-shrink-0"
               style={{ backgroundColor: getBgColor(headerName) }}
             >
               {getInitials(headerName)}
             </div>
-            <span className="text-base font-bold text-black">{headerName}</span>
+            <span className="text-base font-bold text-black truncate">
+              {headerName}
+            </span>
           </div>
           {!!matchMessage && (
             <div className="mt-1">
@@ -1224,27 +1155,25 @@ export default function Chat() {
         </div>
       </header>
 
-      {/* メッセージ一覧：入力バー分 + “補正後KB” 分の下余白 */}
+      {/* メッセージ一覧：flexで自然に伸縮 */}
       <main
         ref={mainRef}
-        className="flex-1 px-2 pt-20 overflow-y-auto overflow-x-hidden scrollbar-hide"
+        className="flex-1 overflow-y-auto overflow-x-hidden px-2 scrollbar-hide"
         style={{
-          ...cssVars,
-          paddingBottom: `calc(${BASE_INPUT_BAR_SPACE_PX}px + ${KB_CORR_EXPR})`,
           overscrollBehavior: "contain",
+          WebkitOverflowScrolling: "touch",
         }}
       >
-        <div className="flex flex-col gap-1 py-2">
+        <div className="flex flex-col gap-1 py-4">
           {renderMessagesWithDate(messages)}
         </div>
       </main>
 
-      {/* 入力欄：下端にぴったり（safe-area + 補正後KB） */}
+      {/* 入力欄：flexで下部に固定、safe-areaに対応 */}
       <footer
-        className="fixed left-0 right-0 bg-white px-4 py-4 shadow-[0_-2px_10px_rgba(0,0,0,0.04)] flex items-center gap-3"
+        className="flex-shrink-0 bg-white px-4 py-3 shadow-[0_-2px_10px_rgba(0,0,0,0.04)] flex items-end gap-3"
         style={{
-          ...cssVars,
-          bottom: `calc(env(safe-area-inset-bottom) + ${KB_CORR_EXPR})`,
+          paddingBottom: "max(12px, env(safe-area-inset-bottom))",
         }}
       >
         <textarea
@@ -1254,19 +1183,27 @@ export default function Chat() {
           onChange={(e) => setNewMessage(e.target.value)}
           onInput={autoResizeTextarea}
           onFocus={handleFocus}
+          onBlur={handleBlur}
           placeholder="メッセージを入力"
-          className="flex-1 border border-gray-200 rounded-2xl px-4 py-3 focus:outline-none bg-gray-50 text-base shadow-sm resize-none leading-6"
-          style={{ height: "auto", overflowY: "hidden" }}
+          className="flex-1 border border-gray-200 rounded-2xl px-4 py-3 focus:outline-none focus:border-green-400 bg-gray-50 text-base shadow-sm resize-none leading-6 transition-colors"
+          style={{
+            height: "auto",
+            overflowY: "hidden",
+            minHeight: "44px", // タップしやすい最小高さ
+          }}
         />
         <button
-          onMouseDown={(e) => e.preventDefault()} // キーボードを閉じさせない
-          onTouchStart={(e) => e.preventDefault()}
           onClick={handleSend}
-          className="p-3 rounded-2xl bg-green-400 hover:bg-green-500 transition shadow-lg active:scale-95"
-          style={{ boxShadow: "0 2px 8px rgba(0,0,0,0.08)" }}
+          className="p-3 rounded-2xl bg-green-400 hover:bg-green-500 active:bg-green-600 transition-colors shadow-lg active:scale-95 flex-shrink-0"
           disabled={isSending || !newMessage.trim()}
-          tabIndex={-1}
           aria-label="メッセージ送信"
+          style={{
+            minWidth: "52px",
+            minHeight: "52px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
         >
           <Image
             src={newMessage.trim() ? "/icons/send.png" : "/icons/message.png"}
