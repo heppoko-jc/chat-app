@@ -6,7 +6,7 @@ import { PrismaClient } from "@prisma/client";
 const prisma = new PrismaClient();
 
 // CSVエスケープ関数
-function escapeCsv(value: any): string {
+function escapeCsv(value: string | number | null | undefined): string {
   if (value === null || value === undefined) return "";
   const str = String(value);
   if (str.includes(",") || str.includes('"') || str.includes("\n")) {
@@ -16,11 +16,18 @@ function escapeCsv(value: any): string {
 }
 
 // 配列をCSVに変換
-function arrayToCsv(data: any[], headers: string[]): string {
+function arrayToCsv(
+  data: Record<string, unknown>[],
+  headers: string[]
+): string {
   const csvRows = [
     headers.join(","),
     ...data.map((row) =>
-      headers.map((header) => escapeCsv(row[header])).join(",")
+      headers
+        .map((header) =>
+          escapeCsv(row[header] as string | number | null | undefined)
+        )
+        .join(",")
     ),
   ];
   return csvRows.join("\n");
@@ -179,25 +186,25 @@ export async function GET(req: NextRequest) {
           },
 
           // ユーザー
-          ...usersAll.map((u) => ({ type: "USER", ...u })),
+          ...usersAll.map((u) => ({ ...u, type: "USER" })),
 
           // プリセットメッセージ
-          ...presetAll.map((p) => ({ type: "PRESET_MESSAGE", ...p })),
+          ...presetAll.map((p) => ({ ...p, type: "PRESET_MESSAGE" })),
 
           // 送信メッセージ
           ...sentAll.map((s) => ({
-            type: "SENT_MESSAGE",
             ...s,
             senderName: s.sender.name,
             receiverName: s.receiver.name,
+            type: "SENT_MESSAGE",
           })),
 
           // マッチペア
           ...matchAll.map((m) => ({
-            type: "MATCH_PAIR",
             ...m,
             user1Name: m.user1.name,
             user2Name: m.user2.name,
+            type: "MATCH_PAIR",
           })),
         ];
 

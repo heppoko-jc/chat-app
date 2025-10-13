@@ -5,7 +5,6 @@ import { useEffect, useState, useRef, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import axios from "axios";
 import Image from "next/image";
-import { useChatData } from "@/app/contexts/ChatDataContext";
 
 // ──────────── 型定義 ────────────
 interface SentMessage {
@@ -54,7 +53,6 @@ function formatDate(iso: string) {
 
 export default function Notifications() {
   const router = useRouter();
-  const { setPresetMessages } = useChatData();
 
   // ──────────── ステート管理 ────────────
   const [sentMessages, setSentMessages] = useState<SentMessage[]>([]);
