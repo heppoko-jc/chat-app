@@ -9,6 +9,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "socket": "node --loader ts-node/esm server.ts",
     "start-socket": "node --loader ts-node/esm server.ts",
     "postinstall": "prisma generate",
     "dev:webpack": "TURBOPACK=0 next dev"

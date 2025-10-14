@@ -10,16 +10,63 @@ const io = new Server(httpServer, {
   },
 });
 
-io.on("connection", (socket) => {
-  console.log("⚡️ ユーザーが WebSocket に接続");
+// ユーザーIDとソケットIDのマッピング
+const userSockets = new Map<string, string>();
 
-  socket.on("sendMessage", (message) => {
-    console.log("📩 新しいメッセージ:", message);
-    io.emit("newMessage", message); // ✅ すべてのクライアントに送信
+io.on("connection", (socket) => {
+  console.log("⚡️ ユーザーが WebSocket に接続:", socket.id);
+
+  // ユーザーIDを設定してルームに参加
+  socket.on("setUserId", (userId: string) => {
+    console.log(
+      `👤 ユーザー ${userId} (socket: ${socket.id}) がユーザールームに参加`
+    );
+    userSockets.set(userId, socket.id);
+    socket.join(`user-${userId}`);
   });
 
+  // チャットルームに参加
+  socket.on("joinChat", (chatId: string) => {
+    console.log(`💬 socket ${socket.id} がチャット ${chatId} のルームに参加`);
+    socket.join(`chat-${chatId}`);
+  });
+
+  // メッセージ送信
+  socket.on(
+    "sendMessage",
+    (data: { chatId: string; toUserId: string; message: any }) => {
+      console.log("📩 新しいメッセージ受信:", {
+        chatId: data.chatId,
+        toUserId: data.toUserId,
+        messageId: data.message?.id,
+      });
+
+      // メッセージのペイロード（クライアントが期待する形式）
+      const payload = {
+        chatId: data.chatId,
+        message: data.message,
+      };
+
+      // 1. チャットルームに送信（そのチャットを開いているすべてのユーザー）
+      console.log(`📤 チャットルーム chat-${data.chatId} に送信`);
+      io.to(`chat-${data.chatId}`).emit("newMessage", payload);
+
+      // 2. 受信者のユーザールームにも送信（チャットを開いていない場合用）
+      console.log(`📤 ユーザールーム user-${data.toUserId} に送信`);
+      io.to(`user-${data.toUserId}`).emit("newMessage", payload);
+    }
+  );
+
   socket.on("disconnect", () => {
-    console.log("❌ ユーザーが切断しました");
+    console.log("❌ ユーザーが切断しました:", socket.id);
+    // ユーザーマップから削除
+    for (const [userId, socketId] of userSockets.entries()) {
+      if (socketId === socket.id) {
+        console.log(`👋 ユーザー ${userId} が切断`);
+        userSockets.delete(userId);
+        break;
+      }
+    }
   });
 });
 

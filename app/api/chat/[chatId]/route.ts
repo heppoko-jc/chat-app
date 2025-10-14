@@ -6,7 +6,10 @@ import { io as ioClient } from "socket.io-client";
 import webpush, { PushSubscription as WebPushSubscription } from "web-push";
 
 const prisma = new PrismaClient();
-const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL!;
+const SOCKET_URL =
+  process.env.SOCKET_URL ||
+  process.env.NEXT_PUBLIC_SOCKET_URL ||
+  "ws://localhost:3001";
 
 // VAPID 鍵の設定
 webpush.setVapidDetails(
@@ -117,9 +120,29 @@ export async function POST(req: NextRequest) {
 
     // → Socket.IO でリアルタイム配信（接続完了を待ってから emit）
     try {
+      console.log(`📡 Socket.IOサーバーに接続を試みます: ${SOCKET_URL}`);
       const socket = ioClient(SOCKET_URL, { transports: ["websocket"] });
-      await new Promise<void>((resolve) =>
-        socket.on("connect", () => resolve())
+
+      await new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          reject(new Error("Socket.IO接続タイムアウト"));
+        }, 5000);
+
+        socket.on("connect", () => {
+          clearTimeout(timeout);
+          console.log(`✅ Socket.IOサーバーに接続成功: ${socket.id}`);
+          resolve();
+        });
+
+        socket.on("connect_error", (error) => {
+          clearTimeout(timeout);
+          console.error(`❌ Socket.IO接続エラー:`, error);
+          reject(error);
+        });
+      });
+
+      console.log(
+        `📤 sendMessageイベントを送信: chatId=${chatId}, toUserId=${receiverId}`
       );
       socket.emit("sendMessage", {
         chatId,
@@ -127,6 +150,7 @@ export async function POST(req: NextRequest) {
         message: newMessage,
       });
       setTimeout(() => socket.disconnect(), 50);
+      console.log(`✅ Socket.IOメッセージ送信完了`);
     } catch (e) {
       console.error("⚠️ Socket.IO relay failed:", e);
       // 通知はベストエフォートなので続行

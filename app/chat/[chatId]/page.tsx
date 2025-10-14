@@ -248,10 +248,34 @@ export default function Chat() {
   // ===== ルーム参加 & 受信購読（newMessage） =====
   useEffect(() => {
     if (!id || id.startsWith("dummy-")) return;
-    socket.emit("joinChat", id);
+
+    console.log(`🔌 チャット ${id} のSocket.IO接続を開始`);
+
+    // 接続済みならすぐに参加
+    if (socket.connected) {
+      console.log("✅ Socket.IO既に接続済み - すぐにルーム参加");
+      socket.emit("joinChat", id);
+    } else {
+      console.log("⏳ Socket.IO接続待機中...");
+      // 接続完了を待つ
+      socket.once("connect", () => {
+        console.log("✅ Socket.IO接続完了 - ルーム参加");
+        socket.emit("joinChat", id);
+      });
+    }
 
     const upsertFromServer = (msg: Message) => {
-      if (seenIdsRef.current.has(msg.id)) return;
+      console.log(`📨 メッセージ受信:`, {
+        id: msg.id,
+        sender: msg.sender.name,
+        content:
+          msg.content.substring(0, 20) + (msg.content.length > 20 ? "..." : ""),
+      });
+
+      if (seenIdsRef.current.has(msg.id)) {
+        console.log(`⏭️ 既に受信済みのメッセージ: ${msg.id}`);
+        return;
+      }
       seenIdsRef.current.add(msg.id);
 
       setMessages((prev) => {
@@ -270,8 +294,13 @@ export default function Chat() {
             minute: "2-digit",
           }),
         };
-        if (idx !== -1) next[idx] = formatted;
-        else next.push(formatted);
+        if (idx !== -1) {
+          console.log(`🔄 一時メッセージを本物に置き換え: ${msg.id}`);
+          next[idx] = formatted;
+        } else {
+          console.log(`➕ 新しいメッセージを追加: ${msg.id}`);
+          next.push(formatted);
+        }
         return next;
       });
 
@@ -339,12 +368,26 @@ export default function Chat() {
       chatId: string;
       message: Message;
     }) => {
-      if (payload.chatId !== id) return;
+      console.log(`📬 newMessageイベント受信:`, {
+        chatId: payload.chatId,
+        currentChatId: id,
+        messageId: payload.message?.id,
+      });
+
+      if (payload.chatId !== id) {
+        console.log(
+          `⏭️ 別のチャットのメッセージ: ${payload.chatId} (現在: ${id})`
+        );
+        return;
+      }
+
       upsertFromServer(payload.message);
     };
 
     socket.on("newMessage", handleNewMessage);
+
     return () => {
+      console.log(`🔌 チャット ${id} のSocket.IO接続を解除`);
       socket.off("newMessage", handleNewMessage);
     };
   }, [id, setChatData, setChatList, scrollToBottom]);
