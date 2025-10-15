@@ -1053,7 +1053,7 @@ export default function Main() {
         <p className="text-[15px] text-gray-700 text-center leading-snug mt-1 font-medium">
           同じメッセージを送り合えるかな？
           <br />
-          マッチの期限は三日間、現在マッチの可能性が
+          マッチの期限は三日間、あなたは現在マッチの可能性が
           <span className="text-orange-500 font-bold mx-1">{matchCount}</span>
           件あります。
         </p>
@@ -1674,7 +1674,7 @@ export default function Main() {
 
       {/* リスト切替トグル */}
       <div
-        className="固定 left-4 right-4 z-30 bg-white py-2 px-4 rounded-3xl shadow-lg border border-orange-200"
+        className="fixed left-4 right-4 z-30 bg-white py-2 px-4 rounded-3xl shadow-lg border border-orange-200"
         style={{ bottom: "calc(76px + env(safe-area-inset-bottom))" }}
       >
         <div className="relative flex">
