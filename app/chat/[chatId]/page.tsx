@@ -120,6 +120,14 @@ export default function Chat() {
     image?: string;
   } | null>(null);
 
+  // リンク確認ポップアップの状態
+  const [showLinkConfirmModal, setShowLinkConfirmModal] = useState<{
+    isVisible: boolean;
+    url: string;
+    title: string;
+    image?: string;
+  } | null>(null);
+
   // ===== レイアウト参照 =====
   const mainRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
@@ -751,6 +759,24 @@ export default function Chat() {
     messages.find((m) => m.sender.id !== currentUserId)?.sender.name ||
     "チャット";
 
+  // ====== マッチ履歴のタップハンドラー ======
+  const handleMatchTap = (match: { message: string; matchedAt: string }) => {
+    if (isLinkMessage(match.message)) {
+      const urlAndText = extractUrlAndText(match.message);
+      if (urlAndText) {
+        const matchKey = `${match.message}-${match.matchedAt}`;
+        const linkPreview = matchLinkPreviews[matchKey];
+
+        setShowLinkConfirmModal({
+          isVisible: true,
+          url: urlAndText.url,
+          title: linkPreview?.title || urlAndText.url,
+          image: linkPreview?.image,
+        });
+      }
+    }
+  };
+
   // ====== タイムライン描画 ======
   function renderMessagesWithDate(msgs: Message[]) {
     console.log("🔍 renderMessagesWithDate called with:", {
@@ -799,7 +825,14 @@ export default function Chat() {
             key={`match-only-${idx}-${m.matchedAt}`}
             className="flex justify-center my-2"
           >
-            <div className="bg-orange-100 text-orange-600 text-xs px-3 py-1 rounded-full shadow font-bold max-w-[80%]">
+            <div
+              className={`bg-orange-100 text-orange-600 text-xs px-3 py-1 rounded-full shadow font-bold max-w-[80%] ${
+                isLinkMessage(m.message)
+                  ? "cursor-pointer hover:bg-orange-200 transition-colors"
+                  : ""
+              }`}
+              onClick={() => isLinkMessage(m.message) && handleMatchTap(m)}
+            >
               <span className="text-orange-600 font-bold">
                 マッチしたことば:
               </span>
@@ -880,7 +913,14 @@ export default function Chat() {
             key={`match-before-${mi}-${m.matchedAt}`}
             className="flex justify-center my-2"
           >
-            <div className="bg-orange-100 text-orange-600 text-xs px-3 py-1 rounded-full shadow font-bold max-w-[80%]">
+            <div
+              className={`bg-orange-100 text-orange-600 text-xs px-3 py-1 rounded-full shadow font-bold max-w-[80%] ${
+                isLinkMessage(m.message)
+                  ? "cursor-pointer hover:bg-orange-200 transition-colors"
+                  : ""
+              }`}
+              onClick={() => isLinkMessage(m.message) && handleMatchTap(m)}
+            >
               <span className="text-orange-600 font-bold">
                 マッチしたことば:
               </span>
@@ -1007,7 +1047,14 @@ export default function Chat() {
           key={`match-after-${mi}-${m.matchedAt}`}
           className="flex justify-center my-2"
         >
-          <div className="bg-orange-100 text-orange-600 text-xs px-3 py-1 rounded-full shadow font-bold max-w-[80%]">
+          <div
+            className={`bg-orange-100 text-orange-600 text-xs px-3 py-1 rounded-full shadow font-bold max-w-[80%] ${
+              isLinkMessage(m.message)
+                ? "cursor-pointer hover:bg-orange-200 transition-colors"
+                : ""
+            }`}
+            onClick={() => isLinkMessage(m.message) && handleMatchTap(m)}
+          >
             <span className="text-orange-600 font-bold">マッチしたことば:</span>
             {linkPreview ? (
               // リンクプレビュー表示
@@ -1264,6 +1311,69 @@ export default function Chat() {
           />
         </button>
       </footer>
+
+      {/* リンク確認ポップアップ */}
+      {showLinkConfirmModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl p-6 mx-4 max-w-sm w-full">
+            <div className="flex items-center gap-3 mb-4">
+              {showLinkConfirmModal.image ? (
+                <Image
+                  src={showLinkConfirmModal.image}
+                  alt={showLinkConfirmModal.title}
+                  width={48}
+                  height={48}
+                  className="w-12 h-12 object-cover rounded-xl border border-orange-200"
+                  onError={(e) => {
+                    e.currentTarget.style.display = "none";
+                    e.currentTarget.nextElementSibling?.classList.remove(
+                      "hidden"
+                    );
+                  }}
+                />
+              ) : null}
+              <div
+                className={`w-12 h-12 rounded-xl bg-orange-100 border border-orange-200 flex items-center justify-center text-orange-600 font-bold text-xs ${
+                  showLinkConfirmModal.image ? "hidden" : ""
+                }`}
+              >
+                {showLinkConfirmModal.image
+                  ? "URL"
+                  : showLinkConfirmModal.title &&
+                    showLinkConfirmModal.title !== "Google Maps"
+                  ? "🗺️"
+                  : "URL"}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-bold text-gray-800 truncate">
+                  {showLinkConfirmModal.title}
+                </p>
+                <p className="text-xs text-gray-500 truncate">
+                  {showLinkConfirmModal.url}
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              <button
+                onClick={() => {
+                  window.open(showLinkConfirmModal.url, "_blank");
+                  setShowLinkConfirmModal(null);
+                }}
+                className="w-full bg-orange-500 hover:bg-orange-600 text-white font-bold py-3 px-4 rounded-xl transition"
+              >
+                リンク先へ遷移
+              </button>
+              <button
+                onClick={() => setShowLinkConfirmModal(null)}
+                className="w-full bg-gray-200 hover:bg-gray-300 text-gray-700 font-bold py-3 px-4 rounded-xl transition"
+              >
+                閉じる
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 吹き出しのトゲ（LINE風） */}
       <style jsx global>{`
