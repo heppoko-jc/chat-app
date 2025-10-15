@@ -364,9 +364,7 @@ export default function Chat() {
                   latestMessageSenderId: msg.sender.id,
                   latestMessageAtDisplay: new Date(
                     msg.createdAt
-                  ).toLocaleString("ja-JP", {
-                    month: "2-digit",
-                    day: "2-digit",
+                  ).toLocaleTimeString("ja-JP", {
                     hour: "2-digit",
                     minute: "2-digit",
                   }),
@@ -1218,12 +1216,13 @@ export default function Chat() {
                   </div>
                   {matchMessageMatchedAt && (
                     <span className="text-xs text-gray-400 flex-shrink-0">
-                      {new Date(matchMessageMatchedAt).toLocaleString("ja-JP", {
-                        month: "2-digit",
-                        day: "2-digit",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
+                      {new Date(matchMessageMatchedAt).toLocaleTimeString(
+                        "ja-JP",
+                        {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        }
+                      )}
                     </span>
                   )}
                 </div>
@@ -1236,12 +1235,13 @@ export default function Chat() {
                   </span>
                   {matchMessageMatchedAt && (
                     <span className="text-xs text-gray-400 flex-shrink-0">
-                      {new Date(matchMessageMatchedAt).toLocaleString("ja-JP", {
-                        month: "2-digit",
-                        day: "2-digit",
-                        hour: "2-digit",
-                        minute: "2-digit",
-                      })}
+                      {new Date(matchMessageMatchedAt).toLocaleTimeString(
+                        "ja-JP",
+                        {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        }
+                      )}
                     </span>
                   )}
                 </div>
@@ -1250,11 +1250,9 @@ export default function Chat() {
                 <span className="text-xs text-gray-500">
                   「{matchMessage}」
                   {matchMessageMatchedAt
-                    ? ` / ${new Date(matchMessageMatchedAt).toLocaleString(
+                    ? ` / ${new Date(matchMessageMatchedAt).toLocaleTimeString(
                         "ja-JP",
                         {
-                          month: "2-digit",
-                          day: "2-digit",
                           hour: "2-digit",
                           minute: "2-digit",
                         }
