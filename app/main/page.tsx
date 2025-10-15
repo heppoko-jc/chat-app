@@ -392,7 +392,7 @@ export default function Main() {
     return () => {
       aborted = true;
     };
-  }, [inputMessage]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [inputMessage]);
 
   // ポップアップ・キュー
   const [matchQueue, setMatchQueue] = useState<MatchQueueItem[]>([]);
@@ -786,7 +786,6 @@ export default function Main() {
   };
 
   // 送信
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const handleSend = useCallback(async () => {
     console.log("[main] handleSend called:", {
       selectedMessage,
@@ -981,6 +980,11 @@ export default function Main() {
     currentUserId,
     isSending,
     selectedMessageLinkData,
+    fetchChatList,
+    fetchPresetMessages,
+    linkComment,
+    linkPreview,
+    users,
   ]);
 
   const canSend =

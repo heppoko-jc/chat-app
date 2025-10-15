@@ -430,7 +430,10 @@ export default function ChatList() {
 
   // WebSocket: 新着メッセージで再取得
   useEffect(() => {
-    const handleNewMessage = (payload: { chatId: string; message: any }) => {
+    const handleNewMessage = (payload: {
+      chatId: string;
+      message: { id: string };
+    }) => {
       console.log(`📬 チャットリストで newMessage 受信:`, {
         chatId: payload.chatId,
         messageId: payload.message?.id,
