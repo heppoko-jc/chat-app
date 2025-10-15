@@ -987,7 +987,7 @@ export default function Main() {
     (!!selectedMessage || !!linkPreview) && selectedRecipientIds.length > 0;
 
   // レイアウト定数
-  const HEADER_H = 132;
+  const HEADER_H = 150;
   const GAP_AFTER_HEADER = 8;
   const SEND_BAR_TOTAL_H = 80;
   const SEND_BAR_TOP = HEADER_H + GAP_AFTER_HEADER;
@@ -1019,7 +1019,7 @@ export default function Main() {
     <>
       {/* ヘッダー（高さ拡張） */}
       <div
-        className="fixed top-0 left-0 w-full bg-gradient-to-b from-white via-orange-50 to-orange-100 z-20 px-6 pt-6 pb-3 flex flex-col items-center shadow-md rounded-b-3xl"
+        className="fixed top-0 left-0 w-full bg-gradient-to-b from-white via-orange-50 to-orange-100 z-20 px-6 pt-4 pb-4 flex flex-col items-center shadow-md rounded-b-3xl"
         style={{ minHeight: HEADER_H, height: HEADER_H }}
       >
         <div className="flex w-full justify-between items-center mb-2">
