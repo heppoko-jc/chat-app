@@ -135,6 +135,22 @@ export default function Chat() {
   // 受信重複ガード
   const seenIdsRef = useRef<Set<string>>(new Set());
 
+  // ===== 未送信メッセージの保存・復元 =====
+  useEffect(() => {
+    if (!id) return;
+    const saved = localStorage.getItem(`draft-message-${id}`);
+    if (saved) setNewMessage(saved);
+  }, [id]);
+
+  useEffect(() => {
+    if (!id) return;
+    if (newMessage.trim()) {
+      localStorage.setItem(`draft-message-${id}`, newMessage);
+    } else {
+      localStorage.removeItem(`draft-message-${id}`);
+    }
+  }, [newMessage, id]);
+
   // ===== テキストエリア：自動リサイズ（最大 3 行まで） =====
   const autoResizeTextarea = useCallback(() => {
     const ta = inputRef.current;
@@ -565,9 +581,7 @@ export default function Chat() {
           if (aborted) return;
           const formatted = res.data.map((msg) => ({
             ...msg,
-            formattedDate: new Date(msg.createdAt).toLocaleString("ja-JP", {
-              month: "2-digit",
-              day: "2-digit",
+            formattedDate: new Date(msg.createdAt).toLocaleTimeString("ja-JP", {
               hour: "2-digit",
               minute: "2-digit",
             }),
@@ -662,6 +676,11 @@ export default function Chat() {
     const contentToSend = newMessage;
     setNewMessage("");
 
+    // 送信後にドラフトをクリア
+    if (id) {
+      localStorage.removeItem(`draft-message-${id}`);
+    }
+
     const temp: Message = {
       id: `temp-${Date.now()}`,
       sender: { id: senderId, name: "自分" },
@@ -701,9 +720,7 @@ export default function Chat() {
         );
         const formatted: Message = {
           ...saved,
-          formattedDate: new Date(saved.createdAt).toLocaleString("ja-JP", {
-            month: "2-digit",
-            day: "2-digit",
+          formattedDate: new Date(saved.createdAt).toLocaleTimeString("ja-JP", {
             hour: "2-digit",
             minute: "2-digit",
           }),
@@ -727,9 +744,7 @@ export default function Chat() {
         );
         const formatted: Message = {
           ...saved,
-          formattedDate: new Date(saved.createdAt).toLocaleString("ja-JP", {
-            month: "2-digit",
-            day: "2-digit",
+          formattedDate: new Date(saved.createdAt).toLocaleTimeString("ja-JP", {
             hour: "2-digit",
             minute: "2-digit",
           }),
@@ -998,7 +1013,7 @@ export default function Chat() {
               {getInitials(msg.sender.name)}
             </div>
           )}
-          {/* 自分のメッセージの場合、タイムスタンプを左に */}
+          {/* 自分のメッセージの場合、時刻を左に */}
           {isMe && (
             <span className="text-[10px] text-gray-400 self-end mb-1 flex-shrink-0">
               {msg.formattedDate}
@@ -1014,7 +1029,7 @@ export default function Chat() {
           >
             {msg.content}
           </div>
-          {/* 相手のメッセージの場合、タイムスタンプを右に */}
+          {/* 相手のメッセージの場合、時刻を右に */}
           {!isMe && (
             <span className="text-[10px] text-gray-400 self-end mb-1 flex-shrink-0">
               {msg.formattedDate}
