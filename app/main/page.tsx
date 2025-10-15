@@ -1084,9 +1084,9 @@ export default function Main() {
                     <Image
                       src={linkPreview.image}
                       alt={linkPreview.title}
-                      width={32}
-                      height={32}
-                      className="w-8 h-8 object-cover rounded-lg border border-orange-200 flex-shrink-0"
+                      width={48}
+                      height={48}
+                      className="w-12 h-12 object-cover rounded-lg border border-orange-200 flex-shrink-0"
                     />
                   ) : (
                     <div className="w-8 h-8 rounded-lg bg-orange-100 border border-orange-200 flex items-center justify-center text-orange-600 font-bold text-xs flex-shrink-0">
@@ -1175,9 +1175,9 @@ export default function Main() {
                     <Image
                       src={selectedMessageLinkData.image}
                       alt={selectedMessageLinkData.title}
-                      width={32}
-                      height={32}
-                      className="w-8 h-8 object-cover rounded-lg border border-orange-300"
+                      width={48}
+                      height={48}
+                      className="w-12 h-12 object-cover rounded-lg border border-orange-300"
                       onError={(e) => {
                         e.currentTarget.style.display = "none";
                         e.currentTarget.nextElementSibling?.classList.remove(
@@ -1264,9 +1264,9 @@ export default function Main() {
                 <Image
                   src={selectedMessageLinkData.image}
                   alt={selectedMessageLinkData.title}
-                  width={48}
-                  height={48}
-                  className="w-12 h-12 object-cover rounded-xl border border-orange-200"
+                  width={64}
+                  height={64}
+                  className="w-16 h-16 object-cover rounded-xl border border-orange-200"
                   onError={(e) => {
                     e.currentTarget.style.display = "none";
                     e.currentTarget.nextElementSibling?.classList.remove(
@@ -1389,9 +1389,9 @@ export default function Main() {
                         <Image
                           src={linkData.image as string}
                           alt={linkData.title}
-                          width={48}
-                          height={48}
-                          className="w-12 h-12 object-cover rounded-xl border border-orange-200"
+                          width={64}
+                          height={64}
+                          className="w-16 h-16 object-cover rounded-xl border border-orange-200"
                           onError={(e) => {
                             console.log("Image load error:", linkData.image);
                             e.currentTarget.style.display = "none";
@@ -1495,9 +1495,9 @@ export default function Main() {
                         <Image
                           src={msg.linkImage}
                           alt={msg.linkTitle || msg.content}
-                          width={48}
-                          height={48}
-                          className="w-12 h-12 object-cover rounded-xl border border-orange-200"
+                          width={64}
+                          height={64}
+                          className="w-16 h-16 object-cover rounded-xl border border-orange-200"
                           onError={(e) => {
                             console.log("Image load error:", msg.linkImage);
                             e.currentTarget.style.display = "none";

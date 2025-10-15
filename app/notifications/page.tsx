@@ -238,9 +238,9 @@ export default function Notifications() {
                                     <Image
                                       src={msg.linkImage}
                                       alt={msg.linkTitle || msg.message}
-                                      width={32}
-                                      height={32}
-                                      className="w-8 h-8 object-cover rounded-lg border border-orange-200 flex-shrink-0"
+                                      width={48}
+                                      height={48}
+                                      className="w-12 h-12 object-cover rounded-lg border border-orange-200 flex-shrink-0"
                                       onError={(e) => {
                                         e.currentTarget.style.display = "none";
                                         e.currentTarget.nextElementSibling?.classList.remove(
@@ -368,9 +368,9 @@ export default function Notifications() {
                                     <Image
                                       src={msg.linkImage}
                                       alt={msg.linkTitle || msg.message}
-                                      width={32}
-                                      height={32}
-                                      className="w-8 h-8 object-cover rounded-lg border border-orange-200 flex-shrink-0"
+                                      width={48}
+                                      height={48}
+                                      className="w-12 h-12 object-cover rounded-lg border border-orange-200 flex-shrink-0"
                                       onError={(e) => {
                                         e.currentTarget.style.display = "none";
                                         e.currentTarget.nextElementSibling?.classList.remove(
@@ -513,9 +513,9 @@ export default function Notifications() {
                 <Image
                   src={linkPopup.linkImage}
                   alt={linkPopup.linkTitle || linkPopup.message}
-                  width={48}
-                  height={48}
-                  className="w-12 h-12 object-cover rounded-xl border border-orange-200"
+                  width={64}
+                  height={64}
+                  className="w-16 h-16 object-cover rounded-xl border border-orange-200"
                   onError={(e) => {
                     e.currentTarget.style.display = "none";
                     e.currentTarget.nextElementSibling?.classList.remove(

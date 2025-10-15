@@ -843,9 +843,9 @@ export default function Chat() {
                     <Image
                       src={linkPreview.image}
                       alt={linkPreview.title}
-                      width={24}
-                      height={24}
-                      className="w-6 h-6 object-cover rounded border border-orange-200 flex-shrink-0"
+                      width={40}
+                      height={40}
+                      className="w-10 h-10 object-cover rounded border border-orange-200 flex-shrink-0"
                       onError={(e) => {
                         e.currentTarget.style.display = "none";
                         e.currentTarget.nextElementSibling?.classList.remove(
@@ -931,9 +931,9 @@ export default function Chat() {
                     <Image
                       src={linkPreview.image}
                       alt={linkPreview.title}
-                      width={24}
-                      height={24}
-                      className="w-6 h-6 object-cover rounded border border-orange-200 flex-shrink-0"
+                      width={40}
+                      height={40}
+                      className="w-10 h-10 object-cover rounded border border-orange-200 flex-shrink-0"
                       onError={(e) => {
                         e.currentTarget.style.display = "none";
                         e.currentTarget.nextElementSibling?.classList.remove(
@@ -1170,9 +1170,9 @@ export default function Chat() {
                     <Image
                       src={headerLinkPreview.image}
                       alt={headerLinkPreview.title}
-                      width={20}
-                      height={20}
-                      className="w-5 h-5 object-cover rounded border border-orange-200 flex-shrink-0"
+                      width={32}
+                      height={32}
+                      className="w-8 h-8 object-cover rounded border border-orange-200 flex-shrink-0"
                       onError={(e) => {
                         e.currentTarget.style.display = "none";
                         e.currentTarget.nextElementSibling?.classList.remove(
@@ -1321,9 +1321,9 @@ export default function Chat() {
                 <Image
                   src={showLinkConfirmModal.image}
                   alt={showLinkConfirmModal.title}
-                  width={48}
-                  height={48}
-                  className="w-12 h-12 object-cover rounded-xl border border-orange-200"
+                  width={64}
+                  height={64}
+                  className="w-16 h-16 object-cover rounded-xl border border-orange-200"
                   onError={(e) => {
                     e.currentTarget.style.display = "none";
                     e.currentTarget.nextElementSibling?.classList.remove(

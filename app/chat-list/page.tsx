@@ -605,9 +605,9 @@ export default function ChatList() {
                               <Image
                                 src={chatLinkPreviews[chat.chatId]!.image!}
                                 alt={chatLinkPreviews[chat.chatId]!.title}
-                                width={20}
-                                height={20}
-                                className="w-5 h-5 object-cover rounded border border-orange-200 flex-shrink-0"
+                                width={32}
+                                height={32}
+                                className="w-8 h-8 object-cover rounded border border-orange-200 flex-shrink-0"
                                 onError={(e) => {
                                   e.currentTarget.style.display = "none";
                                   e.currentTarget.nextElementSibling?.classList.remove(
