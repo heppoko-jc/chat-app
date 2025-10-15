@@ -243,6 +243,47 @@ export default function Chat() {
     if (id?.startsWith("dummy-")) router.replace("/chat-list");
   }, [id, router]);
 
+  // ===== チャット画面を開いた時に最新メッセージを再取得 =====
+  useEffect(() => {
+    if (!id || id.startsWith("dummy-")) return;
+
+    const fetchLatestMessages = async () => {
+      try {
+        console.log(`🔄 チャット ${id} の最新メッセージを再取得中...`);
+        const response = await fetch(`/api/chat/${id}`);
+        if (response.ok) {
+          const latestMessages = await response.json();
+          const formattedMessages = latestMessages.map((msg: Message) => ({
+            ...msg,
+            formattedDate: new Date(msg.createdAt).toLocaleString("ja-JP", {
+              month: "2-digit",
+              day: "2-digit",
+              hour: "2-digit",
+              minute: "2-digit",
+            }),
+          }));
+
+          console.log(
+            `✅ チャット ${id} の最新メッセージを取得完了: ${formattedMessages.length}件`
+          );
+          setMessages(formattedMessages);
+
+          // chatDataも更新（他の画面との同期のため）
+          setChatData((prev) => ({ ...prev, [id]: formattedMessages }));
+        } else {
+          console.error(
+            `❌ チャット ${id} のメッセージ取得に失敗:`,
+            response.status
+          );
+        }
+      } catch (error) {
+        console.error(`❌ チャット ${id} の最新メッセージ取得エラー:`, error);
+      }
+    };
+
+    fetchLatestMessages();
+  }, [id, setChatData]);
+
   // 一覧からヘッダー/マッチ履歴を初期化
   const chatInList = chatList?.find((c) => c.chatId === id);
   useEffect(() => {
