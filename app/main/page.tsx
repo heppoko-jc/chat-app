@@ -1051,9 +1051,9 @@ export default function Main() {
         </div>
 
         <p className="text-[15px] text-gray-700 text-center leading-snug mt-1 font-medium">
-          同じメッセージを送り合えるかな？
+          3日以内に同じメッセージを送り合えるかな？
           <br />
-          マッチの期限は三日間、あなたは現在マッチの可能性が
+          あなたは現在マッチの可能性が
           <span className="text-orange-500 font-bold mx-1">{matchCount}</span>
           件あります。
         </p>
