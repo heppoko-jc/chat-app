@@ -40,10 +40,19 @@ export async function GET(req: NextRequest) {
     // マッチしたユーザーのみを取得（非表示ユーザーを除外）
     const users = await prisma.user.findMany({
       where: {
-        id: {
-          in: Array.from(matchedIds),
-          notIn: hiddenUserIds, // 非表示ユーザーを除外
-        },
+        AND: [
+          {
+            id: {
+              in: Array.from(matchedIds),
+              notIn: hiddenUserIds, // 非表示ユーザーを除外
+            },
+          },
+          {
+            email: {
+              notIn: ["yoko.kiyama@icloud.com", "miharu.kiyama@icloud.com"], // メールアドレスでも除外
+            },
+          },
+        ],
       },
       select: { id: true, name: true },
     });

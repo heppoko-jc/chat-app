@@ -16,14 +16,23 @@ export async function GET() {
 
     const users = await prisma.user.findMany({
       where: {
-        id: {
-          notIn: hiddenUserIds, // 非表示ユーザーを除外
-        },
+        AND: [
+          {
+            id: {
+              notIn: hiddenUserIds, // 非表示ユーザーを除外
+            },
+          },
+          {
+            email: {
+              notIn: ["yoko.kiyama@icloud.com", "miharu.kiyama@icloud.com"], // メールアドレスでも除外
+            },
+          },
+        ],
       },
-      select: { id: true, name: true, bio: true },
+      select: { id: true, name: true, bio: true, email: true },
     });
 
-    return NextResponse.json(users);
+    return NextResponse.json(users.map(({ email, ...user }) => user)); // emailをレスポンスから除外
   } catch (error) {
     // console.error は intercept-console が拾ってエラー化するので避ける
     console.log("Error fetching users:", error);
