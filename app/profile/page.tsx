@@ -1,98 +1,153 @@
 // app/profile/page.tsx
 
-'use client'
+"use client";
 
-import { useEffect, useState } from 'react'
-import { useRouter } from 'next/navigation'
-import axios from 'axios'
-import FixedTabBar from '../components/FixedTabBar'
-import { unsubscribePush } from '@/app/lib/push'
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import axios from "axios";
+import FixedTabBar from "../components/FixedTabBar";
+import { unsubscribePush } from "@/app/lib/push";
 
 function getInitials(name: string) {
   return name
-    .split(' ')
+    .split(" ")
     .map((w) => w.charAt(0))
-    .join('')
-    .toUpperCase()
+    .join("")
+    .toUpperCase();
 }
 
 function getBgColor(name: string) {
-  let hash = 0
-  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash)
-  const h = hash % 360
-  return `hsl(${h}, 70%, 60%)`
+  let hash = 0;
+  for (let i = 0; i < name.length; i++)
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  const h = hash % 360;
+  return `hsl(${h}, 70%, 60%)`;
 }
 
 interface User {
-  name: string
-  email: string
-  bio: string
+  name: string;
+  email: string;
+  bio: string;
 }
 
 export default function Profile() {
-  const router = useRouter()
-  const [user, setUser] = useState<User | null>(null)
-  const [name, setName] = useState('')
-  const [bio, setBio] = useState('')
-  const [isEditing, setIsEditing] = useState(false)
-  const [showSavedPopup, setShowSavedPopup] = useState(false)
-  const [showLogoutPopup, setShowLogoutPopup] = useState(false)
+  const router = useRouter();
+  const [user, setUser] = useState<User | null>(null);
+  const [name, setName] = useState("");
+  const [bio, setBio] = useState("");
+  const [isEditing, setIsEditing] = useState(false);
+  const [showSavedPopup, setShowSavedPopup] = useState(false);
+  const [showLogoutPopup, setShowLogoutPopup] = useState(false);
+  const [showPasswordChange, setShowPasswordChange] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordChangeMessage, setPasswordChangeMessage] = useState("");
 
   useEffect(() => {
     const fetchUser = async () => {
-      const token = localStorage.getItem('token')
+      const token = localStorage.getItem("token");
       if (!token) {
-        router.push('/login')
-        return
+        router.push("/login");
+        return;
       }
       try {
-        const res = await axios.get('/api/auth/profile', {
-          headers: { Authorization: `Bearer ${token}` }
-        })
-        setUser(res.data)
-        setName(res.data.name)
-        setBio(res.data.bio || '')
+        const res = await axios.get("/api/auth/profile", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        setUser(res.data);
+        setName(res.data.name);
+        setBio(res.data.bio || "");
       } catch {
         // 期限切れ or 無効トークンならクリアしてログイン画面へ
-        localStorage.removeItem('token')
-        localStorage.removeItem('userId')
-        router.push('/login')
+        localStorage.removeItem("token");
+        localStorage.removeItem("userId");
+        router.push("/login");
       }
-    }
-    fetchUser()
-  }, [router])
+    };
+    fetchUser();
+  }, [router]);
 
   const handleUpdateProfile = async () => {
-    const token = localStorage.getItem('token')
+    const token = localStorage.getItem("token");
     if (!token) {
-      alert('ログインしてください')
-      return
+      alert("ログインしてください");
+      return;
     }
     try {
-      const res = await axios.put('/api/auth/profile', { name, bio }, { headers: { Authorization: `Bearer ${token}` } })
-      setUser(res.data)
-      setIsEditing(false)
-      setShowSavedPopup(true)
-      setTimeout(() => setShowSavedPopup(false), 3000)
+      const res = await axios.put(
+        "/api/auth/profile",
+        { name, bio },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      setUser(res.data);
+      setIsEditing(false);
+      setShowSavedPopup(true);
+      setTimeout(() => setShowSavedPopup(false), 3000);
     } catch {
-      alert('プロフィールの更新に失敗しました')
+      alert("プロフィールの更新に失敗しました");
     }
-  }
+  };
+
+  const handlePasswordChange = async () => {
+    if (newPassword !== confirmPassword) {
+      setPasswordChangeMessage(
+        "新しいパスワードと確認パスワードが一致しません"
+      );
+      return;
+    }
+
+    if (newPassword.length < 6) {
+      setPasswordChangeMessage(
+        "新しいパスワードは6文字以上である必要があります"
+      );
+      return;
+    }
+
+    const token = localStorage.getItem("token");
+    if (!token) {
+      alert("ログインしてください");
+      return;
+    }
+
+    try {
+      await axios.put(
+        "/api/auth/change-password",
+        { currentPassword, newPassword },
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+
+      setPasswordChangeMessage("パスワードが正常に変更されました");
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+
+      setTimeout(() => {
+        setShowPasswordChange(false);
+        setPasswordChangeMessage("");
+      }, 3000);
+    } catch (error: unknown) {
+      const message =
+        (error as { response?: { data?: { error?: string } } }).response?.data
+          ?.error || "パスワードの変更に失敗しました";
+      setPasswordChangeMessage(message);
+    }
+  };
 
   const handleLogout = async () => {
     try {
       // プッシュ購読解除
-      await unsubscribePush()
+      await unsubscribePush();
     } catch (e) {
-      console.error('プッシュ解除エラー:', e)
+      console.error("プッシュ解除エラー:", e);
     }
     // ローカルストレージ・リダイレクト
-    localStorage.removeItem('token')
-    localStorage.removeItem('userId')
-    router.push('/login')
-  }
+    localStorage.removeItem("token");
+    localStorage.removeItem("userId");
+    router.push("/login");
+  };
 
-  if (!user) return <p className="p-5">Loading...</p>
+  if (!user) return <p className="p-5">Loading...</p>;
 
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-br from-orange-50 via-white to-orange-100">
@@ -104,7 +159,9 @@ export default function Profile() {
           >
             {getInitials(user.name)}
           </div>
-          <h2 className="text-2xl font-extrabold text-gray-800 mb-1 tracking-tight">{user.name}</h2>
+          <h2 className="text-2xl font-extrabold text-gray-800 mb-1 tracking-tight">
+            {user.name}
+          </h2>
           <p className="text-gray-500 text-sm mb-2">{user.email}</p>
         </div>
         {showSavedPopup && (
@@ -116,7 +173,9 @@ export default function Profile() {
           {isEditing ? (
             <>
               <div>
-                <label className="block mb-1 font-semibold text-gray-700">名前</label>
+                <label className="block mb-1 font-semibold text-gray-700">
+                  名前
+                </label>
                 <input
                   type="text"
                   value={name}
@@ -125,7 +184,9 @@ export default function Profile() {
                 />
               </div>
               <div>
-                <label className="block mb-1 font-semibold text-gray-700">自己紹介</label>
+                <label className="block mb-1 font-semibold text-gray-700">
+                  自己紹介
+                </label>
                 <textarea
                   value={bio}
                   onChange={(e) => setBio(e.target.value)}
@@ -149,12 +210,20 @@ export default function Profile() {
             </>
           ) : (
             <div className="flex flex-col items-center gap-3">
-              <p className="text-gray-700 text-base text-center min-h-[2.5rem]">{user.bio || '自己紹介未設定'}</p>
+              <p className="text-gray-700 text-base text-center min-h-[2.5rem]">
+                {user.bio || "自己紹介未設定"}
+              </p>
               <button
                 onClick={() => setIsEditing(true)}
                 className="bg-gradient-to-r from-orange-400 to-orange-500 text-white px-8 py-2 rounded-full shadow font-bold hover:from-orange-500 hover:to-orange-600 transition mt-2"
               >
                 編集
+              </button>
+              <button
+                onClick={() => setShowPasswordChange(true)}
+                className="bg-blue-500 text-white px-8 py-2 rounded-full shadow font-bold hover:bg-blue-600 transition mt-2"
+              >
+                パスワード変更
               </button>
               <button
                 onClick={() => setShowLogoutPopup(true)}
@@ -165,11 +234,99 @@ export default function Profile() {
             </div>
           )}
         </div>
+        {showPasswordChange && (
+          <div className="fixed inset-0 flex items-center justify-center bg-black/40 z-50">
+            <div className="bg-white p-6 rounded-2xl shadow-2xl w-11/12 max-w-sm">
+              <h3 className="text-lg font-bold mb-4 text-center">
+                パスワード変更
+              </h3>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block mb-1 font-semibold text-gray-700">
+                    現在のパスワード
+                  </label>
+                  <input
+                    type="password"
+                    value={currentPassword}
+                    onChange={(e) => setCurrentPassword(e.target.value)}
+                    className="border border-orange-200 p-2 w-full rounded-lg focus:ring-2 focus:ring-orange-200 outline-none"
+                    placeholder="現在のパスワードを入力"
+                  />
+                </div>
+
+                <div>
+                  <label className="block mb-1 font-semibold text-gray-700">
+                    新しいパスワード
+                  </label>
+                  <input
+                    type="password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
+                    className="border border-orange-200 p-2 w-full rounded-lg focus:ring-2 focus:ring-orange-200 outline-none"
+                    placeholder="新しいパスワードを入力"
+                  />
+                </div>
+
+                <div>
+                  <label className="block mb-1 font-semibold text-gray-700">
+                    新しいパスワード（確認）
+                  </label>
+                  <input
+                    type="password"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    className="border border-orange-200 p-2 w-full rounded-lg focus:ring-2 focus:ring-orange-200 outline-none"
+                    placeholder="新しいパスワードを再入力"
+                  />
+                </div>
+
+                {passwordChangeMessage && (
+                  <div
+                    className={`text-center text-sm font-medium ${
+                      passwordChangeMessage.includes("正常に変更")
+                        ? "text-green-600"
+                        : "text-red-600"
+                    }`}
+                  >
+                    {passwordChangeMessage}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex justify-center gap-3 mt-6">
+                <button
+                  onClick={handlePasswordChange}
+                  className="bg-blue-500 text-white px-8 py-2 rounded-full shadow font-bold hover:bg-blue-600 transition"
+                >
+                  変更
+                </button>
+                <button
+                  onClick={() => {
+                    setShowPasswordChange(false);
+                    setPasswordChangeMessage("");
+                    setCurrentPassword("");
+                    setNewPassword("");
+                    setConfirmPassword("");
+                  }}
+                  className="bg-gray-300 text-gray-700 px-8 py-2 rounded-full shadow font-bold hover:bg-gray-400 transition"
+                >
+                  キャンセル
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {showLogoutPopup && (
           <div className="fixed inset-0 flex items-center justify-center bg-black/40 z-50">
             <div className="bg-white p-6 rounded-2xl shadow-2xl w-11/12 max-w-sm">
-              <h3 className="text-lg font-bold mb-2 text-center">ログアウト確認</h3>
-              <p className="mb-4 text-center text-gray-700">本当にログアウトしますか？</p>
+              <h3 className="text-lg font-bold mb-2 text-center">
+                ログアウト確認
+              </h3>
+              <p className="mb-4 text-center text-gray-700">
+                本当にログアウトしますか？
+              </p>
               <div className="flex justify-center gap-3 mt-2">
                 <button
                   onClick={handleLogout}
@@ -190,5 +347,5 @@ export default function Profile() {
       </div>
       <FixedTabBar />
     </div>
-  )
+  );
 }
