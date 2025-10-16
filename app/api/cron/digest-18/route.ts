@@ -5,14 +5,17 @@ import webpush, { PushSubscription as WebPushSubscription } from "web-push";
 
 const prisma = new PrismaClient();
 
-// メイン画面と同じロジック：マッチしていない受信メッセージの件数を取得
-// 72時間以上経過したメッセージは除外
-async function getUnmatchedMessageCount(userId: string): Promise<number> {
+// 個人向けダイジェスト用：過去24時間に新規受信した未マッチ件数を取得
+async function getNewUnmatchedReceivedCount24h(
+  userId: string
+): Promise<number> {
   try {
-    // 自分が受信したメッセージのうち、マッチしていないものをカウント
-    const unmatchedMessages = await prisma.sentMessage.findMany({
+    // 自分が受信したメッセージのうち、直近24時間に届いたものを取得
+    const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const recentReceivedMessages = await prisma.sentMessage.findMany({
       where: {
         receiverId: userId,
+        createdAt: { gte: twentyFourHoursAgo },
       },
       select: {
         id: true,
@@ -22,12 +25,9 @@ async function getUnmatchedMessageCount(userId: string): Promise<number> {
       },
     });
 
-    // 72時間前の時刻
-    const threeDaysAgo = new Date(Date.now() - 72 * 60 * 60 * 1000);
-
     let unmatchedCount = 0;
 
-    for (const receivedMessage of unmatchedMessages) {
+    for (const receivedMessage of recentReceivedMessages) {
       // このメッセージについて、マッチが成立しているかチェック
       const matchExists = await prisma.matchPair.findFirst({
         where: {
@@ -41,20 +41,7 @@ async function getUnmatchedMessageCount(userId: string): Promise<number> {
 
       // マッチが存在しない場合のみカウント対象とする
       if (!matchExists) {
-        // さらに、このメッセージがPresetMessageに存在し、期限切れでないかチェック
-        const presetMessage = await prisma.presetMessage.findFirst({
-          where: {
-            content: receivedMessage.message,
-          },
-          select: {
-            lastSentAt: true,
-          },
-        });
-
-        // PresetMessageに存在し、かつ最終送信が72時間以内の場合のみカウント
-        if (presetMessage && presetMessage.lastSentAt >= threeDaysAgo) {
-          unmatchedCount++;
-        }
+        unmatchedCount++;
       }
     }
 
@@ -149,17 +136,17 @@ export async function GET() {
     // 無効化対象 endpoint を集約する集合（重複排除）
     const endpointsToDeactivate = new Set<string>();
 
-    // 3) 個人配信（マッチしていない受信メッセージの件数）
+    // 3) 個人配信（過去24時間の新規受信・未マッチ件数）
     for (const [userId, subs] of subsByUser) {
       if (!subs?.length) continue;
 
-      const unmatchedCount = await getUnmatchedMessageCount(userId);
+      const unmatchedCount = await getNewUnmatchedReceivedCount24h(userId);
       if (unmatchedCount === 0) continue;
 
       const payload = JSON.stringify({
         type: "digest_user",
-        title: "マッチングチャンス！",
-        body: `あなたは現在、${unmatchedCount}件のマッチの可能性があります`,
+        title: "新着メッセージ",
+        body: `今日あなたに新しいメッセージが${unmatchedCount}件届きました`,
         dateKey,
       });
 
