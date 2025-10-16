@@ -19,11 +19,29 @@ export async function GET(req: NextRequest) {
     // 非表示にするユーザーIDを取得
     const hiddenUserIds = process.env.HIDDEN_USER_IDS?.split(",") || [];
 
-    // 自分以外の全ユーザー（非表示ユーザーを除外）
+    // 自分とマッチしたことのあるユーザーIDを取得
+    const matchedUserIds = await prisma.matchPair.findMany({
+      where: {
+        OR: [{ user1Id: me }, { user2Id: me }],
+      },
+      select: {
+        user1Id: true,
+        user2Id: true,
+      },
+    });
+
+    // マッチしたユーザーIDのセットを作成
+    const matchedIds = new Set<string>();
+    matchedUserIds.forEach((pair) => {
+      if (pair.user1Id !== me) matchedIds.add(pair.user1Id);
+      if (pair.user2Id !== me) matchedIds.add(pair.user2Id);
+    });
+
+    // マッチしたユーザーのみを取得（非表示ユーザーを除外）
     const users = await prisma.user.findMany({
       where: {
         id: {
-          not: me,
+          in: Array.from(matchedIds),
           notIn: hiddenUserIds, // 非表示ユーザーを除外
         },
       },
