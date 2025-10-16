@@ -161,6 +161,23 @@ async function adjustBadge(delta) {
   await setAndPersistBadge(next);
 }
 
+// =============== 通知クリア ヘルパ ===============
+async function clearAllNotifications() {
+  try {
+    const notifs = await self.registration.getNotifications({
+      includeTriggered: true,
+    });
+    for (const n of notifs) n.close();
+  } catch {
+    /* noop */
+  }
+}
+
+async function clearNotificationsAndBadge() {
+  await clearAllNotifications();
+  await setAndPersistBadge(0);
+}
+
 // =============== push ===============
 self.addEventListener("push", (event) => {
   let payload = {};
@@ -259,14 +276,31 @@ self.addEventListener("notificationclick", (event) => {
       : "/chat-list";
 
   event.waitUntil(
-    clients
-      .matchAll({ type: "window", includeUncontrolled: true })
-      .then((wins) => {
-        const targetPath = normalizePath(targetUrl);
-        for (const w of wins) {
-          if (normalizePath(w.url) === targetPath) return w.focus();
-        }
-        return clients.openWindow(targetUrl);
-      })
+    (async () => {
+      await clearNotificationsAndBadge();
+      const wins = await clients.matchAll({
+        type: "window",
+        includeUncontrolled: true,
+      });
+      const targetPath = normalizePath(targetUrl);
+      for (const w of wins) {
+        if (normalizePath(w.url) === targetPath) return w.focus();
+      }
+      return clients.openWindow(targetUrl);
+    })()
   );
+});
+
+// =============== 前面化時の通知クリア ===============
+self.addEventListener("message", (event) => {
+  const data = event.data || {};
+  if (data.type === "FOREGROUND_STATE") {
+    event.waitUntil(
+      (async () => {
+        if (data.visible || data.focused) {
+          await clearNotificationsAndBadge();
+        }
+      })()
+    );
+  }
 });
