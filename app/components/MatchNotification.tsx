@@ -12,18 +12,22 @@ import {
 interface MatchNotificationProps {
   isVisible: boolean;
   onClose: () => void;
+  onGoToChat?: () => void; // チャットへ遷移するコールバック
   matchedUser?: {
     id: string;
     name: string;
   };
   message?: string;
+  chatId?: string; // chatIdを追加
 }
 
 export default function MatchNotification({
   isVisible,
   onClose,
+  onGoToChat, // 追加
   matchedUser,
   message,
+  chatId, // 追加
 }: MatchNotificationProps) {
   const [isAnimating, setIsAnimating] = useState(false);
   const [linkPreview, setLinkPreview] = useState<{
@@ -80,6 +84,15 @@ export default function MatchNotification({
     }
     // アニメーション待ちをやめて即時に親へ閉じる指示（灰色オーバーレイ残留を防ぐ）
     onClose();
+  };
+
+  // チャットへ遷移するハンドラー
+  const handleGoToChat = (e?: React.MouseEvent) => {
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+    onGoToChat?.();
   };
 
   if (!isVisible) return null;
@@ -202,13 +215,21 @@ export default function MatchNotification({
         </div>
 
         {/* アクションボタン */}
-        <div className="flex justify-center">
+        <div className="flex gap-3">
           <button
             onClick={(e) => handleClose(e)}
-            className="w-full bg-gradient-to-r from-orange-400 to-orange-500 text-white py-3 rounded-2xl font-semibold transition-transform duration-200 ease-out active:scale-95"
+            className="flex-1 bg-gray-200 text-gray-700 py-3 rounded-2xl font-semibold transition-transform duration-200 ease-out active:scale-95"
           >
             閉じる
           </button>
+          {chatId && onGoToChat && (
+            <button
+              onClick={(e) => handleGoToChat(e)}
+              className="flex-1 bg-gradient-to-r from-orange-400 to-orange-500 text-white py-3 rounded-2xl font-semibold transition-transform duration-200 ease-out active:scale-95"
+            >
+              チャットへ
+            </button>
+          )}
         </div>
       </div>
     </div>

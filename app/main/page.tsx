@@ -1019,6 +1019,14 @@ export default function Main() {
     }
   }, [queueHead, currentUserId, lastSeenKey]);
 
+  // チャットへ遷移するハンドラー
+  const handleGoToChat = useCallback(() => {
+    if (queueHead?.chatId) {
+      router.push(`/chat/${queueHead.chatId}`);
+      handleClosePopup(); // 通知を閉じる
+    }
+  }, [queueHead?.chatId, router]);
+
   return (
     <>
       {/* ヘッダー（高さ拡張） */}
@@ -1724,8 +1732,10 @@ export default function Main() {
       <MatchNotification
         isVisible={isPopupVisible}
         onClose={handleClosePopup}
+        onGoToChat={handleGoToChat}
         matchedUser={queueHead?.matchedUser ?? undefined}
         message={queueHead?.message ?? undefined}
+        chatId={queueHead?.chatId}
       />
 
       <FixedTabBar />
