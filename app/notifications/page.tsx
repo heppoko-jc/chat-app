@@ -289,24 +289,28 @@ export default function Notifications() {
                                 </div>
                               ) : (
                                 // 通常のテキストメッセージの場合
-                                <p className="text-medium whitespace-normal break-words">
+                                <p className="text-medium whitespace-normal break-words mt-1">
                                   {msg.message}
                                 </p>
                               )}
+
+                              {/* 新しい行: メタデータ情報 */}
+                              <div className="flex items-center justify-end gap-2 mt-2">
+                                {formatDate(msg.createdAt) && (
+                                  <span className="text-xs text-gray-500 whitespace-nowrap">
+                                    {formatDate(msg.createdAt)}
+                                  </span>
+                                )}
+                                {msg.isExpired && (
+                                  <span className="text-xs px-2 py-1 rounded-full bg-gray-200 text-gray-600 font-semibold whitespace-nowrap">
+                                    72時間期限切れ
+                                  </span>
+                                )}
+                              </div>
                             </div>
                           </div>
-                          {/* 日付＋moreボタン（未マッチのみ） */}
-                          <div className="flex items-center gap-2 flex-none shrink-0">
-                            {formatDate(msg.createdAt) && (
-                              <span className="text-xs text-gray-500 whitespace-nowrap">
-                                {formatDate(msg.createdAt)}
-                              </span>
-                            )}
-                            {msg.isExpired && (
-                              <span className="text-xs px-2 py-1 rounded-full bg-gray-200 text-gray-600 font-semibold whitespace-nowrap">
-                                72時間期限切れ
-                              </span>
-                            )}
+                          {/* アクションボタン（未マッチのみ） */}
+                          <div className="flex-none shrink-0 ml-2">
                             <button
                               onClick={(e) => {
                                 e.stopPropagation();
@@ -419,27 +423,28 @@ export default function Notifications() {
                                 </div>
                               ) : (
                                 // 通常のテキストメッセージの場合
-                                <p className="text-medium whitespace-normal break-words">
+                                <p className="text-medium whitespace-normal break-words mt-1">
                                   {msg.message}
                                 </p>
                               )}
+
+                              {/* 新しい行: メタデータ情報 */}
+                              <div className="flex items-center justify-end gap-2 mt-2">
+                                {formatDate(msg.createdAt) && (
+                                  <span className="text-xs text-gray-500 whitespace-nowrap">
+                                    {formatDate(msg.createdAt)}
+                                  </span>
+                                )}
+                                {msg.isExpired && (
+                                  <span className="text-xs px-2 py-1 rounded-full bg-gray-200 text-gray-600 font-semibold whitespace-nowrap">
+                                    72時間期限切れ
+                                  </span>
+                                )}
+                                <span className="text-xs px-2 py-1 rounded-full bg-green-100 text-green-600 font-semibold">
+                                  マッチ済
+                                </span>
+                              </div>
                             </div>
-                          </div>
-                          {/* 日付＋"マッチ済"バッジ（More なし） */}
-                          <div className="flex items-center gap-2 flex-none shrink-0">
-                            {formatDate(msg.createdAt) && (
-                              <span className="text-xs text-gray-500 whitespace-nowrap">
-                                {formatDate(msg.createdAt)}
-                              </span>
-                            )}
-                            {msg.isExpired && (
-                              <span className="text-xs px-2 py-1 rounded-full bg-gray-200 text-gray-600 font-semibold whitespace-nowrap">
-                                72時間期限切れ
-                              </span>
-                            )}
-                            <span className="text-xs px-2 py-1 rounded-full bg-green-100 text-green-600 font-semibold">
-                              マッチ済
-                            </span>
                           </div>
                         </li>
                       ))}

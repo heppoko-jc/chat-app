@@ -29,10 +29,10 @@ export async function GET() {
           },
         ],
       },
-      select: { id: true, name: true, bio: true, email: true },
+      select: { id: true, name: true, bio: true },
     });
 
-    return NextResponse.json(users.map(({ email, ...user }) => user)); // emailをレスポンスから除外
+    return NextResponse.json(users);
   } catch (error) {
     // console.error は intercept-console が拾ってエラー化するので避ける
     console.log("Error fetching users:", error);
