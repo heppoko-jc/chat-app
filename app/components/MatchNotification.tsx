@@ -98,15 +98,9 @@ export default function MatchNotification({
   if (!isVisible) return null;
 
   return (
-    // オーバーレイ自体のクリックで閉じる
+    // オーバーレイ自体のクリックでは閉じない
     <div
       className="fixed inset-0 flex items-center justify-center bg-black/50 z-50"
-      onClick={(e) => {
-        // オーバーレイ自体がクリックされた場合のみ閉じる
-        if (e.target === e.currentTarget) {
-          handleClose(e);
-        }
-      }}
       role="dialog"
       aria-modal="true"
     >

@@ -255,9 +255,7 @@ export default function Chat() {
           const latestMessages = await response.json();
           const formattedMessages = latestMessages.map((msg: Message) => ({
             ...msg,
-            formattedDate: new Date(msg.createdAt).toLocaleString("ja-JP", {
-              month: "2-digit",
-              day: "2-digit",
+            formattedDate: new Date(msg.createdAt).toLocaleTimeString("ja-JP", {
               hour: "2-digit",
               minute: "2-digit",
             }),

@@ -431,9 +431,7 @@ export default function Main() {
               ...c,
               latestMessageAtRaw: c.latestMessageAt ?? "",
               latestMessageAt: c.latestMessageAt
-                ? new Date(c.latestMessageAt).toLocaleString("ja-JP", {
-                    month: "2-digit",
-                    day: "2-digit",
+                ? new Date(c.latestMessageAt).toLocaleTimeString("ja-JP", {
                     hour: "2-digit",
                     minute: "2-digit",
                   })
@@ -687,7 +685,7 @@ export default function Main() {
     if (isInputMode && inputMessage.trim()) {
       const message = inputMessage.trim();
       setSelectedMessage(message);
-      setIsInputMode(false);
+      // setIsInputMode(false); // 入力モードを維持してキーボードを開いたままにする
 
       // 状態をリセット（重要！）
       setSelectedMessageLinkData(null);
@@ -898,12 +896,12 @@ export default function Main() {
 
       const recipientsToSend = [...selectedRecipientIds];
 
-      // UI リセット
+      // UI リセット（入力モードは維持）
       setSelectedMessage(null);
       setSelectedRecipientIds([]);
       setStep("select-message");
-      setIsInputMode(false);
-      setInputMessage("");
+      // setIsInputMode(false); // 入力モードを維持してキーボードを開いたままにする
+      setInputMessage(""); // 入力フィールドはクリア
       setSelectedMessageLinkData(null);
       setLinkPreview(null);
       setLinkComment("");
@@ -1119,7 +1117,7 @@ export default function Main() {
                     setSelectedMessageLinkData(null);
                     setSelectedMessageContent(null);
                     setInputMessage("");
-                    setIsInputMode(false);
+                    // setIsInputMode(false); // 入力モードを維持してキーボードを開いたままにする
                     setSelectedRecipientIds([]);
                     setStep("select-message");
                   }}
@@ -1143,7 +1141,8 @@ export default function Main() {
                   className="flex-1 px-3 py-2 rounded-xl border border-orange-200 text-base bg-white shadow-sm focus:ring-2 focus:ring-orange-200 outline-none transition"
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !isComposing) {
-                      e.currentTarget.blur();
+                      // キーボードを閉じないようにblur()を呼ばない
+                      // e.currentTarget.blur();
                     }
                   }}
                 />
@@ -1158,14 +1157,14 @@ export default function Main() {
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && inputMessage.trim()) {
                     setSelectedMessage(inputMessage.trim());
-                    setIsInputMode(false);
+                    // setIsInputMode(false); // 入力モードを維持してキーボードを開いたままにする
                     setStep("select-recipients");
                   }
                 }}
                 onBlur={() => {
                   if (inputMessage.trim()) {
                     setSelectedMessage(inputMessage.trim());
-                    setIsInputMode(false);
+                    // setIsInputMode(false); // 入力モードを維持してキーボードを開いたままにする
                     setStep("select-recipients");
                   }
                 }}

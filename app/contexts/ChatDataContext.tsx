@@ -145,12 +145,13 @@ export function ChatDataProvider({ children }: { children: ReactNode }) {
               );
               const formattedMessages = messagesRes.data.map((msg) => ({
                 ...msg,
-                formattedDate: new Date(msg.createdAt).toLocaleString("ja-JP", {
-                  month: "2-digit",
-                  day: "2-digit",
-                  hour: "2-digit",
-                  minute: "2-digit",
-                }),
+                formattedDate: new Date(msg.createdAt).toLocaleTimeString(
+                  "ja-JP",
+                  {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  }
+                ),
               }));
               return { chatId: chat.chatId, messages: formattedMessages };
             } catch (error) {
