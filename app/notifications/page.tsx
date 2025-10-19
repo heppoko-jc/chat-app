@@ -202,7 +202,7 @@ export default function Notifications() {
                 {/* ─── 未マッチセクション ─── */}
                 {unmatchedMessages.length > 0 && (
                   <section>
-                    <h3 className="text-sm font-bold text-gray-700 mb-2">
+                    <h3 className="text-lg font-bold text-gray-800 mb-3">
                       まだマッチしてないことば
                     </h3>
                     <ul className="space-y-3">
@@ -336,7 +336,7 @@ export default function Notifications() {
                 {/* ─── マッチ済みセクション ─── */}
                 {matchedMessages.length > 0 && (
                   <section>
-                    <h3 className="text-sm font-bold text-gray-700 mb-2">
+                    <h3 className="text-lg font-bold text-gray-800 mb-3">
                       マッチしたことば
                     </h3>
                     <ul className="space-y-3">
