@@ -138,6 +138,8 @@ export default function Main() {
   // ステート
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [users, setUsers] = useState<User[]>([]);
+  const [friends, setFriends] = useState<Set<string>>(new Set());
+  const [hasNewUsers, setHasNewUsers] = useState(false);
   const [lastSentMap, setLastSentMap] = useState<Record<string, string | null>>(
     {}
   );
@@ -233,6 +235,29 @@ export default function Main() {
 
     console.log("[extractUrlAndText] No URL found");
     return null;
+  };
+
+  // 新規参加者チェック関数
+  const checkNewUsers = async (userId: string) => {
+    try {
+      const lastFriendsVisit = localStorage.getItem(
+        `lastFriendsPageVisit-${userId}`
+      );
+
+      if (!lastFriendsVisit) {
+        // 初回は表示しない
+        setHasNewUsers(false);
+        return;
+      }
+
+      const response = await axios.get(
+        `/api/users/new?since=${lastFriendsVisit}`
+      );
+      setHasNewUsers(response.data.length > 0);
+    } catch (error) {
+      console.error("新規参加者チェックエラー:", error);
+      setHasNewUsers(false);
+    }
   };
 
   // 入力がURLを含む場合、プレビューを取得
@@ -474,6 +499,21 @@ export default function Main() {
       .then((res) => setUsers(res.data))
       .catch((e) => console.error("ユーザー取得エラー:", e));
 
+    // ともだち一覧取得
+    if (uid) {
+      axios
+        .get<{ id: string; friendId: string }[]>("/api/friends", {
+          headers: { userId: uid },
+        })
+        .then((res) => {
+          setFriends(new Set(res.data.map((f) => f.friendId)));
+        })
+        .catch((e) => console.error("ともだち一覧取得エラー:", e));
+
+      // 新規参加者チェック
+      checkNewUsers(uid);
+    }
+
     if (uid) {
       axios
         .get<{ userId: string; lastSentAt: string | null }[]>(
@@ -665,6 +705,34 @@ export default function Main() {
   const allMessageOptions = useMemo(() => {
     return [...messageOptions];
   }, [messageOptions]);
+
+  // 表示中のともだち一覧（フィルタ＋ソートを共通化）
+  const visibleFriends = useMemo(() => {
+    return users
+      .filter((u) => u.id !== currentUserId && friends.has(u.id))
+      .slice()
+      .sort((a, b) => {
+        const la = lastSentMap[a.id];
+        const lb = lastSentMap[b.id];
+        if (la && lb) return new Date(lb).getTime() - new Date(la).getTime();
+        if (la && !lb) return -1;
+        if (!la && lb) return 1;
+        return a.name.localeCompare(b.name, "ja");
+      });
+  }, [users, currentUserId, friends, lastSentMap]);
+
+  const allVisibleSelected = useMemo(() => {
+    if (visibleFriends.length === 0) return false;
+    return visibleFriends.every((u) => selectedRecipientIds.includes(u.id));
+  }, [visibleFriends, selectedRecipientIds]);
+
+  const toggleSelectAllVisible = useCallback(() => {
+    if (allVisibleSelected) {
+      setSelectedRecipientIds([]);
+    } else {
+      setSelectedRecipientIds(visibleFriends.map((u) => u.id));
+    }
+  }, [allVisibleSelected, visibleFriends]);
 
   const handleMessageIconClick = async () => {
     // linkPreviewが設定されている場合の処理
@@ -1053,7 +1121,25 @@ export default function Main() {
           >
             Happy Ice Cream
           </h1>
-          <div className="w-20" />
+          <div className="w-20 flex items-center justify-end">
+            <button
+              onClick={() => router.push("/friends")}
+              className="relative transition-transform duration-200 ease-out active:scale-125 focus:outline-none rounded-full p-2"
+            >
+              <Image
+                src="/icons/friends.png"
+                alt="ともだち認証"
+                width={28}
+                height={28}
+                className="cursor-pointer"
+              />
+              {hasNewUsers && (
+                <div className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full flex items-center justify-center">
+                  <span className="text-white text-xs font-bold">新</span>
+                </div>
+              )}
+            </button>
+          </div>
         </div>
 
         <p className="text-[15px] text-gray-700 text-center leading-snug mt-1 font-medium">
@@ -1243,7 +1329,10 @@ export default function Main() {
 
         {selectedRecipientIds.length > 0 && (
           <span className="ml-2 px-2 py-1 rounded-full bg-orange-400 text-white text-xs font-bold shadow border border-orange-200 select-none">
-            {selectedRecipientIds.length}人
+            {visibleFriends.length > 0 &&
+            selectedRecipientIds.length === visibleFriends.length
+              ? "全員"
+              : `${selectedRecipientIds.length}人`}
           </span>
         )}
 
@@ -1613,23 +1702,40 @@ export default function Main() {
               paddingTop: `${LIST_PT}px`,
             }}
           >
+            {/* 全員選択トグル */}
+            <div className="flex items-center justify-end mb-2">
+              <button
+                onClick={toggleSelectAllVisible}
+                className={`px-3 py-1.5 rounded-xl text-sm font-bold shadow border transition active:scale-95 ${
+                  allVisibleSelected
+                    ? "bg-orange-200 border-orange-300 text-orange-800"
+                    : "bg-orange-50 border-orange-200 text-orange-600 hover:bg-orange-100"
+                }`}
+                disabled={visibleFriends.length === 0}
+              >
+                {allVisibleSelected ? "全選択解除" : "全員を選択"}
+              </button>
+            </div>
+
             <div className="flex flex-col gap-2">
-              {users
-                .filter((u) => u.id !== currentUserId)
-                .slice()
-                .sort((a, b) => {
-                  const la = lastSentMap[a.id];
-                  const lb = lastSentMap[b.id];
-                  // 1) どちらも送信履歴あり → 新しい順
-                  if (la && lb)
-                    return new Date(lb).getTime() - new Date(la).getTime();
-                  // 2) 片方のみ履歴あり → 履歴ありを前へ
-                  if (la && !lb) return -1;
-                  if (!la && lb) return 1;
-                  // 3) 両方なし → 名前の五十音順（localeCompare）
-                  return a.name.localeCompare(b.name, "ja");
-                })
-                .map((u) => (
+              {visibleFriends.length === 0 ? (
+                <div
+                  onClick={() => router.push("/friends")}
+                  className="flex flex-col items-center justify-center py-12 px-6 rounded-3xl shadow-md border border-orange-200 bg-white cursor-pointer hover:bg-orange-50 transition-colors"
+                >
+                  <Image
+                    src="/icons/friends.png"
+                    alt="ともだち登録"
+                    width={48}
+                    height={48}
+                    className="mb-4"
+                  />
+                  <p className="text-lg font-bold text-orange-600 text-center">
+                    ともだち登録しましょう↑！
+                  </p>
+                </div>
+              ) : (
+                visibleFriends.map((u) => (
                   <div
                     key={u.id}
                     onClick={() => toggleRecipient(u.id)}
@@ -1673,7 +1779,8 @@ export default function Main() {
                       />
                     )}
                   </div>
-                ))}
+                ))
+              )}
             </div>
           </div>
         </div>

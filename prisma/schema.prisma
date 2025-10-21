@@ -22,6 +22,8 @@ model User {
   pushSubscriptions PushSubscription[] @relation("UserSubscriptions")
   receivedMessages  SentMessage[]      @relation("ReceivedMessages")
   sentMessages      SentMessage[]      @relation("SentMessages")
+  friends           Friend[]           @relation("UserFriends")
+  friendOf          Friend[]           @relation("FriendOf")
 }
 
 model SentMessage {
@@ -90,4 +92,17 @@ model PresetMessage {
   comment   String?  // ユーザーコメント
   type      String   @default("text") // "text" | "url"
   lastSentAt DateTime @default(now()) // 最後に送信された時刻
+}
+
+model Friend {
+  id        String   @id @default(uuid())
+  userId    String   // 認証する側のユーザー
+  friendId  String   // ともだちとして認証される側のユーザー
+  createdAt DateTime @default(now())
+  
+  user      User     @relation("UserFriends", fields: [userId], references: [id])
+  friend    User     @relation("FriendOf", fields: [friendId], references: [id])
+  
+  @@unique([userId, friendId]) // 重複防止
+  @@index([userId])
 }
