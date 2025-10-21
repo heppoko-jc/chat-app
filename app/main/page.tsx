@@ -148,7 +148,6 @@ export default function Main() {
     []
   );
   const [isSent, setIsSent] = useState(false);
-  const [matchCount, setMatchCount] = useState<number>(0);
   const [step, setStep] = useState<"select-message" | "select-recipients">(
     "select-message"
   );
@@ -486,12 +485,6 @@ export default function Main() {
     setCurrentUserId(uid);
 
     if (uid) {
-      axios
-        .get<{ count: number }>("/api/match-message/count", {
-          headers: { userId: uid },
-        })
-        .then((res) => setMatchCount(res.data.count))
-        .catch((e) => console.error("件数取得エラー:", e));
     }
 
     axios
