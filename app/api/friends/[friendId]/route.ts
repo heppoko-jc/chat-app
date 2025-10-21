@@ -11,7 +11,7 @@ const prisma = new PrismaClient();
  */
 export async function DELETE(
   req: NextRequest,
-  { params }: { params: { friendId: string } }
+  { params }: { params: Promise<{ friendId: string }> }
 ) {
   try {
     const userId = req.headers.get("userId");
@@ -19,8 +19,10 @@ export async function DELETE(
       return NextResponse.json({ error: "userId required" }, { status: 400 });
     }
 
+    const { friendId } = await params;
+
     await prisma.friend.deleteMany({
-      where: { userId, friendId: params.friendId },
+      where: { userId, friendId },
     });
 
     return NextResponse.json({ success: true });

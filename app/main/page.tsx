@@ -1144,10 +1144,6 @@ export default function Main() {
 
         <p className="text-[15px] text-gray-700 text-center leading-snug mt-1 font-medium">
           3日以内に同じメッセージを送り合えるかな？
-          <br />
-          あなたは現在マッチの可能性が
-          <span className="text-orange-500 font-bold mx-1">{matchCount}</span>
-          件あります。
         </p>
       </div>
 
