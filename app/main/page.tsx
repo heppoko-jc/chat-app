@@ -1144,6 +1144,10 @@ export default function Main() {
 
         <p className="text-[15px] text-gray-700 text-center leading-snug mt-1 font-medium">
           3日以内に同じメッセージを送り合えるかな？
+          <br />
+          ことばと相手を選んで送ってみましょう。
+          <br />
+          参加者が誰かに送ったメッセージが並んでいます。
         </p>
       </div>
 
