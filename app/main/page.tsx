@@ -1136,7 +1136,7 @@ export default function Main() {
         </div>
 
         <p className="text-[15px] text-gray-700 text-center leading-snug mt-1 font-medium">
-          3日以内に同じメッセージを送り合えるかな？
+          3日以内にマッチできるかな？
           <br />
           ことばと相手を選んで送ってみましょう。
           <br />
