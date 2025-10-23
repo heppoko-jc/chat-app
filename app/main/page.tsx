@@ -1643,7 +1643,7 @@ export default function Main() {
                           </>
                         )}
                         <p className="text-xs text-orange-600 mt-1">
-                          {msg.senderCount}人がシェアしました
+                          {msg.senderCount}人が送信しました
                         </p>
                         <p className="text-xs text-gray-400 mt-0.5">
                           {formatLastSentAt(msg.lastSentAt)}
@@ -1675,7 +1675,7 @@ export default function Main() {
                     </span>
                     <div className="flex justify-between items-center mt-2">
                       <span className="text-xs text-orange-600">
-                        {msg.senderCount}人がシェアしました
+                        {msg.senderCount}人が送信しました
                       </span>
                       <span className="text-xs text-gray-400">
                         {formatLastSentAt(msg.lastSentAt)}
@@ -1827,7 +1827,7 @@ export default function Main() {
               .map((id) => users.find((u) => u.id === id)?.name)
               .filter(Boolean)
               .join(", ")}
-            にシェアされました！
+            に送信されました！
           </div>
         </div>
       )}
