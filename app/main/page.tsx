@@ -1762,6 +1762,11 @@ export default function Main() {
                       >
                         {u.name}
                       </p>
+                      {u.bio && (
+                        <p className="text-sm text-gray-600 truncate">
+                          {u.bio}
+                        </p>
+                      )}
                     </div>
                     {selectedRecipientIds.includes(u.id) && (
                       <Image

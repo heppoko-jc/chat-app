@@ -177,6 +177,9 @@ export default function FriendsPage() {
         <p className="text-sm text-gray-600 text-center mt-2">
           ここで選んだ人だけがともだちリストに表示されます
         </p>
+        <p className="text-xs text-gray-500 text-center mt-1">
+          相手には何も通知されません
+        </p>
         <p className="text-xs text-orange-500 text-center mt-1 font-bold">
           ともだち: {friends.size}人
         </p>
