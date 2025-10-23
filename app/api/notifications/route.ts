@@ -2,6 +2,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
+import { getMatchExpiryDate } from "@/lib/match-utils";
 
 const prisma = new PrismaClient();
 
@@ -47,7 +48,7 @@ export async function GET(req: NextRequest) {
       presetMessages.map((pm) => [pm.content, pm.lastSentAt])
     );
 
-    const threeDaysAgo = new Date(Date.now() - 72 * 60 * 60 * 1000);
+    const expiryDate = getMatchExpiryDate();
 
     // ✅ 送信済みメッセージとマッチ済みメッセージの照合
     const updatedSentMessages = sentMessages.map((msg) => ({
@@ -58,10 +59,10 @@ export async function GET(req: NextRequest) {
           (match.user1.id === msg.receiver.id ||
             match.user2.id === msg.receiver.id)
       ),
-      // 期限切れ判定：PresetMessageのlastSentAtが72時間以上前
+      // 期限切れ判定：PresetMessageのlastSentAtが24時間以上前
       isExpired:
         presetMessageMap.has(msg.message) &&
-        presetMessageMap.get(msg.message)! < threeDaysAgo,
+        presetMessageMap.get(msg.message)! < expiryDate,
     }));
 
     return NextResponse.json({

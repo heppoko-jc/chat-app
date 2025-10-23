@@ -2,16 +2,17 @@
 // テスト後：期限切れメッセージを現在時刻に戻す
 
 import { PrismaClient } from "@prisma/client";
+import { getMatchExpiryDate } from "../lib/match-utils.js";
 const prisma = new PrismaClient();
 
 async function restoreExpiredMessages() {
   try {
-    const threeDaysAgo = new Date(Date.now() - 72 * 60 * 60 * 1000);
+    const expiryDate = getMatchExpiryDate();
 
-    // 72時間以上前のメッセージを取得
+    // 24時間以上前のメッセージを取得
     const expiredMessages = await prisma.presetMessage.findMany({
       where: {
-        lastSentAt: { lt: threeDaysAgo },
+        lastSentAt: { lt: expiryDate },
         count: { gt: 0 },
       },
     });

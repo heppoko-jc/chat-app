@@ -1,7 +1,8 @@
 // scripts/test-expired-messages.js
-// テスト用：既存のメッセージのlastSentAtを4日前に設定する
+// テスト用：既存のメッセージのlastSentAtを期限切れに設定する
 
 import { PrismaClient } from "@prisma/client";
+import { MATCH_EXPIRY_HOURS } from "../lib/match-utils.js";
 const prisma = new PrismaClient();
 
 async function createExpiredMessages() {
@@ -21,17 +22,19 @@ async function createExpiredMessages() {
     }
 
     console.log(
-      `\n📝 ${messages.length}件のメッセージを4日前に設定します...\n`
+      `\n📝 ${messages.length}件のメッセージを期限切れに設定します...\n`
     );
 
-    const fourDaysAgo = new Date(Date.now() - 4 * 24 * 60 * 60 * 1000);
+    const expiredTime = new Date(
+      Date.now() - (MATCH_EXPIRY_HOURS + 1) * 60 * 60 * 1000
+    );
 
     for (const msg of messages) {
       await prisma.presetMessage.update({
         where: { id: msg.id },
-        data: { lastSentAt: fourDaysAgo },
+        data: { lastSentAt: expiredTime },
       });
-      console.log(`✅ "${msg.content}" → 4日前に設定`);
+      console.log(`✅ "${msg.content}" → 期限切れに設定`);
     }
 
     console.log("\n✨ 完了！メイン画面とHistory画面で確認してください。\n");

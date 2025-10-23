@@ -2,17 +2,18 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
+import { getMatchExpiryDate } from "@/lib/match-utils";
 
 const prisma = new PrismaClient();
 
 export async function GET() {
   try {
-    const threeDaysAgo = new Date(Date.now() - 72 * 60 * 60 * 1000);
+    const expiryDate = getMatchExpiryDate();
 
     const messages = await prisma.presetMessage.findMany({
       where: {
         count: { gt: 0 },
-        lastSentAt: { gte: threeDaysAgo }, // 72時間以内のメッセージのみ取得
+        lastSentAt: { gte: expiryDate }, // 24時間以内のメッセージのみ取得
       },
       orderBy: { lastSentAt: "desc" },
       select: {

@@ -303,7 +303,7 @@ export default function Notifications() {
                                 )}
                                 {msg.isExpired && (
                                   <span className="text-xs px-2 py-1 rounded-full bg-gray-200 text-gray-600 font-semibold whitespace-nowrap">
-                                    72時間期限切れ
+                                    24時間期限切れ
                                   </span>
                                 )}
                               </div>
@@ -437,7 +437,7 @@ export default function Notifications() {
                                 )}
                                 {msg.isExpired && (
                                   <span className="text-xs px-2 py-1 rounded-full bg-gray-200 text-gray-600 font-semibold whitespace-nowrap">
-                                    72時間期限切れ
+                                    24時間期限切れ
                                   </span>
                                 )}
                                 <span className="text-xs px-2 py-1 rounded-full bg-green-100 text-green-600 font-semibold">

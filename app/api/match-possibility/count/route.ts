@@ -2,6 +2,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
+import { getMatchExpiryDate } from "@/lib/match-utils";
 
 const prisma = new PrismaClient();
 
@@ -12,9 +13,8 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "userId required" }, { status: 400 });
     }
 
-    // 3日前の日時を計算
-    const threeDaysAgo = new Date();
-    threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+    // 24時間前の日時を計算
+    const expiryDate = getMatchExpiryDate();
 
     // 自分宛に送信された未マッチのメッセージを取得
     const unMatchedMessages = await prisma.sentMessage.findMany({
@@ -62,9 +62,9 @@ export async function GET(req: NextRequest) {
       );
     });
 
-    // 3日以内のメッセージのみをカウント
+    // 24時間以内のメッセージのみをカウント
     const recentUnMatchedMessages = trulyUnMatchedMessages.filter(
-      (sm) => new Date(sm.createdAt) >= threeDaysAgo
+      (sm) => new Date(sm.createdAt) >= expiryDate
     );
 
     // マッチの可能性がある件数
