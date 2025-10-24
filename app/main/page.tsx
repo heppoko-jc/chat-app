@@ -174,77 +174,76 @@ export default function Main() {
     image?: string;
   } | null>(null);
 
-  // Phase 2.1: 安全なキャッシュ基盤の構築
-  const useMessageCache = () => {
-    const [cache, setCache] = useState<{
-      data: PresetMessage[];
-      timestamp: number;
-      friendIds: string[];
-    }>({
-      data: [],
-      timestamp: 0,
-      friendIds: [],
-    });
+  // Phase 2.1: 安全なキャッシュ基盤の構築（一時的に無効化）
+  // const useMessageCache = () => {
+  //   const [cache, setCache] = useState<{
+  //     data: PresetMessage[];
+  //     timestamp: number;
+  //     friendIds: string[];
+  //   }>({
+  //     data: [],
+  //     timestamp: 0,
+  //     friendIds: [],
+  //   });
 
-    // キャッシュの有効性をチェック（依存関係を最小限に）
-    const isCacheValid = useCallback(
-      (currentFriendIds: string[]) => {
-        const now = Date.now();
-        const CACHE_DURATION = 5 * 60 * 1000; // 5分間キャッシュ
+  //   // キャッシュの有効性をチェック（依存関係を最小限に）
+  //   const isCacheValid = useCallback(
+  //     (currentFriendIds: string[]) => {
+  //       const now = Date.now();
+  //       const CACHE_DURATION = 5 * 60 * 1000; // 5分間キャッシュ
 
-        // キャッシュが古い場合は無効
-        if (now - cache.timestamp > CACHE_DURATION) {
-          return false;
-        }
+  //       // キャッシュが古い場合は無効
+  //       if (now - cache.timestamp > CACHE_DURATION) {
+  //         return false;
+  //       }
 
-        // ともだちリストが変更された場合は無効
-        const friendIdsChanged =
-          currentFriendIds.length !== cache.friendIds.length ||
-          !currentFriendIds.every((id) => cache.friendIds.includes(id));
+  //       // ともだちリストが変更された場合は無効
+  //       const friendIdsChanged =
+  //         currentFriendIds.length !== cache.friendIds.length ||
+  //         !currentFriendIds.every((id) => cache.friendIds.includes(id));
 
-        return !friendIdsChanged;
-      },
-      [cache.timestamp, cache.friendIds]
-    );
+  //       return !friendIdsChanged;
+  //     },
+  //     [cache.timestamp, cache.friendIds]
+  //   );
 
-    // キャッシュを更新（依存関係なし）
-    const updateCache = useCallback(
-      (newData: PresetMessage[], friendIds: string[]) => {
-        setCache({
-          data: newData,
-          timestamp: Date.now(),
-          friendIds: friendIds,
-        });
-      },
-      []
-    );
+  //   // キャッシュを更新（依存関係なし）
+  //   const updateCache = useCallback(
+  //     (newData: PresetMessage[], friendIds: string[]) => {
+  //       setCache({
+  //         data: newData,
+  //         timestamp: Date.now(),
+  //         friendIds: friendIds,
+  //       });
+  //     },
+  //     []
+  //   );
 
-    // キャッシュをクリア（依存関係なし）
-    const clearCache = useCallback(() => {
-      setCache({
-        data: [],
-        timestamp: 0,
-        friendIds: [],
-      });
-    }, []);
+  //   // キャッシュをクリア（依存関係なし）
+  //   const clearCache = useCallback(() => {
+  //     setCache({
+  //       data: [],
+  //       timestamp: 0,
+  //       friendIds: [],
+  //     });
+  //   }, []);
 
-    return {
-      cache,
-      isCacheValid,
-      updateCache,
-      clearCache,
-    };
-  };
+  //   return {
+  //     cache,
+  //     isCacheValid,
+  //     updateCache,
+  //     clearCache,
+  //   };
+  // };
 
-  const { cache, isCacheValid, updateCache, clearCache } = useMessageCache();
-
-  // Phase 2.3: エラーハンドリングとパフォーマンス監視（無限ループ検出機能を削除）
-  const [performanceMetrics, setPerformanceMetrics] = useState({
-    apiCalls: 0,
-    cacheHits: 0,
-    errors: 0,
-    lastCallTime: 0,
-  });
+  // Phase 2.3: エラーハンドリングとパフォーマンス監視（一時的に無効化）
+  // const { cache, isCacheValid, updateCache, clearCache } = useMessageCache();
+  // const [performanceMetrics, setPerformanceMetrics] = useState({
+  //   apiCalls: 0,
+  //   cacheHits: 0,
+  //   errors: 0,
+  //   lastCallTime: 0,
+  // });
 
   // Phase 2.5: Pull to Refresh機能（Step 1: 最小限の実装）
   const usePullToRefresh = () => {
@@ -658,25 +657,22 @@ export default function Main() {
   // Phase 2.2: 依存関係の最適化（古いコードを削除）
 
   // Phase 2.3: 基本的なプリセットマッチメッセージ取得（キャッシュ機能を一時的に無効化）
-  const fetchPresetMessages = useCallback(
-    async (forceRefresh = false) => {
-      try {
-        const uid = localStorage.getItem("userId");
-        console.log("fetchPresetMessages called (基本モード)");
+  const fetchPresetMessages = useCallback(async () => {
+    try {
+      const uid = localStorage.getItem("userId");
+      console.log("fetchPresetMessages called (基本モード)");
 
-        console.log("APIからメッセージを取得");
-        const res = await axios.get<PresetMessage[]>("/api/preset-message", {
-          headers: { userId: uid }, // ユーザーIDをヘッダーで送信
-        });
+      console.log("APIからメッセージを取得");
+      const res = await axios.get<PresetMessage[]>("/api/preset-message", {
+        headers: { userId: uid }, // ユーザーIDをヘッダーで送信
+      });
 
-        setPresetMessages(sortByNewest(res.data));
-      } catch (e) {
-        console.error("preset取得エラー:", e);
-        setPresetMessages([]);
-      }
-    },
-    [setPresetMessages]
-  );
+      setPresetMessages(sortByNewest(res.data));
+    } catch (e) {
+      console.error("preset取得エラー:", e);
+      setPresetMessages([]);
+    }
+  }, [setPresetMessages]);
 
   // チャットリスト（一時的に無効化 - 500エラー回避）
   const fetchChatList = useCallback(
@@ -1380,7 +1376,7 @@ export default function Main() {
       router.push(`/chat/${queueHead.chatId}`);
       handleClosePopup(); // 通知を閉じる
     }
-  }, [queueHead?.chatId, router]);
+  }, [queueHead?.chatId, router, handleClosePopup]);
 
   return (
     <>
