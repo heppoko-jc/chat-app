@@ -25,9 +25,8 @@ export async function GET(req: NextRequest) {
       where: {
         count: { gt: 0 },
         lastSentAt: { gte: expiryDate }, // 24時間以内のメッセージのみ取得
-        // ともだちが送信したメッセージのみに制限
-        // ともだちが0人の場合は空配列でフィルタリング（0件になる）
-        createdBy: { in: friendIds },
+        // 自分が送信したメッセージ + ともだちが送信したメッセージ
+        createdBy: { in: [userId, ...friendIds].filter(Boolean) },
       },
       orderBy: { lastSentAt: "desc" },
       select: {
