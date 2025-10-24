@@ -6,14 +6,28 @@ import { getMatchExpiryDate } from "@/lib/match-utils";
 
 const prisma = new PrismaClient();
 
-export async function GET() {
+export async function GET(req: NextRequest) {
   try {
+    const userId = req.headers.get("userId"); // 現在のユーザーIDを取得
     const expiryDate = getMatchExpiryDate();
+
+    // 現在のユーザーのともだち一覧を取得
+    let friendIds: string[] = [];
+    if (userId) {
+      const friends = await prisma.friend.findMany({
+        where: { userId },
+        select: { friendId: true },
+      });
+      friendIds = friends.map((f) => f.friendId);
+    }
 
     const messages = await prisma.presetMessage.findMany({
       where: {
         count: { gt: 0 },
         lastSentAt: { gte: expiryDate }, // 24時間以内のメッセージのみ取得
+        // ともだちが送信したメッセージのみに制限
+        // ともだちが0人の場合は空配列でフィルタリング（0件になる）
+        createdBy: { in: friendIds },
       },
       orderBy: { lastSentAt: "desc" },
       select: {
