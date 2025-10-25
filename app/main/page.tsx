@@ -1427,13 +1427,23 @@ export default function Main() {
           </div>
         </div>
 
-        <p className="text-[15px] text-gray-700 text-center leading-snug mt-1 font-medium">
-          24時間以内にマッチできるかな？
-          <br />
-          ことばと相手を選んで送ってみましょう。
-          <br />
-          登録した{friends.size}人が誰かに送ったメッセージです👇
-        </p>
+        {friends.size === 0 ? (
+          <p className="text-[15px] text-gray-700 text-center leading-snug mt-1 font-medium">
+            24時間以内にマッチできるかな？
+            <br />
+            ことばと相手を選んで送ってみましょう。
+            <br />
+            まずはマッチユーザーを登録してください👇
+          </p>
+        ) : (
+          <p className="text-[15px] text-gray-700 text-center leading-snug mt-1 font-medium">
+            24時間以内にマッチできるかな？
+            <br />
+            ことばと相手を選んで送ってみましょう。
+            <br />
+            登録した{friends.size}人が誰かに送ったメッセージです👇
+          </p>
+        )}
       </div>
 
       {/* 送信待機バー（ヘッダー直下より少し下） */}
@@ -2016,13 +2026,13 @@ export default function Main() {
                 >
                   <Image
                     src="/icons/friends.png"
-                    alt="ともだち登録"
+                    alt="マッチユーザー登録"
                     width={48}
                     height={48}
                     className="mb-4"
                   />
                   <p className="text-lg font-bold text-orange-600 text-center">
-                    ともだち登録しましょう↑！
+                    マッチユーザー登録しましょう↑！
                   </p>
                 </div>
               ) : (
