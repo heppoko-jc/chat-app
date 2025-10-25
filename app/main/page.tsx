@@ -1433,7 +1433,9 @@ export default function Main() {
             <br />
             ことばと相手を選んで送ってみましょう。
             <br />
-            まずはマッチユーザーを登録してください👇
+            まずは
+            <span className="text-orange-500 font-bold">マッチユーザー</span>
+            を登録してください
           </p>
         ) : (
           <p className="text-[15px] text-gray-700 text-center leading-snug mt-1 font-medium">
