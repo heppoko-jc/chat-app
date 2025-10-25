@@ -1441,7 +1441,9 @@ export default function Main() {
             <br />
             ことばと相手を選んで送ってみましょう。
             <br />
-            登録した{friends.size}人が誰かに送ったメッセージです👇
+            登録した
+            <span className="text-orange-500 font-bold">{friends.size}</span>
+            人が誰かに送ったメッセージです👇
           </p>
         )}
       </div>
