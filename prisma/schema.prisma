@@ -24,6 +24,7 @@ model User {
   sentMessages      SentMessage[]      @relation("SentMessages")
   friends           Friend[]           @relation("UserFriends")
   friendOf          Friend[]           @relation("FriendOf")
+  friendRestriction FriendRestriction? @relation("UserFriendRestriction")
 }
 
 model SentMessage {
@@ -105,4 +106,14 @@ model Friend {
   
   @@unique([userId, friendId]) // 重複防止
   @@index([userId])
+}
+
+model FriendRestriction {
+  id         String   @id @default(uuid())
+  userId     String   @unique
+  lastChange DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  
+  user       User     @relation("UserFriendRestriction", fields: [userId], references: [id])
 }

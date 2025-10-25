@@ -1,7 +1,7 @@
 // app/friends/page.tsx
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import axios from "axios";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -11,6 +11,7 @@ interface User {
   id: string;
   name: string;
   bio: string;
+  createdAt: string;
 }
 
 interface Friend {
@@ -23,18 +24,169 @@ export default function FriendsPage() {
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [friends, setFriends] = useState<Set<string>>(new Set());
+  const [initialFriends, setInitialFriends] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [processingUsers, setProcessingUsers] = useState<Set<string>>(
     new Set()
   );
   const [isProcessing, setIsProcessing] = useState(false);
+  const [showWarning, setShowWarning] = useState(false);
+  const [warningType, setWarningType] = useState<
+    "min_friends" | "daily_limit" | "time_remaining" | null
+  >(null);
+  const [remainingTime, setRemainingTime] = useState<string>("");
+  const [isRestricted, setIsRestricted] = useState(false);
+
+  // ソート済みユーザーリスト（登録済みが上、登録順でソート）
+  const sortedUsers = useMemo(() => {
+    return users.slice().sort((a, b) => {
+      const aIsFriend = friends.has(a.id);
+      const bIsFriend = friends.has(b.id);
+
+      // 登録済みの人が上に来る
+      if (aIsFriend && !bIsFriend) return -1;
+      if (!aIsFriend && bIsFriend) return 1;
+
+      // 同じ登録状態の場合、登録順（createdAt順）
+      return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+    });
+  }, [users, friends]);
+
+  // 変更の検出
+  const hasChanges = () => {
+    return !setsEqual(friends, initialFriends);
+  };
+
+  // 新規ユーザーが追加されたかチェック
+  const hasNewUserAdded = () => {
+    for (const friendId of friends) {
+      if (!initialFriends.has(friendId) && isNewUser(friendId)) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  // ユーザーが削除されたかチェック
+  const hasUserRemoved = () => {
+    for (const friendId of initialFriends) {
+      if (!friends.has(friendId)) {
+        return true;
+      }
+    }
+    return false;
+  };
+
+  // 新規ユーザーかどうかチェック
+  const isNewUser = (userId: string) => {
+    const user = users.find((u) => u.id === userId);
+    if (!user) return false;
+    const userCreatedAt = new Date(user.createdAt);
+    const today = new Date();
+    const isToday = userCreatedAt.toDateString() === today.toDateString();
+    return isToday;
+  };
+
+  // セットの等価性チェック
+  const setsEqual = (set1: Set<string>, set2: Set<string>) => {
+    if (set1.size !== set2.size) return false;
+    for (const item of set1) {
+      if (!set2.has(item)) return false;
+    }
+    return true;
+  };
+
+  // 制限状態をチェック
+  const checkRestrictionStatus = async () => {
+    if (!currentUserId) return { canChange: true, remainingTime: null };
+
+    try {
+      const response = await axios.get("/api/friends/restriction", {
+        headers: { userId: currentUserId },
+      });
+      return response.data;
+    } catch (error) {
+      console.error("制限状態チェックエラー:", error);
+      // エラー時は制限を適用しない（安全側に倒す）
+      return { canChange: true, remainingTime: null };
+    }
+  };
+
+  // 制限を記録
+  const recordChange = async () => {
+    if (!currentUserId) return;
+    try {
+      await axios.post(
+        "/api/friends/restriction",
+        {},
+        {
+          headers: { userId: currentUserId },
+        }
+      );
+    } catch (error) {
+      console.error("制限状態更新エラー:", error);
+    }
+  };
 
   // 戻るボタンの処理
-  const handleBack = () => {
+  const handleBack = async () => {
     if (isProcessing) {
       alert("ともだち設定を保存中です。");
       return;
     }
+
+    // ①2人以上登録のチェック（最優先）
+    if (friends.size < 2) {
+      setWarningType("min_friends");
+      setShowWarning(true);
+      return;
+    }
+
+    // ②変更があった場合のチェック
+    if (hasChanges()) {
+      const { canChange, remainingTime } = await checkRestrictionStatus();
+
+      if (!canChange) {
+        setWarningType("time_remaining");
+        setRemainingTime(remainingTime || "");
+        setShowWarning(true);
+        return;
+      }
+
+      // 新規ユーザー追加のみの場合は特別扱い
+      if (hasNewUserAdded() && !hasUserRemoved()) {
+        // 新規ユーザー追加のみの場合は警告なしで記録（楽観的更新）
+        recordChange().catch(console.error);
+        router.back();
+        return;
+      }
+
+      // その他の変更の場合は警告を表示
+      setWarningType("daily_limit");
+      setShowWarning(true);
+      return;
+    }
+
+    // 変更がない場合はそのまま戻る
+    router.back();
+  };
+
+  // 警告ポップアップの処理
+  const handleWarningClose = () => {
+    setShowWarning(false);
+    setWarningType(null);
+
+    // 制限中の場合は元の設定に戻す
+    if (isRestricted) {
+      setFriends(new Set(initialFriends));
+    }
+  };
+
+  const handleConfirmBack = () => {
+    // 変更を記録（楽観的更新）
+    recordChange().catch(console.error);
+    setShowWarning(false);
+    setWarningType(null);
     router.back();
   };
 
@@ -72,10 +224,24 @@ export default function FriendsPage() {
         axios.get<Friend[]>("/api/friends", {
           headers: { userId: uid },
         }),
+        // 制限状態もチェック
+        axios.get("/api/friends/restriction", {
+          headers: { userId: uid },
+        }),
       ])
-        .then(([usersRes, friendsRes]) => {
+        .then(([usersRes, friendsRes, restrictionRes]) => {
           setUsers(usersRes.data.filter((u) => u.id !== uid));
-          setFriends(new Set(friendsRes.data.map((f) => f.friendId)));
+          const friendsSet = new Set(friendsRes.data.map((f) => f.friendId));
+          setFriends(friendsSet);
+          setInitialFriends(new Set(friendsSet));
+
+          // 制限状態をチェック
+          const { canChange, remainingTime } = restrictionRes.data;
+          if (!canChange) {
+            setIsRestricted(true);
+            setRemainingTime(remainingTime || "");
+          }
+
           setLoading(false);
         })
         .catch((error) => {
@@ -88,6 +254,22 @@ export default function FriendsPage() {
   // ともだちタグの切り替え（楽観的更新 + ボタン無効化）
   const toggleFriend = async (userId: string) => {
     if (!currentUserId || processingUsers.has(userId)) return;
+
+    // 制限中の場合は新規ユーザー追加以外を制限
+    if (isRestricted) {
+      const isCurrentlyFriend = friends.has(userId);
+      const isNewUserToday = isNewUser(userId);
+
+      // 新規ユーザーを追加する場合は許可
+      if (!isCurrentlyFriend && isNewUserToday) {
+        // 新規ユーザー追加は許可
+      } else {
+        // その他の変更は制限
+        setWarningType("time_remaining");
+        setShowWarning(true);
+        return;
+      }
+    }
 
     const isCurrentlyFriend = friends.has(userId);
 
@@ -171,24 +353,40 @@ export default function FriendsPage() {
               className="cursor-pointer"
             />
           </button>
-          <h1 className="text-xl font-bold text-orange-500">ともだち登録</h1>
+          <h1 className="text-xl font-bold text-orange-500">
+            マッチユーザー登録
+          </h1>
           <div className="w-10" />
         </div>
         <p className="text-sm text-gray-600 text-center mt-2">
-          ここで選んだ人だけがともだちリストに表示されます
+          ここで選んだ人とマッチします。
         </p>
-        <p className="text-xs text-gray-500 text-center mt-1">
-          相手には何も通知されません
-        </p>
-        <p className="text-xs text-orange-500 text-center mt-1 font-bold">
-          ともだち: {friends.size}人
-        </p>
+        {!isRestricted && (
+          <p className="text-xs text-gray-500 text-center mt-1">
+            設定編集は1日一回のみ可能。相手には何も通知されません。
+          </p>
+        )}
+        {isRestricted && (
+          <p className="text-xs text-gray-500 text-center mt-1">
+            相手には何も通知されません。
+          </p>
+        )}
+        {isRestricted ? (
+          <p className="text-xs text-red-500 text-center mt-1 font-bold">
+            マッチユーザー: {friends.size}人。次の設定編集は{remainingTime}
+            後から可能になります。（新規ユーザーはいつでも追加可能）
+          </p>
+        ) : (
+          <p className="text-xs text-orange-500 text-center mt-1 font-bold">
+            マッチユーザー: {friends.size}人
+          </p>
+        )}
       </div>
 
       {/* コンテンツ（スクロール可能） */}
       <div className="flex-1 overflow-y-auto px-4 py-6 pb-24">
         <div className="space-y-3">
-          {users.map((user) => (
+          {sortedUsers.map((user) => (
             <div
               key={user.id}
               className="flex items-center gap-3 p-4 rounded-2xl shadow-md border border-orange-200 bg-white"
@@ -212,9 +410,15 @@ export default function FriendsPage() {
               {/* ともだちボタン */}
               <button
                 onClick={() => toggleFriend(user.id)}
-                disabled={processingUsers.has(user.id)}
+                disabled={
+                  processingUsers.has(user.id) ||
+                  (isRestricted &&
+                    !(!friends.has(user.id) && isNewUser(user.id)))
+                }
                 className={`flex items-center gap-2 px-3 py-2 rounded-full transition-opacity ${
-                  processingUsers.has(user.id)
+                  processingUsers.has(user.id) ||
+                  (isRestricted &&
+                    !(!friends.has(user.id) && isNewUser(user.id)))
                     ? "opacity-50 cursor-not-allowed"
                     : ""
                 }`}
@@ -232,21 +436,85 @@ export default function FriendsPage() {
                         ? "/icons/add-friend.png"
                         : "/icons/add.png"
                     }
-                    alt={friends.has(user.id) ? "ともだち解除" : "ともだち追加"}
+                    alt={friends.has(user.id) ? "登録解除" : "登録追加"}
                     width={20}
                     height={20}
                   />
                 )}
                 {processingUsers.has(user.id) ? (
                   <span className="text-sm font-bold">処理中...</span>
+                ) : isRestricted &&
+                  !(!friends.has(user.id) && isNewUser(user.id)) ? (
+                  <span className="text-sm font-bold">制限中</span>
                 ) : friends.has(user.id) ? (
-                  <span className="text-sm font-bold">ともだち</span>
+                  <span className="text-sm font-bold">登録済み</span>
                 ) : null}
               </button>
             </div>
           ))}
         </div>
       </div>
+
+      {/* 警告ポップアップ */}
+      {showWarning && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl p-6 mx-4 max-w-sm w-full">
+            {warningType === "min_friends" && (
+              <>
+                <h3 className="text-lg font-bold text-gray-800 mb-4 text-center">
+                  2人以上登録してください。
+                </h3>
+                <button
+                  onClick={handleWarningClose}
+                  className="w-full bg-orange-500 text-white py-3 rounded-xl font-bold"
+                >
+                  閉じる
+                </button>
+              </>
+            )}
+            {warningType === "daily_limit" && (
+              <>
+                <h3 className="text-lg font-bold text-gray-800 mb-2 text-center">
+                  登録状態の変更は1日一回まで
+                </h3>
+                <p className="text-sm text-gray-600 mb-4 text-center">
+                  今日は今回限りになります。本当にメイン画面に戻りますか？（新規参加者の追加はいつでもできます）
+                </p>
+                <div className="space-y-2">
+                  <button
+                    onClick={handleConfirmBack}
+                    className="w-full bg-orange-500 text-white py-3 rounded-xl font-bold"
+                  >
+                    メイン画面に戻る
+                  </button>
+                  <button
+                    onClick={handleWarningClose}
+                    className="w-full bg-gray-200 text-gray-700 py-3 rounded-xl font-bold"
+                  >
+                    登録状態を確認する
+                  </button>
+                </div>
+              </>
+            )}
+            {warningType === "time_remaining" && (
+              <>
+                <h3 className="text-lg font-bold text-gray-800 mb-2 text-center">
+                  変更は1日一回です
+                </h3>
+                <p className="text-sm text-gray-600 mb-4 text-center">
+                  次は{remainingTime}後に変更が可能です。
+                </p>
+                <button
+                  onClick={handleWarningClose}
+                  className="w-full bg-orange-500 text-white py-3 rounded-xl font-bold"
+                >
+                  閉じる
+                </button>
+              </>
+            )}
+          </div>
+        </div>
+      )}
 
       <FixedTabBar />
     </div>

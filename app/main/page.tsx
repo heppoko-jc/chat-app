@@ -1432,7 +1432,7 @@ export default function Main() {
           <br />
           ことばと相手を選んで送ってみましょう。
           <br />
-          参加者が誰かに送ったメッセージが並んでいます。
+          登録した{friends.size}人が誰かに送ったメッセージです👇
         </p>
       </div>
 
@@ -2111,7 +2111,7 @@ export default function Main() {
               step === "select-recipients" ? "bg-orange-200 shadow" : ""
             }`}
           >
-            ともだちリスト
+            送信先リスト
           </button>
         </div>
       </div>
