@@ -77,14 +77,14 @@ export default function FriendsPage() {
     return false;
   };
 
-  // 新規ユーザーかどうかチェック
+  // 新規ユーザーかどうかチェック（2日以内）
   const isNewUser = (userId: string) => {
     const user = users.find((u) => u.id === userId);
-    if (!user) return false;
+    if (!user || !user.createdAt) return false;
     const userCreatedAt = new Date(user.createdAt);
-    const today = new Date();
-    const isToday = userCreatedAt.toDateString() === today.toDateString();
-    return isToday;
+    const now = new Date();
+    const twoDaysAgo = new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000);
+    return userCreatedAt >= twoDaysAgo;
   };
 
   // セットの等価性チェック
@@ -144,20 +144,20 @@ export default function FriendsPage() {
 
     // ②変更があった場合のチェック
     if (hasChanges()) {
+      // 新規ユーザー追加のみの場合は制限に関係なく特別扱い
+      if (hasNewUserAdded() && !hasUserRemoved()) {
+        // 新規ユーザー追加のみの場合は警告なしで記録（楽観的更新）
+        recordChange().catch(console.error);
+        router.back();
+        return;
+      }
+
       const { canChange, remainingTime } = await checkRestrictionStatus();
 
       if (!canChange) {
         setWarningType("time_remaining");
         setRemainingTime(remainingTime || "");
         setShowWarning(true);
-        return;
-      }
-
-      // 新規ユーザー追加のみの場合は特別扱い
-      if (hasNewUserAdded() && !hasUserRemoved()) {
-        // 新規ユーザー追加のみの場合は警告なしで記録（楽観的更新）
-        recordChange().catch(console.error);
-        router.back();
         return;
       }
 

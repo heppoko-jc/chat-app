@@ -29,7 +29,7 @@ export async function GET() {
           },
         ],
       },
-      select: { id: true, name: true, bio: true },
+      select: { id: true, name: true, bio: true, createdAt: true },
     });
 
     return NextResponse.json(users);
