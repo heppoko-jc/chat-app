@@ -28,11 +28,11 @@ export async function GET(req: NextRequest) {
     const timeDiff = now.getTime() - restriction.lastChange.getTime();
     const hoursDiff = timeDiff / (1000 * 60 * 60);
 
-    if (hoursDiff >= 24) {
+    if (hoursDiff >= 3) {
       return NextResponse.json({ canChange: true, remainingTime: null });
     }
 
-    const remainingHours = Math.ceil(24 - hoursDiff);
+    const remainingHours = Math.ceil(3 - hoursDiff);
     return NextResponse.json({
       canChange: false,
       remainingTime: `${remainingHours}時間`,

@@ -37,11 +37,17 @@ export default function FriendsPage() {
   const [remainingTime, setRemainingTime] = useState<string>("");
   const [isRestricted, setIsRestricted] = useState(false);
 
-  // ソート済みユーザーリスト（登録済みが上、登録順でソート）
-  const sortedUsers = useMemo(() => {
-    return users.slice().sort((a, b) => {
-      const aIsFriend = friends.has(a.id);
-      const bIsFriend = friends.has(b.id);
+  // ページ滞在中の表示順序を固定するための状態
+  const [displayUsers, setDisplayUsers] = useState<User[]>([]);
+
+  // 初期表示時のみのソート関数
+  const createSortedUsersList = (
+    usersList: User[],
+    friendsSet: Set<string>
+  ) => {
+    return usersList.slice().sort((a, b) => {
+      const aIsFriend = friendsSet.has(a.id);
+      const bIsFriend = friendsSet.has(b.id);
 
       // 登録済みの人が上に来る
       if (aIsFriend && !bIsFriend) return -1;
@@ -50,7 +56,7 @@ export default function FriendsPage() {
       // 同じ登録状態の場合、登録順（createdAt順）
       return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
     });
-  }, [users, friends]);
+  };
 
   // 変更の検出
   const hasChanges = () => {
@@ -230,10 +236,15 @@ export default function FriendsPage() {
         }),
       ])
         .then(([usersRes, friendsRes, restrictionRes]) => {
-          setUsers(usersRes.data.filter((u) => u.id !== uid));
+          const filteredUsers = usersRes.data.filter((u) => u.id !== uid);
+          setUsers(filteredUsers);
           const friendsSet = new Set(friendsRes.data.map((f) => f.friendId));
           setFriends(friendsSet);
           setInitialFriends(new Set(friendsSet));
+
+          // 初期表示順序を設定（ページ滞在中はこの順序を維持）
+          const sortedUsers = createSortedUsersList(filteredUsers, friendsSet);
+          setDisplayUsers(sortedUsers);
 
           // 制限状態をチェック
           const { canChange, remainingTime } = restrictionRes.data;
@@ -363,7 +374,7 @@ export default function FriendsPage() {
         </p>
         {!isRestricted && (
           <p className="text-xs text-gray-500 text-center mt-1">
-            設定編集は1日一回のみ可能。相手には何も通知されません。
+            他のユーザーには何も通知されません。また一度設定を変更すると3時間ロックされます。
           </p>
         )}
         {isRestricted && (
@@ -386,7 +397,7 @@ export default function FriendsPage() {
       {/* コンテンツ（スクロール可能） */}
       <div className="flex-1 overflow-y-auto px-4 py-6 pb-24">
         <div className="space-y-3">
-          {sortedUsers.map((user) => (
+          {displayUsers.map((user) => (
             <div
               key={user.id}
               className="flex items-center gap-3 p-4 rounded-2xl shadow-md border border-orange-200 bg-white"
@@ -475,7 +486,7 @@ export default function FriendsPage() {
             {warningType === "daily_limit" && (
               <>
                 <h3 className="text-lg font-bold text-gray-800 mb-2 text-center">
-                  登録状態の変更は1日一回まで
+                  一度変更すると3時間ロックされます
                 </h3>
                 <p className="text-sm text-gray-600 mb-4 text-center">
                   今日は今回限りになります。本当にメイン画面に戻りますか？（新規参加者の追加はいつでもできます）
@@ -499,7 +510,7 @@ export default function FriendsPage() {
             {warningType === "time_remaining" && (
               <>
                 <h3 className="text-lg font-bold text-gray-800 mb-2 text-center">
-                  変更は1日一回です
+                  一度変更すると3時間ロックされます
                 </h3>
                 <p className="text-sm text-gray-600 mb-4 text-center">
                   次は{remainingTime}後に変更が可能です。
