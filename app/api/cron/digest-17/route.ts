@@ -7,6 +7,73 @@ import webpush, { PushSubscription as WebPushSubscription } from "web-push";
 
 const prisma = new PrismaClient();
 
+// バッチ処理で全ユーザーのフィード新着メッセージ数を効率的に取得
+async function getAllUsersFeedNewCounts(): Promise<Map<string, number>> {
+  const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+  try {
+    // 1) 全てのFriend関係を取得
+    const allFriends = await prisma.friend.findMany({
+      select: {
+        userId: true,
+        friendId: true,
+      },
+    });
+
+    // 2) 過去24時間以内の新着PresetMessageを取得
+    const newPresetMessages = await prisma.presetMessage.findMany({
+      where: {
+        lastSentAt: { gte: twentyFourHoursAgo },
+        count: { gt: 0 }, // 実際に送信されたメッセージのみ
+      },
+      select: {
+        id: true,
+        createdBy: true,
+        lastSentAt: true,
+      },
+    });
+
+    // 3) ユーザーごとのフィード対象ユーザーIDセットを作成
+    const userFeedTargets = new Map<string, Set<string>>();
+
+    // 全ユーザーを取得（自分自身も含める）
+    const allUsers = await prisma.user.findMany({
+      select: { id: true },
+    });
+
+    // 各ユーザーの初期化（自分自身を含める）
+    allUsers.forEach((user) => {
+      userFeedTargets.set(user.id, new Set([user.id]));
+    });
+
+    // Friend関係を追加
+    allFriends.forEach((friend) => {
+      const targetSet = userFeedTargets.get(friend.userId);
+      if (targetSet) {
+        targetSet.add(friend.friendId);
+      }
+    });
+
+    // 4) ユーザーごとのフィード新着メッセージ数をカウント
+    const userFeedCounts = new Map<string, number>();
+
+    for (const [userId, targetUserIds] of userFeedTargets) {
+      const count = newPresetMessages.filter((msg) =>
+        targetUserIds.has(msg.createdBy)
+      ).length;
+
+      if (count > 0) {
+        userFeedCounts.set(userId, count);
+      }
+    }
+
+    return userFeedCounts;
+  } catch (error) {
+    console.error("Error in getAllUsersFeedNewCounts:", error);
+    return new Map();
+  }
+}
+
 // バッチ処理で全ユーザーの未マッチメッセージ数を効率的に取得
 async function getAllUsersUnmatchedCounts(): Promise<Map<string, number>> {
   const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
@@ -115,17 +182,30 @@ export async function GET() {
   try {
     console.log("🚀 Digest notification started (17:00 JST)");
 
-    // 1) 効率的に全ユーザーの未マッチ数を取得
-    const userUnmatchedCounts = await getAllUsersUnmatchedCounts();
+    // 1) 効率的に全ユーザーの未マッチ数とフィード新着数を取得
+    const [userUnmatchedCounts, userFeedNewCounts] = await Promise.all([
+      getAllUsersUnmatchedCounts(),
+      getAllUsersFeedNewCounts(),
+    ]);
+
     console.log(
       `📊 Processed ${userUnmatchedCounts.size} users with unmatched messages`
     );
+    console.log(
+      `📊 Processed ${userFeedNewCounts.size} users with feed new messages`
+    );
 
-    if (userUnmatchedCounts.size === 0) {
-      console.log("📭 No users with unmatched messages found");
+    // 通知対象ユーザーの統合（未マッチまたはフィード新着があるユーザー）
+    const allTargetUserIds = new Set([
+      ...userUnmatchedCounts.keys(),
+      ...userFeedNewCounts.keys(),
+    ]);
+
+    if (allTargetUserIds.size === 0) {
+      console.log("📭 No users with notifications to send");
       return NextResponse.json({
         ok: true,
-        message: "No unmatched messages found",
+        message: "No notifications to send",
         stats: {
           processed: 0,
           sent: 0,
@@ -135,11 +215,11 @@ export async function GET() {
       });
     }
 
-    // 2) アクティブな購読を取得（未マッチメッセージがあるユーザーのみ）
+    // 2) アクティブな購読を取得（通知対象ユーザーのみ）
     const allActiveSubs = await prisma.pushSubscription.findMany({
       where: {
         isActive: true,
-        userId: { in: Array.from(userUnmatchedCounts.keys()) },
+        userId: { in: Array.from(allTargetUserIds) },
       },
       select: { endpoint: true, subscription: true, userId: true },
     });
@@ -178,38 +258,72 @@ export async function GET() {
     // 4) 通知送信
     for (const [userId, subs] of subsByUser) {
       const unmatchedCount = userUnmatchedCounts.get(userId) || 0;
-      if (unmatchedCount === 0) continue;
+      const feedNewCount = userFeedNewCounts.get(userId) || 0;
 
-      // 通知メッセージの決定
-      const notificationBody =
-        unmatchedCount === 1
-          ? "あなたに誰かからメッセージが来ています（24時間以内）"
-          : "あなたに誰かから複数のメッセージが来ています（24時間以内）";
+      // 未マッチメッセージ通知
+      if (unmatchedCount > 0) {
+        const notificationBody =
+          unmatchedCount === 1
+            ? "あなたに誰かからメッセージが来ています（24時間以内）"
+            : "あなたに誰かから複数のメッセージが来ています（24時間以内）";
 
-      const payload = JSON.stringify({
-        type: "digest_user",
-        title: "新着メッセージ",
-        body: notificationBody,
-        url: "/notifications",
-        icon: "/icons/icon-192x192.png",
-        badge: "/icons/icon-144x144.png",
-        timestamp: Date.now(),
-        data: {
-          unmatchedCount,
-          userId,
-        },
-      });
+        const payload = JSON.stringify({
+          type: "digest_unmatched",
+          title: "新着メッセージ",
+          body: notificationBody,
+          url: "/notifications",
+          icon: "/icons/icon-192x192.png",
+          badge: "/icons/icon-144x144.png",
+          timestamp: Date.now(),
+          data: {
+            unmatchedCount,
+            userId,
+          },
+        });
 
-      const deactivated = await sendToSubsBatch(subs, payload);
-      deactivated.forEach((ep) => endpointsToDeactivate.add(ep));
+        const deactivated = await sendToSubsBatch(subs, payload);
+        deactivated.forEach((ep) => endpointsToDeactivate.add(ep));
 
-      const successfulSends = subs.length - deactivated.length;
-      if (successfulSends > 0) {
-        notificationsSent += successfulSends;
+        const successfulSends = subs.length - deactivated.length;
+        if (successfulSends > 0) {
+          notificationsSent += successfulSends;
+          console.log(
+            `📱 Sent unmatched notification to user ${userId}: ${unmatchedCount} messages`
+          );
+        }
+      }
+
+      // フィード新着メッセージ通知
+      if (feedNewCount > 0) {
+        const feedPayload = JSON.stringify({
+          type: "digest_feed",
+          title: "新着メッセージ",
+          body: `今日はこれまでに${feedNewCount}件の新しいメッセージが追加されました`,
+          url: "/main",
+          icon: "/icons/icon-192x192.png",
+          badge: "/icons/icon-144x144.png",
+          timestamp: Date.now(),
+          data: {
+            feedNewCount,
+            userId,
+          },
+        });
+
+        const feedDeactivated = await sendToSubsBatch(subs, feedPayload);
+        feedDeactivated.forEach((ep) => endpointsToDeactivate.add(ep));
+
+        const feedSuccessfulSends = subs.length - feedDeactivated.length;
+        if (feedSuccessfulSends > 0) {
+          notificationsSent += feedSuccessfulSends;
+          console.log(
+            `📱 Sent feed notification to user ${userId}: ${feedNewCount} new messages`
+          );
+        }
+      }
+
+      // ユーザーが何らかの通知を受け取った場合のカウント
+      if (unmatchedCount > 0 || feedNewCount > 0) {
         usersNotified++;
-        console.log(
-          `📱 Sent notification to user ${userId}: ${unmatchedCount} unmatched messages`
-        );
       }
     }
 
@@ -235,6 +349,8 @@ export async function GET() {
       message: `Successfully sent notifications to ${usersNotified} users`,
       stats: {
         usersWithUnmatchedMessages: userUnmatchedCounts.size,
+        usersWithFeedNewMessages: userFeedNewCounts.size,
+        totalTargetUsers: allTargetUserIds.size,
         usersNotified,
         notificationsSent,
         deactivated: endpointsToDeactivate.size,
