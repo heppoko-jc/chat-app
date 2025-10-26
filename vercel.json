@@ -3,5 +3,10 @@
 
   "ignoreCommand": "git diff --quiet HEAD^ HEAD -- prisma/schema.prisma",
 
-  "crons": []
+  "crons": [
+    {
+      "path": "/api/cron/digest-17",
+      "schedule": "0 8 * * *"
+    }
+  ]
 }
