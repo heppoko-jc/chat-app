@@ -1955,9 +1955,11 @@ export default function Main() {
                           </>
                         )}
                         <div className="flex gap-1 mt-1">
-                          <p className="text-xs text-orange-600">
-                            {msg.senderCount}人が送信しました
-                          </p>
+                          {msg.senderCount > 3 && (
+                            <p className="text-xs text-orange-600">
+                              {msg.senderCount}人が送信しました
+                            </p>
+                          )}
                           <p className="text-xs text-gray-400">
                             {formatLastSentAt(msg.lastSentAt)}
                           </p>
@@ -1988,9 +1990,11 @@ export default function Main() {
                       {msg.content}
                     </span>
                     <div className="flex gap-1 items-center mt-2">
-                      <span className="text-xs text-orange-600">
-                        {msg.senderCount}人が送信しました
-                      </span>
+                      {msg.senderCount > 3 && (
+                        <span className="text-xs text-orange-600">
+                          {msg.senderCount}人が送信しました
+                        </span>
+                      )}
                       <span className="text-xs text-gray-400">
                         {formatLastSentAt(msg.lastSentAt)}
                       </span>
