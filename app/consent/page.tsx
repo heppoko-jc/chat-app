@@ -1,10 +1,11 @@
 // app/consent/page.tsx
 
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 
 export default function Consent() {
+  const [name, setName] = useState("");
   const [agreements, setAgreements] = useState({
     participation: false,
     interview: false,
@@ -13,67 +14,84 @@ export default function Consent() {
   });
   const [textScrolledToBottom, setTextScrolledToBottom] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
 
-  // 既存ユーザーのチェック（同意済みならスキップ）
+  // 既存ユーザーのチェック（同意済み && 名前入力済みならスキップ）
   useEffect(() => {
     const existingConsent = localStorage.getItem("experimentConsent");
     if (existingConsent) {
       const consentData = JSON.parse(existingConsent);
-      if (consentData.consentGiven) {
-        // 既に同意済み → ログインページへ
+      if (consentData.consentGiven && consentData.participantName) {
+        // 既に同意済み && 名前入力済み → ログインページへ
         router.replace("/login");
         return;
       }
+      // 同意済みだが名前が未入力 → フォームの初期値として名前を設定
+      if (consentData.participantName) {
+        setName(consentData.participantName);
+      }
+      // 同意済みだが名前が未入力 → そのまま表示（名前入力を促す）
     }
   }, [router]);
 
   // テキスト版スクロール監視
   useEffect(() => {
-    // 開発環境では即座に有効化（デバッグ用）
+    // 開発環境では即座に有効化（問題回避のため）
     if (process.env.NODE_ENV === "development") {
-      console.log("Development mode: Text scroll restrictions relaxed");
-      setTimeout(() => setTextScrolledToBottom(true), 1000);
+      console.log("Development mode: 同意項目を即座に有効化");
+      setTimeout(() => setTextScrolledToBottom(true), 500);
       return;
     }
 
-    // テキスト版では説明書コンテナのスクロール監視
-    const textContainer = document.querySelector(".prose");
-    if (!textContainer) {
-      // フォールバック: コンテナが見つからない場合は3秒後に有効化
-      setTimeout(() => setTextScrolledToBottom(true), 3000);
-      return;
-    }
+    // 少し待ってから要素を探す（Reactのレンダリング完了を待つ）
+    const setupScrollDetection = () => {
+      // スクロール可能な親要素を探す
+      const scrollContainer = document.querySelector(".overflow-y-auto");
 
-    const checkScroll = () => {
-      const parent = textContainer.parentElement;
-      if (!parent) return;
-
-      const scrollTop = parent.scrollTop;
-      const scrollHeight = parent.scrollHeight;
-      const clientHeight = parent.clientHeight;
-
-      // 最下部まで読んだかチェック（余裕を持って30px手前でOK）
-      if (scrollTop + clientHeight >= scrollHeight - 30) {
-        setTextScrolledToBottom(true);
-        parent.removeEventListener("scroll", checkScroll);
+      if (!scrollContainer) {
+        console.warn("スクロールコンテナが見つかりません");
+        // フォールバック: 3秒後に有効化
+        setTimeout(() => setTextScrolledToBottom(true), 3000);
+        return;
       }
-    };
 
-    const parent = textContainer.parentElement;
-    if (parent) {
-      parent.addEventListener("scroll", checkScroll);
+      const checkScroll = () => {
+        const scrollTop = scrollContainer.scrollTop;
+        const scrollHeight = scrollContainer.scrollHeight;
+        const clientHeight = scrollContainer.clientHeight;
+
+        console.log("Scroll check:", {
+          scrollTop,
+          scrollHeight,
+          clientHeight,
+          isAtBottom: scrollTop + clientHeight >= scrollHeight - 50,
+        });
+
+        // 最下部まで読んだかチェック（余裕を持って50px手前でOK）
+        if (scrollTop + clientHeight >= scrollHeight - 50) {
+          console.log("最下部まで到達しました");
+          setTextScrolledToBottom(true);
+          scrollContainer.removeEventListener("scroll", checkScroll);
+        }
+      };
+
+      scrollContainer.addEventListener("scroll", checkScroll);
 
       // 初期チェック（既に最下部にいる場合）
       checkScroll();
 
       return () => {
-        parent.removeEventListener("scroll", checkScroll);
+        scrollContainer.removeEventListener("scroll", checkScroll);
       };
-    } else {
-      // フォールバック: 親要素が見つからない場合は3秒後に有効化
-      setTimeout(() => setTextScrolledToBottom(true), 3000);
-    }
+    };
+
+    // DOM読み込み完了を待つ
+    const timer = setTimeout(setupScrollDetection, 100);
+
+    return () => {
+      clearTimeout(timer);
+    };
   }, []);
 
   const handleAgreementChange = (key: string, value: boolean) => {
@@ -82,6 +100,7 @@ export default function Consent() {
 
   const isFormValid = () => {
     return (
+      name.trim() !== "" && // 名前が必須
       textScrolledToBottom &&
       agreements.participation &&
       agreements.interview &&
@@ -92,7 +111,9 @@ export default function Consent() {
 
   const handleSubmit = async () => {
     if (!isFormValid()) {
-      if (!textScrolledToBottom) {
+      if (!name.trim()) {
+        alert("お名前を入力してください");
+      } else if (!textScrolledToBottom) {
         alert("説明書を最後までスクロールしてお読みください");
       } else {
         alert("全ての必須項目にご同意いただく必要があります");
@@ -107,6 +128,7 @@ export default function Consent() {
       const consentData = {
         consentGiven: true,
         consentDate: new Date().toISOString(),
+        participantName: name.trim(), // 名前も保存
         participation: agreements.participation,
         interview: agreements.interview,
         dataUsage: agreements.dataUsage,
@@ -137,6 +159,24 @@ export default function Consent() {
 
         {/* PDF表示エリア */}
         <div className="p-6">
+          {/* お名前入力欄 */}
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              お名前 <span className="text-red-600">*</span>
+            </label>
+            <input
+              type="text"
+              placeholder="例：山田太郎"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+              disabled={isSubmitting}
+            />
+            <p className="text-xs text-gray-500 mt-1">
+              本実験でのご参加者名をご入力ください
+            </p>
+          </div>
+
           <div className="mb-6">
             <h2 className="text-lg font-semibold mb-3">実験説明書</h2>
             <div className="border rounded-lg bg-white max-h-96 overflow-y-auto">
@@ -563,6 +603,7 @@ export default function Consent() {
 
             {!isFormValid() && (
               <div className="text-sm text-gray-600 mt-2 space-y-1">
+                {!name.trim() && <p>• お名前を入力してください</p>}
                 {!textScrolledToBottom && (
                   <p>• 説明書を最後までスクロールしてお読みください</p>
                 )}
