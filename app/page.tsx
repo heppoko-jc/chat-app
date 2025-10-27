@@ -10,16 +10,37 @@ export default function Home() {
   const router = useRouter();
 
   useEffect(() => {
+    // 1. まず同意書チェック
+    const consentData = localStorage.getItem("experimentConsent");
+    if (!consentData) {
+      router.replace("/consent");
+      return;
+    }
+
+    try {
+      const consent = JSON.parse(consentData);
+      if (!consent.consentGiven) {
+        router.replace("/consent");
+        return;
+      }
+    } catch (error) {
+      // 不正なデータがあれば同意書からやり直し
+      localStorage.removeItem("experimentConsent");
+      router.replace("/consent");
+      return;
+    }
+
+    // 2. 同意済みなら認証チェック
     const token = localStorage.getItem("token");
     const userId = localStorage.getItem("userId");
 
-    // トークン／userId が無ければ即ログイン画面へ
+    // トークン／userId が無ければログイン画面へ
     if (!token || !userId) {
       router.replace("/login");
       return;
     }
 
-    // トークンの有効性をサーバーへ問い合わせ
+    // 3. トークンの有効性をサーバーへ問い合わせ
     fetch("/api/auth/profile", {
       method: "GET",
       headers: { Authorization: `Bearer ${token}` },

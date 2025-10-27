@@ -21,12 +21,30 @@ export async function GET(req: NextRequest) {
       friendIds = friends.map((f) => f.friendId);
     }
 
+    // ともだちが24時間以内に送信したメッセージの内容を取得
+    const sentByFriends = await prisma.sentMessage.findMany({
+      where: {
+        senderId: { in: friendIds },
+        createdAt: { gte: expiryDate },
+      },
+      select: {
+        message: true,
+      },
+      distinct: ["message"],
+    });
+    const friendSentMessages = sentByFriends.map((s) => s.message);
+
     const messages = await prisma.presetMessage.findMany({
       where: {
         count: { gt: 0 },
         lastSentAt: { gte: expiryDate }, // 24時間以内のメッセージのみ取得
-        // 自分が送信したメッセージ + ともだちが送信したメッセージ
-        createdBy: { in: [userId, ...friendIds].filter((id): id is string => Boolean(id)) },
+        // 自分が作成したメッセージ または ともだちが送信したメッセージ
+        OR: [
+          { createdBy: userId },
+          ...(friendSentMessages.length > 0
+            ? [{ content: { in: friendSentMessages } }]
+            : []),
+        ],
       },
       orderBy: { lastSentAt: "desc" },
       select: {
