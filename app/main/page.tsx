@@ -2017,7 +2017,7 @@ export default function Main() {
             <div className="flex items-center justify-end mb-2">
               <button
                 onClick={toggleSelectAllVisible}
-                className={`px-3 py-1.5 rounded-xl text-sm font-bold shadow border transition active:scale-95 ${
+                className={`px-3 py-1.5 rounded-xl text-sm font-bold border transition ${
                   allVisibleSelected
                     ? "bg-orange-200 border-orange-300 text-orange-800"
                     : "bg-orange-50 border-orange-200 text-orange-600 hover:bg-orange-100"
@@ -2104,7 +2104,7 @@ export default function Main() {
 
       {/* リスト切替トグル */}
       <div
-        className="fixed left-4 right-4 z-30 bg-white py-2 px-4 rounded-3xl border border-orange-200"
+        className="fixed left-4 right-4 z-30 bg-white py-2 px-4 rounded-3xl"
         style={{ bottom: "calc(76px + env(safe-area-inset-bottom))" }}
       >
         <div className="relative flex">
