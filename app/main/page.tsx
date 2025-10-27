@@ -1452,13 +1452,13 @@ export default function Main() {
 
       {/* 送信待機バー（ヘッダー直下より少し下） */}
       <div
-        className={`fixed left-6 right-6 z-30 py-2 flex items-center h-16 px-3 rounded-2xl border border-orange-200 transition-all duration-200
+        className={`fixed left-6 right-6 z-30 py-2 flex items-center h-16 px-3 rounded-2xl border-2 border-orange-300 transition-all duration-200
           ${
             canSend
               ? "bg-gradient-to-r from-orange-400 to-orange-300"
               : selectedMessage || selectedRecipientIds.length > 0
               ? "bg-gradient-to-r from-orange-200 to-orange-100"
-              : "bg-orange-50"
+              : "bg-white"
           }
         `}
         style={{ top: `${SEND_BAR_TOP}px` }}
@@ -1954,12 +1954,14 @@ export default function Main() {
                             </p>
                           </>
                         )}
-                        <p className="text-xs text-orange-600 mt-1">
-                          {msg.senderCount}人が送信しました
-                        </p>
-                        <p className="text-xs text-gray-400 mt-0.5">
-                          {formatLastSentAt(msg.lastSentAt)}
-                        </p>
+                        <div className="flex gap-1 mt-1">
+                          <p className="text-xs text-orange-600">
+                            {msg.senderCount}人が送信しました
+                          </p>
+                          <p className="text-xs text-gray-400">
+                            {formatLastSentAt(msg.lastSentAt)}
+                          </p>
+                        </div>
                       </div>
                     </button>
                   );
@@ -1985,7 +1987,7 @@ export default function Main() {
                     <span className="whitespace-pre-wrap break-words">
                       {msg.content}
                     </span>
-                    <div className="flex justify-between items-center mt-2">
+                    <div className="flex gap-1 items-center mt-2">
                       <span className="text-xs text-orange-600">
                         {msg.senderCount}人が送信しました
                       </span>
