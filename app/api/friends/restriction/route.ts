@@ -26,16 +26,16 @@ export async function GET(req: NextRequest) {
 
     const now = new Date();
     const timeDiff = now.getTime() - restriction.lastChange.getTime();
-    const hoursDiff = timeDiff / (1000 * 60 * 60);
+    const minutesDiff = timeDiff / (1000 * 60);
 
-    if (hoursDiff >= 3) {
+    if (minutesDiff >= 60) {
       return NextResponse.json({ canChange: true, remainingTime: null });
     }
 
-    const remainingHours = Math.ceil(3 - hoursDiff);
+    const remainingMinutes = Math.ceil(60 - minutesDiff);
     return NextResponse.json({
       canChange: false,
-      remainingTime: `${remainingHours}時間`,
+      remainingTime: `${remainingMinutes}分`,
     });
   } catch (error) {
     console.error("制限状態チェックエラー:", error);

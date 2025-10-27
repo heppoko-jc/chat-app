@@ -32,7 +32,7 @@ export default function FriendsPage() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [showWarning, setShowWarning] = useState(false);
   const [warningType, setWarningType] = useState<
-    "min_friends" | "daily_limit" | "time_remaining" | null
+    "min_friends" | "daily_limit" | "time_remaining" | "locked" | null
   >(null);
   const [remainingTime, setRemainingTime] = useState<string>("");
   const [isRestricted, setIsRestricted] = useState(false);
@@ -275,7 +275,9 @@ export default function FriendsPage() {
         // 新規ユーザー追加は許可
       } else {
         // その他の変更は制限
-        setWarningType("time_remaining");
+        const restrictionStatus = await checkRestrictionStatus();
+        setRemainingTime(restrictionStatus.remainingTime || "");
+        setWarningType("locked");
         setShowWarning(true);
         return;
       }
@@ -374,7 +376,7 @@ export default function FriendsPage() {
         </p>
         {!isRestricted && (
           <p className="text-xs text-gray-500 text-center mt-1">
-            一度設定を変更すると3時間ロックされます。
+            一度設定を変更すると1時間ロックされます。
           </p>
         )}
         {isRestricted ? (
@@ -415,11 +417,7 @@ export default function FriendsPage() {
               {/* ともだちボタン */}
               <button
                 onClick={() => toggleFriend(user.id)}
-                disabled={
-                  processingUsers.has(user.id) ||
-                  (isRestricted &&
-                    !(!friends.has(user.id) && isNewUser(user.id)))
-                }
+                disabled={processingUsers.has(user.id)}
                 className={`flex items-center gap-2 px-3 py-2 rounded-full transition-opacity ${
                   processingUsers.has(user.id) ||
                   (isRestricted &&
@@ -480,7 +478,7 @@ export default function FriendsPage() {
             {warningType === "daily_limit" && (
               <>
                 <h3 className="text-lg font-bold text-gray-800 mb-2 text-center">
-                  一度変更すると3時間ロックされます
+                  一度変更すると1時間ロックされます
                 </h3>
                 <p className="text-sm text-gray-600 mb-4 text-center">
                   今日は今回限りになります。本当にメイン画面に戻りますか？（新規参加者の追加はいつでもできます）
@@ -504,10 +502,28 @@ export default function FriendsPage() {
             {warningType === "time_remaining" && (
               <>
                 <h3 className="text-lg font-bold text-gray-800 mb-2 text-center">
-                  一度変更すると3時間ロックされます
+                  一度変更すると1時間ロックされます
                 </h3>
                 <p className="text-sm text-gray-600 mb-4 text-center">
                   次は{remainingTime}後に変更が可能です。
+                </p>
+                <button
+                  onClick={handleWarningClose}
+                  className="w-full bg-orange-500 text-white py-3 rounded-xl font-bold"
+                >
+                  閉じる
+                </button>
+              </>
+            )}
+            {warningType === "locked" && (
+              <>
+                <h3 className="text-lg font-bold text-gray-800 mb-2 text-center">
+                  現在編集をロックしています
+                </h3>
+                <p className="text-sm text-gray-600 mb-4 text-center">
+                  次の編集は{remainingTime}後に可能です。
+                  <br />
+                  新規ユーザーはいつでも追加できます。
                 </p>
                 <button
                   onClick={handleWarningClose}
