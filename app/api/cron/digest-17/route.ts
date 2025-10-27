@@ -222,8 +222,13 @@ export async function GET() {
         isActive: true,
         userId: { in: Array.from(allTargetUserIds) },
       },
-      select: { endpoint: true, subscription: true, userId: true, createdAt: true },
-      orderBy: { createdAt: 'desc' }, // 最新順にソート
+      select: {
+        endpoint: true,
+        subscription: true,
+        userId: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: "desc" }, // 最新順にソート
     });
 
     if (allActiveSubsWithDate.length === 0) {
@@ -247,34 +252,35 @@ export async function GET() {
       string,
       { endpoint: string; subscription: unknown; createdAt: Date }[]
     >();
-    
+
     allActiveSubsWithDate.forEach((sub) => {
       const subs = subsByUser.get(sub.userId) || [];
-      subs.push({ 
-        endpoint: sub.endpoint, 
+      subs.push({
+        endpoint: sub.endpoint,
         subscription: sub.subscription,
-        createdAt: sub.createdAt
+        createdAt: sub.createdAt,
       });
       subsByUser.set(sub.userId, subs);
     });
-    
+
     // 各ユーザーについて、最新の購読以外を無効化候補に追加
     const oldEndpointsToDeactivate = new Set<string>();
     for (const [userId, subs] of subsByUser) {
       if (subs.length > 1) {
         // 最新の購読を除いて、古い購読を無効化
-        const sortedSubs = subs.sort((a, b) => 
-          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        const sortedSubs = subs.sort(
+          (a, b) =>
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
         );
         const latestSubscription = sortedSubs[0];
-        
+
         // 最新以外を無効化対象に追加
         for (let i = 1; i < sortedSubs.length; i++) {
           oldEndpointsToDeactivate.add(sortedSubs[i].endpoint);
         }
       }
     }
-    
+
     // 古い購読を無効化
     if (oldEndpointsToDeactivate.size > 0) {
       await prisma.pushSubscription.updateMany({
@@ -294,9 +300,9 @@ export async function GET() {
     for (const [userId, subs] of subsByUser) {
       // 最新の購読のみを取得（既にソート済み）
       const latestSub = subs.length > 0 ? [subs[0]] : [];
-      
+
       if (latestSub.length === 0) continue;
-      
+
       const unmatchedCount = userUnmatchedCounts.get(userId) || 0;
       const feedNewCount = userFeedNewCounts.get(userId) || 0;
 
