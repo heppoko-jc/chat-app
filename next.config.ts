@@ -29,10 +29,6 @@ const withPWAMiddleware = withPWA(pwaOptions);
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
-  // Turbopackを無効化（Webpackを使用）
-  experimental: {
-    turbo: false,
-  },
   images: {
     remotePatterns: [
       {

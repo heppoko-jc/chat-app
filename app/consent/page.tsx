@@ -1,7 +1,7 @@
 // app/consent/page.tsx
 
 "use client";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 
 export default function Consent() {
@@ -14,7 +14,6 @@ export default function Consent() {
   });
   const [textScrolledToBottom, setTextScrolledToBottom] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
 
   // 既存ユーザーのチェック（同意済み && 名前入力済みならスキップ）
