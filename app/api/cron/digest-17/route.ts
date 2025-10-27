@@ -216,15 +216,17 @@ export async function GET() {
     }
 
     // 2) アクティブな購読を取得（通知対象ユーザーのみ）
-    const allActiveSubs = await prisma.pushSubscription.findMany({
+    // 購読を取得する際にcreatedAtも含める
+    const allActiveSubsWithDate = await prisma.pushSubscription.findMany({
       where: {
         isActive: true,
         userId: { in: Array.from(allTargetUserIds) },
       },
-      select: { endpoint: true, subscription: true, userId: true },
+      select: { endpoint: true, subscription: true, userId: true, createdAt: true },
+      orderBy: { createdAt: 'desc' }, // 最新順にソート
     });
 
-    if (allActiveSubs.length === 0) {
+    if (allActiveSubsWithDate.length === 0) {
       console.log(
         "📭 No active subscriptions found for users with unmatched messages"
       );
@@ -243,20 +245,58 @@ export async function GET() {
     // 3) ユーザーごとに購読をグループ化
     const subsByUser = new Map<
       string,
-      { endpoint: string; subscription: unknown }[]
+      { endpoint: string; subscription: unknown; createdAt: Date }[]
     >();
-    allActiveSubs.forEach((sub) => {
+    
+    allActiveSubsWithDate.forEach((sub) => {
       const subs = subsByUser.get(sub.userId) || [];
-      subs.push({ endpoint: sub.endpoint, subscription: sub.subscription });
+      subs.push({ 
+        endpoint: sub.endpoint, 
+        subscription: sub.subscription,
+        createdAt: sub.createdAt
+      });
       subsByUser.set(sub.userId, subs);
     });
+    
+    // 各ユーザーについて、最新の購読以外を無効化候補に追加
+    const oldEndpointsToDeactivate = new Set<string>();
+    for (const [userId, subs] of subsByUser) {
+      if (subs.length > 1) {
+        // 最新の購読を除いて、古い購読を無効化
+        const sortedSubs = subs.sort((a, b) => 
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        );
+        const latestSubscription = sortedSubs[0];
+        
+        // 最新以外を無効化対象に追加
+        for (let i = 1; i < sortedSubs.length; i++) {
+          oldEndpointsToDeactivate.add(sortedSubs[i].endpoint);
+        }
+      }
+    }
+    
+    // 古い購読を無効化
+    if (oldEndpointsToDeactivate.size > 0) {
+      await prisma.pushSubscription.updateMany({
+        where: { endpoint: { in: Array.from(oldEndpointsToDeactivate) } },
+        data: { isActive: false },
+      });
+      console.log(
+        `🗑️ Deactivated ${oldEndpointsToDeactivate.size} old subscriptions (multiple subscriptions per user)`
+      );
+    }
 
     const endpointsToDeactivate = new Set<string>();
     let notificationsSent = 0;
     let usersNotified = 0;
 
-    // 4) 通知送信
+    // 4) 通知送信（各ユーザーに対して最新の購読のみに送信）
     for (const [userId, subs] of subsByUser) {
+      // 最新の購読のみを取得（既にソート済み）
+      const latestSub = subs.length > 0 ? [subs[0]] : [];
+      
+      if (latestSub.length === 0) continue;
+      
       const unmatchedCount = userUnmatchedCounts.get(userId) || 0;
       const feedNewCount = userFeedNewCounts.get(userId) || 0;
 
@@ -281,10 +321,10 @@ export async function GET() {
           },
         });
 
-        const deactivated = await sendToSubsBatch(subs, payload);
+        const deactivated = await sendToSubsBatch(latestSub, payload);
         deactivated.forEach((ep) => endpointsToDeactivate.add(ep));
 
-        const successfulSends = subs.length - deactivated.length;
+        const successfulSends = latestSub.length - deactivated.length;
         if (successfulSends > 0) {
           notificationsSent += successfulSends;
           console.log(
@@ -309,10 +349,10 @@ export async function GET() {
           },
         });
 
-        const feedDeactivated = await sendToSubsBatch(subs, feedPayload);
+        const feedDeactivated = await sendToSubsBatch(latestSub, feedPayload);
         feedDeactivated.forEach((ep) => endpointsToDeactivate.add(ep));
 
-        const feedSuccessfulSends = subs.length - feedDeactivated.length;
+        const feedSuccessfulSends = latestSub.length - feedDeactivated.length;
         if (feedSuccessfulSends > 0) {
           notificationsSent += feedSuccessfulSends;
           console.log(
