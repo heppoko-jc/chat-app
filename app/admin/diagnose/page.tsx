@@ -5,8 +5,35 @@
 
 import { useEffect, useState } from "react";
 
+interface DiagnoseResult {
+  timestamp?: string;
+  environment?: {
+    has_vapid_public: boolean;
+    has_vapid_private: boolean;
+    has_next_pub_vapid: boolean;
+    node_env?: string;
+  };
+  push_subscriptions?: {
+    total_active: number;
+    [key: string]: unknown;
+  };
+  messages?: {
+    sent_messages_24h: number;
+    [key: string]: unknown;
+  };
+  unmatched_messages?: {
+    unmatched_count: number;
+    [key: string]: unknown;
+  };
+  feed_messages?: {
+    total_users_with_feed_new: number;
+    [key: string]: unknown;
+  };
+  [key: string]: unknown;
+}
+
 export default function DiagnosePage() {
-  const [result, setResult] = useState<Record<string, unknown> | null>(null);
+  const [result, setResult] = useState<DiagnoseResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
