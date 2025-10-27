@@ -1346,7 +1346,7 @@ export default function Main() {
   const GAP_AFTER_HEADER = 8;
   const SEND_BAR_TOTAL_H = 80;
   const SEND_BAR_TOP = HEADER_H + GAP_AFTER_HEADER;
-  const LIST_PT = SEND_BAR_TOP + SEND_BAR_TOTAL_H;
+  const LIST_PT = SEND_BAR_TOP + SEND_BAR_TOTAL_H - 32;
 
   // ポップアップを閉じたとき：先頭を剥がし、しきい値を進める
   const handleClosePopup = useCallback(() => {
@@ -1382,7 +1382,7 @@ export default function Main() {
     <>
       {/* ヘッダー（高さ拡張） */}
       <div
-        className="fixed top-0 left-0 w-full bg-gradient-to-b from-white via-orange-50 to-orange-100 z-20 px-6 pt-4 pb-4 flex flex-col items-center shadow-md rounded-b-3xl"
+        className="fixed top-0 left-0 w-full bg-white z-20 px-6 pt-4 pb-4 flex flex-col items-center rounded-b-3xl"
         style={{ minHeight: HEADER_H, height: HEADER_H }}
       >
         <div className="flex w-full justify-between items-center mb-2">
@@ -1401,7 +1401,7 @@ export default function Main() {
             </button>
           </div>
           <h1
-            className="text-xl font-extrabold text-orange-500 tracking-tight drop-shadow-sm whitespace-nowrap"
+            className="text-xl font-extrabold text-orange-500 tracking-tight whitespace-nowrap"
             style={{ fontFamily: "'Poppins', sans-serif" }}
           >
             Happy Ice Cream
@@ -1452,7 +1452,7 @@ export default function Main() {
 
       {/* 送信待機バー（ヘッダー直下より少し下） */}
       <div
-        className={`fixed left-6 right-6 z-30 py-2 flex items-center h-16 px-3 shadow-lg rounded-2xl border border-orange-200 transition-all duration-200
+        className={`fixed left-6 right-6 z-30 py-2 flex items-center h-16 px-3 rounded-2xl border border-orange-200 transition-all duration-200
           ${
             canSend
               ? "bg-gradient-to-r from-orange-400 to-orange-300"
@@ -1523,7 +1523,7 @@ export default function Main() {
                     setIsComposing(false);
                   }}
                   placeholder="コメントを追加..."
-                  className="flex-1 px-3 py-2 rounded-xl border border-orange-200 text-base bg-white shadow-sm focus:ring-2 focus:ring-orange-200 outline-none transition"
+                  className="flex-1 px-3 py-2 rounded-xl border border-orange-200 text-base bg-white focus:ring-2 focus:ring-orange-200 outline-none transition"
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !isComposing) {
                       // キーボードを閉じないようにblur()を呼ばない
@@ -1537,8 +1537,8 @@ export default function Main() {
                 type="text"
                 value={inputMessage}
                 onChange={(e) => setInputMessage(e.target.value)}
-                placeholder="Aa..."
-                className="flex-1 px-3 py-2 rounded-xl border border-orange-200 text-base bg-white shadow-sm focus:ring-2 focus:ring-orange-200 outline-none transition"
+                placeholder="メッセージを入力"
+                className="flex-1 px-3 py-2 rounded-xl border border-orange-200 text-base bg-white focus:ring-2 focus:ring-orange-200 outline-none transition"
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && inputMessage.trim()) {
                     setSelectedMessage(inputMessage.trim());
@@ -1770,9 +1770,9 @@ export default function Main() {
                         setSelectedMessageLinkData(linkData);
                         handleSelectMessage(msg.content, linkData);
                       }}
-                      className={`w-full flex items-center gap-3 text-left px-5 py-3 rounded-3xl shadow-md border border-orange-100 hover:bg-orange-100 active:scale-95 font-medium text-base ${
+                      className={`w-full flex items-center gap-3 text-left px-5 py-3 rounded-3xl border border-orange-100 hover:bg-orange-100 active:scale-95 font-medium text-base ${
                         selectedMessage === msg.content
-                          ? "font-bold text-orange-700 bg-orange-200 border-orange-300 shadow-lg"
+                          ? "font-bold text-orange-700 bg-orange-200 border-orange-300"
                           : "text-gray-700 bg-white"
                       }`}
                       style={{
@@ -1876,9 +1876,9 @@ export default function Main() {
                         setSelectedMessageContent(msg.content);
                         handleSelectMessage(msg.content, linkData);
                       }}
-                      className={`w-full flex items-center gap-3 text-left px-5 py-3 rounded-3xl shadow-md border border-orange-100 hover:bg-orange-100 active:scale-95 font-medium text-base ${
+                      className={`w-full flex items-center gap-3 text-left px-5 py-3 rounded-3xl border border-orange-100 hover:bg-orange-100 active:scale-95 font-medium text-base ${
                         selectedMessage === msg.content
-                          ? "font-bold text-orange-700 bg-orange-200 border-orange-300 shadow-lg"
+                          ? "font-bold text-orange-700 bg-orange-200 border-orange-300"
                           : "text-gray-700 bg-white"
                       }`}
                       style={{
@@ -1970,9 +1970,9 @@ export default function Main() {
                   <button
                     key={msg.id}
                     onClick={() => handleSelectMessage(msg.content)}
-                    className={`w-full flex flex-col text-left px-5 py-3 rounded-3xl shadow-md border border-orange-100 hover:bg-orange-100 active:scale-95 font-medium text-base ${
+                    className={`w-full flex flex-col text-left px-5 py-3 rounded-3xl border border-orange-100 hover:bg-orange-100 active:scale-95 font-medium text-base ${
                       selectedMessage === msg.content
-                        ? "font-bold text-orange-700 bg-orange-200 border-orange-300 shadow-lg"
+                        ? "font-bold text-orange-700 bg-orange-200 border-orange-300"
                         : "text-gray-700 bg-white"
                     }`}
                     style={{
@@ -2026,7 +2026,7 @@ export default function Main() {
               {visibleFriends.length === 0 ? (
                 <div
                   onClick={() => router.push("/friends")}
-                  className="flex flex-col items-center justify-center py-12 px-6 rounded-3xl shadow-md border border-orange-200 bg-white cursor-pointer hover:bg-orange-50 transition-colors"
+                  className="flex flex-col items-center justify-center py-12 px-6 rounded-3xl border border-orange-200 bg-white cursor-pointer hover:bg-orange-50 transition-colors"
                 >
                   <Image
                     src="/icons/friends.png"
@@ -2044,9 +2044,9 @@ export default function Main() {
                   <div
                     key={u.id}
                     onClick={() => toggleRecipient(u.id)}
-                    className={`flex items-center gap-3 p-3 rounded-3xl shadow-md border border-orange-100 hover:bg-orange-100 active:scale-95 cursor-pointer ${
+                    className={`flex items-center gap-3 p-3 rounded-3xl border border-orange-100 hover:bg-orange-100 active:scale-95 cursor-pointer ${
                       selectedRecipientIds.includes(u.id)
-                        ? "bg-orange-200 border-orange-300 shadow-lg"
+                        ? "bg-orange-200 border-orange-300"
                         : "bg-white"
                     }`}
                     style={{
@@ -2098,7 +2098,7 @@ export default function Main() {
 
       {/* リスト切替トグル */}
       <div
-        className="fixed left-4 right-4 z-30 bg-white py-2 px-4 rounded-3xl shadow-lg border border-orange-200"
+        className="fixed left-4 right-4 z-30 bg-white py-2 px-4 rounded-3xl border border-orange-200"
         style={{ bottom: "calc(76px + env(safe-area-inset-bottom))" }}
       >
         <div className="relative flex">
@@ -2133,7 +2133,7 @@ export default function Main() {
       {/* 送信成功メッセージ */}
       {isSent && sentMessageInfo && (
         <div className="fixed top-[50px] left-0 right-0 z-30 overflow-hidden px-2 neon-gradient">
-          <div className="w-max whitespace-nowrap animate-slide-in font-bold text-white text-lg px-4 py-2 shadow-lg">
+          <div className="w-max whitespace-nowrap animate-slide-in font-bold text-white text-lg px-4 py-2">
             「{sentMessageInfo.message}」が
             {sentMessageInfo.recipients
               .map((id) => users.find((u) => u.id === id)?.name)

@@ -152,8 +152,7 @@ export default function FriendsPage() {
     if (hasChanges()) {
       // 新規ユーザー追加のみの場合は制限に関係なく特別扱い
       if (hasNewUserAdded() && !hasUserRemoved()) {
-        // 新規ユーザー追加のみの場合は警告なしで記録（楽観的更新）
-        recordChange().catch(console.error);
+        // 新規ユーザー追加のみの場合は警告なし、記録なしで戻る
         router.back();
         return;
       }
