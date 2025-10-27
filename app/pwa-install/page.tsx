@@ -18,7 +18,8 @@ export default function PWAInstall() {
     // PWAモード判定
     const isStandalone =
       window.matchMedia("(display-mode: standalone)").matches ||
-      (window.navigator as any)?.standalone === true;
+      (window.navigator as unknown as { standalone?: boolean })?.standalone ===
+        true;
     setIsInStandaloneMode(isStandalone);
 
     // 既にPWAモードで開いている場合は自動的にログインページへ

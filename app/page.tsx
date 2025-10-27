@@ -23,7 +23,7 @@ export default function Home() {
         router.replace("/consent");
         return;
       }
-    } catch (error) {
+    } catch {
       // 不正なデータがあれば同意書からやり直し
       localStorage.removeItem("experimentConsent");
       router.replace("/consent");

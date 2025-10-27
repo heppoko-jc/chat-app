@@ -265,14 +265,14 @@ export async function GET() {
 
     // 各ユーザーについて、最新の購読以外を無効化候補に追加
     const oldEndpointsToDeactivate = new Set<string>();
-    for (const [userId, subs] of subsByUser) {
+    for (const [, subs] of subsByUser) {
       if (subs.length > 1) {
         // 最新の購読を除いて、古い購読を無効化
         const sortedSubs = subs.sort(
           (a, b) =>
             new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
         );
-        const latestSubscription = sortedSubs[0];
+        // const latestSubscription = sortedSubs[0];
 
         // 最新以外を無効化対象に追加
         for (let i = 1; i < sortedSubs.length; i++) {

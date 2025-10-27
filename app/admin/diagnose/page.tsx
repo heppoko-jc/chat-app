@@ -6,7 +6,7 @@
 import { useEffect, useState } from "react";
 
 export default function DiagnosePage() {
-  const [result, setResult] = useState<any>(null);
+  const [result, setResult] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 

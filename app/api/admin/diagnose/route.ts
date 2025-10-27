@@ -1,16 +1,16 @@
 // app/api/admin/diagnose/route.ts
 // 診断用API - プッシュ通知の状態を確認
 
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 
 const prisma = new PrismaClient();
 
-export async function GET(req: NextRequest) {
+export async function GET() {
   try {
     // 簡単な認証チェック（本番環境では実装してください）
-    const authHeader = req.headers.get("Authorization");
-    const adminKey = req.headers.get("X-Admin-Key");
+    // const authHeader = req.headers.get("Authorization");
+    // const adminKey = req.headers.get("X-Admin-Key");
 
     // 認証をスキップ（開発・診断用）
     // 本番環境では必ず認証を実装してください
