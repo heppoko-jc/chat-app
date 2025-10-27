@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
         lastSentAt: { gte: expiryDate }, // 24時間以内のメッセージのみ取得
         // 自分が作成したメッセージ または ともだちが送信したメッセージ
         OR: [
-          { createdBy: userId },
+          ...(userId ? [{ createdBy: userId }] : []),
           ...(friendSentMessages.length > 0
             ? [{ content: { in: friendSentMessages } }]
             : []),
