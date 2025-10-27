@@ -8,7 +8,7 @@ const prisma = new PrismaClient();
 
 export async function POST(req: NextRequest) {
   try {
-    const { name, email, password } = await req.json();
+    const { name, email, password, consentInfo } = await req.json();
 
     // 既に登録されているか確認
     const existingUser = await prisma.user.findUnique({
@@ -22,9 +22,26 @@ export async function POST(req: NextRequest) {
     // パスワードのハッシュ化
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // ユーザーを作成
+    // ユーザーを作成（同意情報も含む）
     const user = await prisma.user.create({
-      data: { name, email, password: hashedPassword },
+      data: {
+        name,
+        email,
+        password: hashedPassword,
+        // 同意情報がある場合、保存
+        participantName: consentInfo?.participantName || null,
+        consentDate: consentInfo?.consentDate ? new Date(consentInfo.consentDate) : null,
+        consentParticipated: consentInfo?.participation ?? null,
+        consentInterview: consentInfo?.interview ?? null,
+        consentDataUsage: consentInfo?.dataUsage ?? null,
+        consentRecording: consentInfo?.recordingConsent ?? null,
+      },
+    });
+
+    console.log("ユーザー登録完了:", {
+      email: user.email,
+      participantName: user.participantName,
+      consentDate: user.consentDate,
     });
 
     return NextResponse.json({ message: "User registered successfully!", user});

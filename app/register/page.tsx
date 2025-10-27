@@ -75,10 +75,33 @@ export default function Register() {
     setIsSubmitting(true);
 
     try {
+      // 同意情報を取得
+      const consentData = localStorage.getItem("experimentConsent");
+      let consentInfo = null;
+      
+      if (consentData) {
+        try {
+          consentInfo = JSON.parse(consentData);
+        } catch (e) {
+          console.error("同意情報の解析エラー:", e);
+        }
+      }
+
+      // 登録APIを呼び出し（同意情報も含む）
       const res = await axios.post("/api/auth/register", {
         name,
         email,
         password,
+        consentInfo: consentInfo
+          ? {
+              participantName: consentInfo.participantName,
+              consentDate: consentInfo.consentDate,
+              participation: consentInfo.participation,
+              interview: consentInfo.interview,
+              dataUsage: consentInfo.dataUsage,
+              recordingConsent: consentInfo.recordingConsent,
+            }
+          : null,
       });
       alert(res.data.message);
 

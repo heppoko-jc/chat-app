@@ -14,6 +14,14 @@ model User {
   password          String
   createdAt         DateTime           @default(now())
   bio               String?
+  // 同意情報
+  participantName    String?   // 実験参加者名
+  consentDate        DateTime? // 同意日時
+  consentParticipated Boolean? // 参加同意
+  consentInterview    Boolean? // インタビュー同意
+  consentDataUsage   Boolean? // データ使用同意
+  consentRecording   Boolean? // 録音同意
+  // リレーション
   chats1            Chat[]             @relation("ChatUser1")
   chats2            Chat[]             @relation("ChatUser2")
   matchedPairs1     MatchPair[]        @relation("MatchPairUser1")
