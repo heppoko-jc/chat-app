@@ -45,6 +45,14 @@ export default function DiagnosePage() {
     );
   }
 
+  if (!result) {
+    return (
+      <div style={{ padding: "20px", fontFamily: "monospace" }}>
+        <h1>❌ データが取得できませんでした</h1>
+      </div>
+    );
+  }
+
   return (
     <div
       style={{ padding: "20px", fontFamily: "monospace", maxWidth: "1200px" }}
