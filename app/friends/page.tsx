@@ -49,11 +49,11 @@ export default function FriendsPage() {
       const aIsFriend = friendsSet.has(a.id);
       const bIsFriend = friendsSet.has(b.id);
 
-      // 登録済みの人が上に来る
+      // フォロー中の人が上に来る
       if (aIsFriend && !bIsFriend) return -1;
       if (!aIsFriend && bIsFriend) return 1;
 
-      // 同じ登録状態の場合、登録順（createdAt順）
+      // 同じフォロー状態の場合、登録順（createdAt順）
       return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
     });
   };
@@ -349,7 +349,7 @@ export default function FriendsPage() {
   return (
     <div className="flex flex-col h-[100dvh] bg-orange-50 overflow-hidden">
       {/* ヘッダー */}
-      <div className="shrink-0 bg-white shadow-md px-6 py-4 border-b border-orange-100">
+      <div className="shrink-0 bg-white px-6 py-4 border-b border-orange-100">
         <div className="flex items-center justify-between">
           <button
             onClick={handleBack}
@@ -363,32 +363,27 @@ export default function FriendsPage() {
               className="cursor-pointer"
             />
           </button>
-          <h1 className="text-xl font-bold text-orange-500">
-            マッチユーザー登録
-          </h1>
+          <h1 className="text-xl font-bold text-orange-500">フォローする</h1>
           <div className="w-10" />
         </div>
         <p className="text-sm text-gray-600 text-center mt-2">
           ここで選んだ人とマッチします。
         </p>
+        <p className="text-xs text-red-600 text-center mt-1 font-bold">
+          相手には何も通知されません。
+        </p>
         {!isRestricted && (
           <p className="text-xs text-gray-500 text-center mt-1">
-            他のユーザーには何も通知されません。また一度設定を変更すると3時間ロックされます。
-          </p>
-        )}
-        {isRestricted && (
-          <p className="text-xs text-gray-500 text-center mt-1">
-            相手には何も通知されません。
+            一度設定を変更すると3時間ロックされます。
           </p>
         )}
         {isRestricted ? (
-          <p className="text-xs text-red-500 text-center mt-1 font-bold">
-            マッチユーザー: {friends.size}人。次の設定編集は{remainingTime}
-            後から可能になります。（新規ユーザーはいつでも追加可能）
+          <p className="text-xs text-orange-500 text-center mt-1 font-bold">
+            フォロー: {friends.size}人
           </p>
         ) : (
           <p className="text-xs text-orange-500 text-center mt-1 font-bold">
-            マッチユーザー: {friends.size}人
+            フォロー: {friends.size}人
           </p>
         )}
       </div>
@@ -399,11 +394,11 @@ export default function FriendsPage() {
           {displayUsers.map((user) => (
             <div
               key={user.id}
-              className="flex items-center gap-3 p-4 rounded-2xl shadow-md border border-orange-200 bg-white"
+              className="flex items-center gap-3 p-4 rounded-2xl border border-orange-200 bg-white"
             >
               {/* アバター */}
               <div
-                className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold shadow"
+                className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold"
                 style={{ backgroundColor: getBgColor(user.name) }}
               >
                 {getInitials(user.name)}
@@ -446,7 +441,7 @@ export default function FriendsPage() {
                         ? "/icons/add-friend.png"
                         : "/icons/add.png"
                     }
-                    alt={friends.has(user.id) ? "登録解除" : "登録追加"}
+                    alt={friends.has(user.id) ? "フォロー解除" : "フォロー追加"}
                     width={20}
                     height={20}
                   />
@@ -457,7 +452,7 @@ export default function FriendsPage() {
                   !(!friends.has(user.id) && isNewUser(user.id)) ? (
                   <span className="text-sm font-bold">制限中</span>
                 ) : friends.has(user.id) ? (
-                  <span className="text-sm font-bold">登録済み</span>
+                  <span className="text-sm font-bold">フォロー中</span>
                 ) : null}
               </button>
             </div>
@@ -472,7 +467,7 @@ export default function FriendsPage() {
             {warningType === "min_friends" && (
               <>
                 <h3 className="text-lg font-bold text-gray-800 mb-4 text-center">
-                  2人以上登録してください。
+                  2人以上フォローしてください。
                 </h3>
                 <button
                   onClick={handleWarningClose}
@@ -501,7 +496,7 @@ export default function FriendsPage() {
                     onClick={handleWarningClose}
                     className="w-full bg-gray-200 text-gray-700 py-3 rounded-xl font-bold"
                   >
-                    登録状態を確認する
+                    フォロー状態を確認する
                   </button>
                 </div>
               </>
