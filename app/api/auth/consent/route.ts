@@ -2,8 +2,14 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
+import jwt from "jsonwebtoken";
 
 const prisma = new PrismaClient();
+const SECRET_KEY: string = process.env.JWT_SECRET || "";
+
+if (!SECRET_KEY) {
+  throw new Error("JWT_SECRET is not defined in environment variables");
+}
 
 // 同意情報を保存
 export async function POST(req: NextRequest) {
@@ -83,8 +89,18 @@ export async function GET(req: NextRequest) {
 
     const token = authHeader.split(" ")[1];
     
-    // 簡単な認証チェック（本番環境ではJWTで検証）
-    // TODO: 本番環境ではJWT検証を実装
+    // JWT検証
+    try {
+      jwt.verify(token, SECRET_KEY) as { id: string };
+    } catch (err: unknown) {
+      if (err instanceof jwt.TokenExpiredError) {
+        console.warn("Consent fetch warning: JWT expired", err);
+        return NextResponse.json({ error: "Token expired" }, { status: 401 });
+      } else {
+        console.error("Consent fetch error: Invalid token", err);
+        return NextResponse.json({ error: "Invalid token" }, { status: 401 });
+      }
+    }
     
     const users = await prisma.user.findMany({
       where: {
