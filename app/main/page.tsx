@@ -1877,58 +1877,25 @@ export default function Main() {
                             : "#fed7aa",
                       }}
                     >
-                      {msg.linkImage ? (
-                        <Image
-                          src={msg.linkImage}
-                          alt={msg.linkTitle || msg.content}
-                          width={64}
-                          height={64}
-                          className="w-16 h-16 object-cover rounded-xl border border-orange-200"
-                          onError={(e) => {
-                            console.log("Image load error:", msg.linkImage);
-                            e.currentTarget.style.display = "none";
-                            e.currentTarget.nextElementSibling?.classList.remove(
-                              "hidden"
-                            );
-                          }}
-                          onLoad={() => {
-                            console.log(
-                              "Image loaded successfully:",
-                              msg.linkImage
-                            );
-                          }}
-                        />
-                      ) : null}
-                      <div
-                        className={`w-12 h-12 rounded-xl bg-orange-100 border border-orange-200 flex items-center justify-center text-orange-600 font-bold text-xs ${
-                          msg.linkImage ? "hidden" : ""
-                        }`}
-                      >
-                        {msg.linkImage
-                          ? "URL"
-                          : msg.linkTitle && msg.linkTitle !== "Google Maps"
-                          ? "🗺️"
-                          : "no photo"}
-                      </div>
                       <div className="flex-1 min-w-0">
                         {msg.linkTitle &&
                         (msg.content.includes(" ") ||
                           msg.content.includes("　") ||
                           msg.content.match(
-                            /^(https?:\/\/[a-zA-Z0-9\-._~:/?#[\]@!$&'()*+,;=%]+)([^a-zA-Z0-9\-._~:/?#[\]@!$&'()*+,;=%].+)$/
+                            /^(https?:\/\/[a-zA-Z0-9\-._~:\/?#[\]@!$&'()*+,;=%]+)([^a-zA-Z0-9\-._~:\/?#[\]@!$&'()*+,;=%].+)$/
                           )) ? (
                           // リンク+テキストの場合
                           <>
-                            <p className="text-sm font-bold text-gray-800">
-                              {msg.linkTitle}
-                            </p>
-                            <p className="text-xs text-gray-500 truncate mt-1">
+                            <p className="text-base font-medium text-gray-800 truncate">
                               {msg.content
                                 .replace(
-                                  /^(https?:\/\/[a-zA-Z0-9\-._~:/?#[\]@!$&'()*+,;=%]+)/,
+                                  /^(https?:\/\/[a-zA-Z0-9\-._~:\/?#[\]@!$&'()*+,;=%]+)/,
                                   ""
                                 )
                                 .trim()}
+                            </p>
+                            <p className="text-[10px] text-gray-500 mt-1 leading-tight">
+                              {msg.linkTitle}
                             </p>
                           </>
                         ) : (
@@ -1950,6 +1917,38 @@ export default function Main() {
                           </p>
                         </div>
                       </div>
+                      {msg.linkImage ? (
+                        <Image
+                          src={msg.linkImage}
+                          alt={msg.linkTitle || msg.content}
+                          width={40}
+                          height={40}
+                          className="w-10 h-10 object-cover rounded-lg border border-orange-200 flex-shrink-0"
+                          onError={(e) => {
+                            console.log("Image load error:", msg.linkImage);
+                            e.currentTarget.style.display = "none";
+                            e.currentTarget.nextElementSibling?.classList.remove(
+                              "hidden"
+                            );
+                          }}
+                          onLoad={() => {
+                            console.log(
+                              "Image loaded successfully:",
+                              msg.linkImage
+                            );
+                          }}
+                        />
+                      ) : (
+                        <div
+                          className={`w-8 h-8 rounded-lg bg-orange-100 border border-orange-200 flex items-center justify-center text-orange-600 font-bold text-xs flex-shrink-0`}
+                        >
+                          {msg.linkImage
+                            ? "URL"
+                            : msg.linkTitle && msg.linkTitle !== "Google Maps"
+                            ? "🗺️"
+                            : "no photo"}
+                        </div>
+                      )}
                     </button>
                   );
                 }
