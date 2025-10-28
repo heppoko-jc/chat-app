@@ -1789,6 +1789,7 @@ export default function Main() {
                           selectedMessage === msg.content
                             ? "#ea580c"
                             : "#fed7aa",
+                        fontWeight: selectedMessage === msg.content ? 900 : 500,
                       }}
                     >
                       {linkData.image ? (
@@ -1895,6 +1896,7 @@ export default function Main() {
                           selectedMessage === msg.content
                             ? "#ea580c"
                             : "#fed7aa",
+                        fontWeight: selectedMessage === msg.content ? 900 : 500,
                       }}
                     >
                       {msg.linkImage ? (
@@ -1986,6 +1988,7 @@ export default function Main() {
                     }`}
                     style={{
                       backgroundColor: "#ffffff",
+                      fontWeight: selectedMessage === msg.content ? 900 : 500,
                     }}
                   >
                     <span
