@@ -364,9 +364,9 @@ export default function Main() {
       <div
         className="flex justify-center items-center py-4 transition-all duration-200 ease-out"
         style={{
-          transform: `translateY(${Math.min(pullDistance, 90)}px)`,
+          marginTop: shouldShow ? "0px" : "-60px",
           opacity: shouldShow ? 1 : 0,
-          height: shouldShow ? "60px" : "0px",
+          height: "60px",
           overflow: "hidden",
         }}
       >
@@ -374,24 +374,24 @@ export default function Main() {
           {isRefreshing ? (
             // 更新中のスピナー
             <div className="flex flex-col items-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-4 border-orange-200 border-t-orange-500 mb-2"></div>
-              <div className="text-xs text-orange-600 font-bold">更新中...</div>
+              <div className="animate-spin rounded-full h-8 w-8 border-4 border-gray-200 border-t-black mb-2"></div>
+              <div className="text-xs text-black font-bold">更新中...</div>
             </div>
           ) : isPulling ? (
             // 引っ張っている時のインジケーター
             <div className="relative">
               <div
-                className="rounded-full h-6 w-6 border-2 border-orange-300"
+                className="rounded-full h-6 w-6 border-2 border-gray-300"
                 style={{
-                  background: `conic-gradient(from 0deg, #f97316 ${
+                  background: `conic-gradient(from 0deg, #000000 ${
                     progress * 360
-                  }deg, #fed7aa 0deg)`,
+                  }deg, #d1d5db 0deg)`,
                 }}
               ></div>
             </div>
           ) : null}
 
-          <p className="text-sm text-orange-600 mt-2 font-medium">
+          <p className="text-sm text-black mt-2 font-medium">
             {isPulling ? "離すと更新" : ""}
           </p>
         </div>
@@ -1729,10 +1729,6 @@ export default function Main() {
         onTouchMove={handleTouchMove}
         onTouchEnd={handleTouchEnd}
       >
-        {/* Step 2: Pull to Refresh表示（アニメーション付き） */}
-        <div className="relative z-50">
-          <PullToRefreshIndicator />
-        </div>
         <div
           className="flex w-full h-full transition-transform duration-300 will-change-transform"
           style={{
@@ -1751,7 +1747,8 @@ export default function Main() {
             }}
           >
             {/* Pull to Refresh機能（本番用） */}
-            <div className="flex flex-col gap-3">
+            <PullToRefreshIndicator />
+            <div className="flex flex-col gap-3" style={{ marginTop: "20px" }}>
               {allMessageOptions.map((msg) => {
                 // リンクプレビューは送信待機バーに表示するため、ここでは表示しない
                 if (
@@ -1960,7 +1957,7 @@ export default function Main() {
                           </>
                         )}
                         <div className="flex gap-1 mt-1">
-                          {msg.senderCount > 3 && (
+                          {msg.senderCount > 2 && (
                             <p className="text-xs text-black font-medium">
                               {msg.senderCount}人が送信しました
                             </p>
@@ -1996,7 +1993,7 @@ export default function Main() {
                       {msg.content}
                     </span>
                     <div className="flex gap-1 items-center mt-2">
-                      {msg.senderCount > 3 && (
+                      {msg.senderCount > 2 && (
                         <span className="text-xs text-black font-medium">
                           {msg.senderCount}人が送信しました
                         </span>
@@ -2019,8 +2016,14 @@ export default function Main() {
               paddingTop: `${LIST_PT}px`,
             }}
           >
+            {/* Pull to Refresh機能（本番用） */}
+            <PullToRefreshIndicator />
+
             {/* 全員選択トグル */}
-            <div className="flex items-center justify-end mb-2">
+            <div
+              className="flex items-center justify-end mb-2"
+              style={{ marginTop: "20px" }}
+            >
               <button
                 onClick={toggleSelectAllVisible}
                 className={`px-3 py-1.5 rounded-xl text-sm font-bold border transition ${
