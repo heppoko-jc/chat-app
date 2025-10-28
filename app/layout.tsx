@@ -7,6 +7,7 @@ import PushRegistrar from "./components/PushRegistrar";
 import Providers from "./providers";
 import RegisterSW from "./register-sw"; // SW登録（client）
 import SWVisibilityPinger from "./components/SWVisibilityPinger"; // ← 追加（client）
+import ConsentSync from "./components/ConsentSync"; // ← 同意情報同期（client）
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -57,6 +58,9 @@ export default function RootLayout({
 
         {/* 画面状態をSWへ常時送信（通知抑制のためのハートビート） */}
         <SWVisibilityPinger />
+
+        {/* 同意情報の自動同期（ログイン済みユーザー向け） */}
+        <ConsentSync />
 
         {/* アプリ本体 */}
         <Providers>

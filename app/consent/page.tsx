@@ -3,6 +3,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import axios from "axios";
 
 export default function Consent() {
   const [name, setName] = useState("");
@@ -135,6 +136,41 @@ export default function Consent() {
       };
 
       localStorage.setItem("experimentConsent", JSON.stringify(consentData));
+
+      // ログイン済みの場合は即座にDBに同期
+      const token = localStorage.getItem("token");
+      const userId = localStorage.getItem("userId");
+      
+      if (token && userId) {
+        try {
+          // ユーザー情報を取得（メールアドレスが必要）
+          const profileResponse = await axios.get("/api/auth/profile", {
+            headers: { Authorization: `Bearer ${token}` }
+          });
+
+          if (profileResponse.data?.email) {
+            // 同意情報をDBに送信
+            await axios.post("/api/auth/consent", {
+              email: profileResponse.data.email,
+              participantName: consentData.participantName,
+              consentDate: consentData.consentDate,
+              participation: consentData.participation,
+              interview: consentData.interview,
+              dataUsage: consentData.dataUsage,
+              recordingConsent: consentData.recordingConsent,
+            }, {
+              headers: { Authorization: `Bearer ${token}` }
+            });
+
+            // 同期完了フラグを設定
+            localStorage.setItem("consentSyncedAt", new Date().toISOString());
+            console.log("同意情報をDBに即座に同期しました");
+          }
+        } catch (error) {
+          console.warn("同意情報の即座同期に失敗しました:", error);
+          // エラーでも処理を続行
+        }
+      }
 
       // 登録ページに遷移
       router.push("/register");
