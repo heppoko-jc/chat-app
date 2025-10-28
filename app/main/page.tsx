@@ -358,7 +358,7 @@ export default function Main() {
   // Pull to Refresh表示（本番用）
   const PullToRefreshIndicator = () => {
     const shouldShow = isRefreshing || isPulling;
-    const progress = Math.min(pullDistance / 80, 1); // 0-1の範囲で正規化
+    const progress = Math.min(pullDistance / 150, 1); // 0-1の範囲で正規化
 
     return (
       <div
@@ -374,24 +374,24 @@ export default function Main() {
           {isRefreshing ? (
             // 更新中のスピナー
             <div className="flex flex-col items-center">
-              <div className="animate-spin rounded-full h-8 w-8 border-4 border-orange-200 border-t-orange-500 mb-2"></div>
-              <div className="text-xs text-orange-600 font-bold">更新中...</div>
+              <div className="animate-spin rounded-full h-8 w-8 border-4 border-gray-200 border-t-black mb-2"></div>
+              <div className="text-xs text-black font-bold">更新中...</div>
             </div>
           ) : isPulling ? (
             // 引っ張っている時のインジケーター
             <div className="relative">
               <div
-                className="rounded-full h-6 w-6 border-2 border-orange-300"
+                className="rounded-full h-6 w-6 border-2 border-gray-300"
                 style={{
-                  background: `conic-gradient(from 0deg, #f97316 ${
+                  background: `conic-gradient(from 0deg, #000000 ${
                     progress * 360
-                  }deg, #fed7aa 0deg)`,
+                  }deg, #d1d5db 0deg)`,
                 }}
               ></div>
             </div>
           ) : null}
 
-          <p className="text-sm text-orange-600 mt-2 font-medium">
+          <p className="text-sm text-black mt-2 font-medium">
             {isPulling ? "離すと更新" : ""}
           </p>
         </div>
@@ -877,12 +877,12 @@ export default function Main() {
 
       if (deltaY > 0) {
         // 下に引っ張っている
-        const distance = Math.min(deltaY * 0.5, 80 * 1.5); // 抵抗感を演出
+        const distance = Math.min(deltaY * 0.4, 200); // 抵抗感を強く演出
         setPullDistance(distance);
         setIsPulling(true);
 
-        if (distance >= 80) {
-          // 閾値を超えたら更新実行
+        if (distance >= 150) {
+          // 閾値を超えたら更新実行（より厳しい条件）
           handleRefresh();
           setTouchStart(null);
           setPullDistance(0);
@@ -2018,14 +2018,8 @@ export default function Main() {
               paddingTop: `${LIST_PT}px`,
             }}
           >
-            {/* Pull to Refresh機能（本番用） */}
-            <PullToRefreshIndicator />
-
             {/* 全員選択トグル */}
-            <div
-              className="flex items-center justify-end mb-2"
-              style={{ marginTop: "20px" }}
-            >
+            <div className="flex items-center justify-end mb-2">
               <button
                 onClick={toggleSelectAllVisible}
                 className={`px-3 py-1.5 rounded-xl text-sm font-bold border transition ${
