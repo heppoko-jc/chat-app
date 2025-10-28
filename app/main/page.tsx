@@ -155,7 +155,6 @@ export default function Main() {
     message: string;
     recipients: string[];
   } | null>(null);
-  const [touchStartX, setTouchStartX] = useState<number | null>(null);
   const [isInputMode, setIsInputMode] = useState(false);
   const [inputMessage, setInputMessage] = useState("");
   const { presetMessages, setPresetMessages, setChatList } = useChatData();
@@ -357,7 +356,7 @@ export default function Main() {
 
   // Pull to Refresh表示（本番用）
   const PullToRefreshIndicator = () => {
-    const shouldShow = isRefreshing || isPulling;
+    const shouldShow = isRefreshing || (isPulling && pullDistance >= 40);
     const progress = Math.min(pullDistance / 150, 1); // 0-1の範囲で正規化
 
     return (
@@ -847,11 +846,9 @@ export default function Main() {
     };
   }, [currentUserId, fetchPresetMessages, fetchChatList]);
 
-  // スワイプとPull to Refresh統合（JSXで使う）
+  // Pull to Refresh用のタッチハンドラー
   const handleTouchStart = useCallback(
     (e: React.TouchEvent) => {
-      setTouchStartX(e.touches[0].clientX);
-
       // Pull to Refresh用のタッチ開始
       if (isRefreshing) return;
 
@@ -895,16 +892,6 @@ export default function Main() {
 
   const handleTouchEnd = useCallback(
     (e: React.TouchEvent) => {
-      // スワイプ処理
-      if (touchStartX === null) return;
-      const deltaX = e.changedTouches[0].clientX - touchStartX;
-      const SWIPE_THRESHOLD = 100;
-      if (deltaX < -SWIPE_THRESHOLD && step === "select-message")
-        setStep("select-recipients");
-      else if (deltaX > SWIPE_THRESHOLD && step === "select-recipients")
-        setStep("select-message");
-      setTouchStartX(null);
-
       // Pull to Refresh用のタッチ終了
       if (isPulling && !isRefreshing) {
         setPullDistance(0);
@@ -912,7 +899,7 @@ export default function Main() {
       }
       setTouchStart(null);
     },
-    [touchStartX, step, isPulling, isRefreshing]
+    [isPulling, isRefreshing]
   );
 
   const handleHistoryNavigation = () => router.push("/notifications");
@@ -1632,10 +1619,7 @@ export default function Main() {
             }}
             className="ml-2 px-2 py-1 rounded-full bg-black text-white text-xs font-bold shadow cursor-pointer hover:bg-gray-800 transition select-none"
           >
-            {visibleFriends.length > 0 &&
-            selectedRecipientIds.length === visibleFriends.length
-              ? "全員"
-              : `${selectedRecipientIds.length}人`}
+            {selectedRecipientIds.length}人
           </span>
         )}
 
@@ -2019,10 +2003,10 @@ export default function Main() {
             }}
           >
             {/* 全員選択トグル */}
-            <div className="flex items-center justify-end mb-2">
+            <div className="mb-3">
               <button
                 onClick={toggleSelectAllVisible}
-                className={`px-3 py-1.5 rounded-xl text-sm font-bold border transition ${
+                className={`w-full py-3 rounded-xl text-base font-bold border transition ${
                   allVisibleSelected
                     ? "bg-black border-black text-white"
                     : "bg-white border-gray-300 text-black hover:bg-gray-100"
