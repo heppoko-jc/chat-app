@@ -156,6 +156,13 @@ export default function Consent() {
           </h1>
         </div>
 
+        {/* 研究紹介 */}
+        <div className="bg-blue-50 p-4">
+          <p className="text-sm text-gray-700 text-center">
+            このアプリは慶應義塾大学メディアデザイン研究科城山拓海の修士研究の一環です。アプリを使った感想をぜひ教えてください。
+          </p>
+        </div>
+
         {/* PDF表示エリア */}
         <div className="p-6">
           {/* お名前入力欄 */}
