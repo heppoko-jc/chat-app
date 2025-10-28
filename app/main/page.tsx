@@ -358,13 +358,13 @@ export default function Main() {
   // Pull to Refresh表示（本番用）
   const PullToRefreshIndicator = () => {
     const shouldShow = isRefreshing || isPulling;
-    const progress = Math.min(pullDistance / 80, 1); // 0-1の範囲で正規化
+    const progress = Math.min(pullDistance / 150, 1); // 0-1の範囲で正規化（閾値150に合わせて調整）
 
     return (
       <div
         className="flex justify-center items-center py-4 transition-all duration-200 ease-out"
         style={{
-          transform: `translateY(${Math.min(pullDistance, 60)}px)`,
+          transform: `translateY(${Math.min(pullDistance, 90)}px)`,
           opacity: shouldShow ? 1 : 0,
           height: shouldShow ? "60px" : "0px",
           overflow: "hidden",
@@ -877,12 +877,12 @@ export default function Main() {
 
       if (deltaY > 0) {
         // 下に引っ張っている
-        const distance = Math.min(deltaY * 0.5, 80 * 1.5); // 抵抗感を演出
+        const distance = Math.min(deltaY * 0.4, 200); // 抵抗感を強く演出
         setPullDistance(distance);
         setIsPulling(true);
 
-        if (distance >= 80) {
-          // 閾値を超えたら更新実行
+        if (distance >= 150) {
+          // 閾値を超えたら更新実行（より厳しい条件）
           handleRefresh();
           setTouchStart(null);
           setPullDistance(0);
@@ -1777,7 +1777,7 @@ export default function Main() {
                       }}
                       className={`w-full flex items-center gap-3 text-left px-5 py-3 rounded-3xl hover:bg-gray-100 active:scale-95 font-medium text-base ${
                         selectedMessage === msg.content
-                          ? "font-black text-black bg-white"
+                          ? "font-black text-black bg-white tracking-tighter"
                           : "font-normal text-gray-700 bg-white"
                       }`}
                       style={{
@@ -1883,7 +1883,7 @@ export default function Main() {
                       }}
                       className={`w-full flex items-center gap-3 text-left px-5 py-3 rounded-3xl hover:bg-gray-100 active:scale-95 font-medium text-base ${
                         selectedMessage === msg.content
-                          ? "font-black text-black bg-white"
+                          ? "font-black text-black bg-white tracking-tighter"
                           : "font-normal text-gray-700 bg-white"
                       }`}
                       style={{
@@ -1981,14 +1981,18 @@ export default function Main() {
                     onClick={() => handleSelectMessage(msg.content)}
                     className={`w-full flex flex-col text-left px-5 py-3 rounded-3xl hover:bg-gray-100 active:scale-95 font-medium text-base ${
                       selectedMessage === msg.content
-                        ? "font-black text-black bg-white"
+                        ? "font-black text-black bg-white tracking-tighter"
                         : "font-normal text-gray-700 bg-white"
                     }`}
                     style={{
                       backgroundColor: "#ffffff",
                     }}
                   >
-                    <span className="whitespace-pre-wrap break-words">
+                    <span
+                      className={`whitespace-pre-wrap break-words ${
+                        selectedMessage === msg.content ? "font-black" : ""
+                      }`}
+                    >
                       {msg.content}
                     </span>
                     <div className="flex gap-1 items-center mt-2">
