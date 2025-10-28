@@ -1452,7 +1452,7 @@ export default function Main() {
 
       {/* 送信待機バー（ヘッダー直下より少し下） */}
       <div
-        className={`fixed left-4 right-4 z-30 py-2 flex items-center h-16 px-3 rounded-2xl transition-all duration-200 backdrop-blur-sm ${
+        className={`fixed left-4 right-4 z-30 py-2 flex items-center h-16 px-3 rounded-2xl backdrop-blur-sm ${
           canSend ? "bg-black" : "bg-white/90"
         }`}
         style={{ top: `${SEND_BAR_TOP}px` }}
@@ -1517,7 +1517,7 @@ export default function Main() {
                     setIsComposing(false);
                   }}
                   placeholder="コメントを追加..."
-                  className="flex-1 px-3 py-2 rounded-xl border border-gray-300 text-base bg-white focus:outline-none transition"
+                  className="flex-1 px-3 py-2 rounded-xl border border-gray-300 text-base bg-white focus:outline-none"
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !isComposing) {
                       // キーボードを閉じないようにblur()を呼ばない
@@ -1532,7 +1532,7 @@ export default function Main() {
                 value={inputMessage}
                 onChange={(e) => setInputMessage(e.target.value)}
                 placeholder="メッセージを入力"
-                className="flex-1 px-3 py-2 rounded-xl border border-gray-300 text-base bg-white focus:outline-none transition"
+                className="flex-1 px-3 py-2 rounded-xl border border-gray-300 text-base bg-white focus:outline-none"
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && inputMessage.trim()) {
                     setSelectedMessage(inputMessage.trim());
@@ -1552,7 +1552,7 @@ export default function Main() {
           ) : selectedMessageLinkData ? (
             // リンクの場合はプレビュー形式で表示（編集できない）
             <div
-              className={`flex items-center px-3 py-2 rounded-xl border transition h-[48px] ${
+              className={`flex items-center px-3 py-2 rounded-xl border h-[48px] ${
                 canSend ? "border-gray-600" : "border-gray-300"
               }`}
             >
@@ -1614,7 +1614,7 @@ export default function Main() {
               onChange={(e) => {
                 setSelectedMessage(e.target.value);
               }}
-              className={`flex-1 px-3 py-2 rounded-xl border text-base focus:outline-none transition ${
+              className={`flex-1 px-3 py-2 rounded-xl border text-base focus:outline-none ${
                 canSend
                   ? "bg-transparent text-white border-gray-600 placeholder-gray-400"
                   : "bg-white text-black border-gray-300"
@@ -1789,7 +1789,6 @@ export default function Main() {
                           selectedMessage === msg.content
                             ? "#ea580c"
                             : "#fed7aa",
-                        fontWeight: selectedMessage === msg.content ? 900 : 500,
                       }}
                     >
                       {linkData.image ? (
@@ -1896,7 +1895,6 @@ export default function Main() {
                           selectedMessage === msg.content
                             ? "#ea580c"
                             : "#fed7aa",
-                        fontWeight: selectedMessage === msg.content ? 900 : 500,
                       }}
                     >
                       {msg.linkImage ? (
@@ -1988,7 +1986,6 @@ export default function Main() {
                     }`}
                     style={{
                       backgroundColor: "#ffffff",
-                      fontWeight: selectedMessage === msg.content ? 900 : 500,
                     }}
                   >
                     <span
