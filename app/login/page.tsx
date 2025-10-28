@@ -98,7 +98,7 @@ export default function Login() {
           {isLoading ? "ログイン中..." : "Login"}
         </button>
       </form>
-      
+
       <div className="mt-4 p-3 bg-orange-50 border border-orange-200 rounded-lg">
         <p className="text-sm text-gray-700 text-center">
           うまくログインができない場合は、一度アプリを閉じてもう一度開くとうまくいくことが多いです！

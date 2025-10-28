@@ -1343,7 +1343,7 @@ export default function Main() {
 
   // レイアウト定数
   const HEADER_H = 150;
-  const GAP_AFTER_HEADER = 8;
+  const GAP_AFTER_HEADER = -10;
   const SEND_BAR_TOTAL_H = 80;
   const SEND_BAR_TOP = HEADER_H + GAP_AFTER_HEADER;
   const LIST_PT = SEND_BAR_TOP + SEND_BAR_TOTAL_H - 32;
@@ -1401,7 +1401,7 @@ export default function Main() {
             </button>
           </div>
           <h1
-            className="text-xl font-extrabold text-orange-500 tracking-tight whitespace-nowrap"
+            className="text-xl font-extrabold text-black tracking-tight whitespace-nowrap"
             style={{ fontFamily: "'Poppins', sans-serif" }}
           >
             Happy Ice Cream
@@ -1434,7 +1434,7 @@ export default function Main() {
             ことばと相手を選んで送ってみましょう。
             <br />
             まずは
-            <span className="text-orange-500 font-bold">フォロー</span>
+            <span className="text-black font-bold">フォロー</span>
             を登録してください
           </p>
         ) : (
@@ -1444,7 +1444,7 @@ export default function Main() {
             ことばと相手を選んで送ってみましょう。
             <br />
             登録した
-            <span className="text-orange-500 font-bold">{friends.size}</span>
+            <span className="text-black font-bold">{friends.size}</span>
             人が誰かに送ったメッセージです👇
           </p>
         )}
@@ -1452,18 +1452,12 @@ export default function Main() {
 
       {/* 送信待機バー（ヘッダー直下より少し下） */}
       <div
-        className={`fixed left-6 right-6 z-30 py-2 flex items-center h-16 px-3 rounded-2xl border-2 border-orange-300 transition-all duration-200
-          ${
-            canSend
-              ? "bg-gradient-to-r from-orange-400 to-orange-300"
-              : selectedMessage || selectedRecipientIds.length > 0
-              ? "bg-gradient-to-r from-orange-200 to-orange-100"
-              : "bg-white"
-          }
-        `}
+        className={`fixed left-4 right-4 z-30 py-2 flex items-center h-16 px-3 rounded-2xl transition-all duration-200 backdrop-blur-sm ${
+          canSend ? "bg-black" : "bg-white/90"
+        }`}
         style={{ top: `${SEND_BAR_TOP}px` }}
       >
-        <div className="flex-1 flex flex-col justify-between h-full overflow-x-auto pr-2">
+        <div className="flex-1 flex flex-col justify-center h-full overflow-x-auto pr-2">
           {!selectedMessage ||
           !messageOptions.some((m) => m.content === selectedMessage) ? (
             // リンクプレビューがある場合はプレビューを表示、ない場合は入力フィールド
@@ -1477,10 +1471,10 @@ export default function Main() {
                       alt={linkPreview.title}
                       width={48}
                       height={48}
-                      className="w-12 h-12 object-cover rounded-lg border border-orange-200 flex-shrink-0"
+                      className="w-12 h-12 object-cover rounded-lg border border-gray-300 flex-shrink-0"
                     />
                   ) : (
-                    <div className="w-8 h-8 rounded-lg bg-orange-100 border border-orange-200 flex items-center justify-center text-orange-600 font-bold text-xs flex-shrink-0">
+                    <div className="w-8 h-8 rounded-lg bg-gray-100 border border-gray-300 flex items-center justify-center text-gray-600 font-bold text-xs flex-shrink-0">
                       {linkPreview.title && linkPreview.title !== "Google Maps"
                         ? "URL"
                         : "🗺️"}
@@ -1523,7 +1517,7 @@ export default function Main() {
                     setIsComposing(false);
                   }}
                   placeholder="コメントを追加..."
-                  className="flex-1 px-3 py-2 rounded-xl border border-orange-200 text-base bg-white focus:ring-2 focus:ring-orange-200 outline-none transition"
+                  className="flex-1 px-3 py-2 rounded-xl border border-gray-300 text-base bg-white focus:outline-none transition"
                   onKeyDown={(e) => {
                     if (e.key === "Enter" && !isComposing) {
                       // キーボードを閉じないようにblur()を呼ばない
@@ -1538,7 +1532,7 @@ export default function Main() {
                 value={inputMessage}
                 onChange={(e) => setInputMessage(e.target.value)}
                 placeholder="メッセージを入力"
-                className="flex-1 px-3 py-2 rounded-xl border border-orange-200 text-base bg-white focus:ring-2 focus:ring-orange-200 outline-none transition"
+                className="flex-1 px-3 py-2 rounded-xl border border-gray-300 text-base bg-white focus:outline-none transition"
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && inputMessage.trim()) {
                     setSelectedMessage(inputMessage.trim());
@@ -1555,79 +1549,89 @@ export default function Main() {
                 }}
               />
             )
-          ) : (
+          ) : selectedMessageLinkData ? (
+            // リンクの場合はプレビュー形式で表示（編集できない）
             <div
-              onClick={() => setSelectedMessage(null)}
-              className="px-3 py-2 rounded-xl font-bold cursor-pointer bg白/80 text-orange-600 shadow border border-orange-200 hover:bg-orange-100 transition"
+              className={`flex items-center px-3 py-2 rounded-xl border transition h-[48px] ${
+                canSend ? "border-gray-600" : "border-gray-300"
+              }`}
             >
-              {selectedMessageLinkData ? (
-                // リンクの場合はプレビュー形式で表示
-                <div className="flex items-center gap-2">
-                  {selectedMessageLinkData.image ? (
-                    <Image
-                      src={selectedMessageLinkData.image}
-                      alt={selectedMessageLinkData.title}
-                      width={48}
-                      height={48}
-                      className="w-12 h-12 object-cover rounded-lg border border-orange-300"
-                      onError={(e) => {
-                        e.currentTarget.style.display = "none";
-                        e.currentTarget.nextElementSibling?.classList.remove(
-                          "hidden"
-                        );
-                      }}
-                    />
-                  ) : null}
-                  <div
-                    className={`w-8 h-8 rounded-lg bg-orange-100 border border-orange-300 flex items-center justify-center text-orange-600 font-bold text-xs ${
-                      selectedMessageLinkData.image ? "hidden" : ""
+              <div className="flex items-center gap-2">
+                {selectedMessageLinkData.image ? (
+                  <Image
+                    src={selectedMessageLinkData.image}
+                    alt={selectedMessageLinkData.title}
+                    width={48}
+                    height={48}
+                    className="w-12 h-12 object-cover rounded-lg border border-gray-300 flex-shrink-0"
+                    onError={(e) => {
+                      e.currentTarget.style.display = "none";
+                      e.currentTarget.nextElementSibling?.classList.remove(
+                        "hidden"
+                      );
+                    }}
+                  />
+                ) : null}
+                <div
+                  className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs font-bold flex-shrink-0 ${
+                    selectedMessageLinkData.image ? "hidden" : ""
+                  } ${
+                    canSend
+                      ? "bg-gray-700 border border-gray-600 text-gray-300"
+                      : "bg-gray-100 border border-gray-300 text-gray-600"
+                  }`}
+                >
+                  {selectedMessageLinkData.image
+                    ? "URL"
+                    : selectedMessageLinkData.title &&
+                      selectedMessageLinkData.title !== "Google Maps"
+                    ? "🗺️"
+                    : "no photo"}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p
+                    className={`text-sm font-bold truncate ${
+                      canSend ? "text-white" : "text-black"
                     }`}
                   >
-                    {selectedMessageLinkData.image
-                      ? "URL"
-                      : selectedMessageLinkData.title &&
-                        selectedMessageLinkData.title !== "Google Maps"
-                      ? "🗺️"
-                      : "no photo"}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-bold text-orange-800 truncate">
-                      {selectedMessageLinkData.title}
-                    </p>
-                    <p className="text-xs text-orange-600 truncate">
-                      {selectedMessage}
-                    </p>
-                  </div>
-                </div>
-              ) : (
-                // 通常のメッセージの場合
-                selectedMessage
-              )}
-            </div>
-          )}
-          <div className="flex overflow-x-auto whitespace-nowrap scrollbar-hide mt-1">
-            {selectedRecipientIds.length > 0 ? (
-              selectedRecipientIds.map((id, idx) => {
-                const u = users.find((u) => u.id === id);
-                return (
-                  <span
-                    key={id}
-                    onClick={() => toggleRecipient(id)}
-                    className="inline-block mr-1 font-bold text-orange-700 bg-orange-100 px-2 py-1 rounded-xl shadow cursor-pointer hover:bg-orange-200 transition"
+                    {selectedMessageLinkData.title}
+                  </p>
+                  <p
+                    className={`text-xs truncate ${
+                      canSend ? "text-gray-300" : "text-gray-600"
+                    }`}
                   >
-                    {u?.name}
-                    {idx < selectedRecipientIds.length - 1 ? "," : ""}
-                  </span>
-                );
-              })
-            ) : (
-              <span className="text-orange-300">誰に送る？</span>
-            )}
-          </div>
+                    {selectedMessage}
+                  </p>
+                </div>
+              </div>
+            </div>
+          ) : (
+            // 通常のメッセージの場合は編集可能な入力欄
+            <input
+              type="text"
+              value={selectedMessage || ""}
+              onChange={(e) => {
+                setSelectedMessage(e.target.value);
+              }}
+              className={`flex-1 px-3 py-2 rounded-xl border text-base focus:outline-none transition ${
+                canSend
+                  ? "bg-transparent text-white border-gray-600 placeholder-gray-400"
+                  : "bg-white text-black border-gray-300"
+              }`}
+              placeholder="メッセージを編集"
+              onClick={(e) => e.stopPropagation()}
+            />
+          )}
         </div>
 
         {selectedRecipientIds.length > 0 && (
-          <span className="ml-2 px-2 py-1 rounded-full bg-orange-400 text-white text-xs font-bold shadow border border-orange-200 select-none">
+          <span
+            onClick={() => {
+              setSelectedRecipientIds([]);
+            }}
+            className="ml-2 px-2 py-1 rounded-full bg-black text-white text-xs font-bold shadow cursor-pointer hover:bg-gray-800 transition select-none"
+          >
             {visibleFriends.length > 0 &&
             selectedRecipientIds.length === visibleFriends.length
               ? "全員"
@@ -1637,15 +1641,16 @@ export default function Main() {
 
         <button
           onClick={canSend ? handleSend : handleMessageIconClick}
-          className="flex-none px-1 py-1 transition-transform duration-200 ease-out active:scale-125 focus:outline-none rounded-full bg-white/80 hover:bg-orange-100 shadow border border-orange-200"
+          className="flex-none p-0 focus:outline-none"
           disabled={isSending}
-          style={{ minWidth: 36, minHeight: 36 }}
+          style={{ minWidth: 28, minHeight: 28 }}
         >
           <Image
             src={canSend ? "/icons/send.png" : "/icons/message.png"}
             alt="send"
             width={28}
             height={28}
+            className={canSend ? "brightness-0 invert" : ""}
           />
         </button>
       </div>
@@ -1718,7 +1723,7 @@ export default function Main() {
 
       {/* コンテンツ（スワイプ可能） */}
       <main
-        className="flex-1 overflow-y-auto overflow-x-hidden bg-orange-50"
+        className="flex-1 overflow-y-auto overflow-x-hidden bg-white"
         style={{ overscrollBehavior: "contain", touchAction: "pan-y" }}
         onTouchStart={handleTouchStart}
         onTouchMove={handleTouchMove}
@@ -1770,10 +1775,10 @@ export default function Main() {
                         setSelectedMessageLinkData(linkData);
                         handleSelectMessage(msg.content, linkData);
                       }}
-                      className={`w-full flex items-center gap-3 text-left px-5 py-3 rounded-3xl border border-orange-100 hover:bg-orange-100 active:scale-95 font-medium text-base ${
+                      className={`w-full flex items-center gap-3 text-left px-5 py-3 rounded-3xl hover:bg-gray-100 active:scale-95 font-medium text-base ${
                         selectedMessage === msg.content
-                          ? "font-bold text-orange-700 bg-orange-200 border-orange-300"
-                          : "text-gray-700 bg-white"
+                          ? "font-black text-black bg-white"
+                          : "font-normal text-gray-700 bg-white"
                       }`}
                       style={{
                         backgroundColor:
@@ -1876,10 +1881,10 @@ export default function Main() {
                         setSelectedMessageContent(msg.content);
                         handleSelectMessage(msg.content, linkData);
                       }}
-                      className={`w-full flex items-center gap-3 text-left px-5 py-3 rounded-3xl border border-orange-100 hover:bg-orange-100 active:scale-95 font-medium text-base ${
+                      className={`w-full flex items-center gap-3 text-left px-5 py-3 rounded-3xl hover:bg-gray-100 active:scale-95 font-medium text-base ${
                         selectedMessage === msg.content
-                          ? "font-bold text-orange-700 bg-orange-200 border-orange-300"
-                          : "text-gray-700 bg-white"
+                          ? "font-black text-black bg-white"
+                          : "font-normal text-gray-700 bg-white"
                       }`}
                       style={{
                         backgroundColor:
@@ -1956,7 +1961,7 @@ export default function Main() {
                         )}
                         <div className="flex gap-1 mt-1">
                           {msg.senderCount > 3 && (
-                            <p className="text-xs text-orange-600">
+                            <p className="text-xs text-black font-medium">
                               {msg.senderCount}人が送信しました
                             </p>
                           )}
@@ -1974,16 +1979,13 @@ export default function Main() {
                   <button
                     key={msg.id}
                     onClick={() => handleSelectMessage(msg.content)}
-                    className={`w-full flex flex-col text-left px-5 py-3 rounded-3xl border border-orange-100 hover:bg-orange-100 active:scale-95 font-medium text-base ${
+                    className={`w-full flex flex-col text-left px-5 py-3 rounded-3xl hover:bg-gray-100 active:scale-95 font-medium text-base ${
                       selectedMessage === msg.content
-                        ? "font-bold text-orange-700 bg-orange-200 border-orange-300"
-                        : "text-gray-700 bg-white"
+                        ? "font-black text-black bg-white"
+                        : "font-normal text-gray-700 bg-white"
                     }`}
                     style={{
-                      backgroundColor:
-                        selectedMessage === msg.content ? "#fed7aa" : "#ffffff",
-                      borderColor:
-                        selectedMessage === msg.content ? "#ea580c" : "#fed7aa",
+                      backgroundColor: "#ffffff",
                     }}
                   >
                     <span className="whitespace-pre-wrap break-words">
@@ -1991,7 +1993,7 @@ export default function Main() {
                     </span>
                     <div className="flex gap-1 items-center mt-2">
                       {msg.senderCount > 3 && (
-                        <span className="text-xs text-orange-600">
+                        <span className="text-xs text-black font-medium">
                           {msg.senderCount}人が送信しました
                         </span>
                       )}
@@ -2019,8 +2021,8 @@ export default function Main() {
                 onClick={toggleSelectAllVisible}
                 className={`px-3 py-1.5 rounded-xl text-sm font-bold border transition ${
                   allVisibleSelected
-                    ? "bg-orange-200 border-orange-300 text-orange-800"
-                    : "bg-orange-50 border-orange-200 text-orange-600 hover:bg-orange-100"
+                    ? "bg-black border-black text-white"
+                    : "bg-white border-gray-300 text-black hover:bg-gray-100"
                 }`}
                 disabled={visibleFriends.length === 0}
               >
@@ -2041,7 +2043,7 @@ export default function Main() {
                     height={48}
                     className="mb-4"
                   />
-                  <p className="text-lg font-bold text-orange-600 text-center">
+                  <p className="text-lg font-bold text-black text-center">
                     フォローしましょう↑！
                   </p>
                 </div>
@@ -2050,18 +2052,13 @@ export default function Main() {
                   <div
                     key={u.id}
                     onClick={() => toggleRecipient(u.id)}
-                    className={`flex items-center gap-3 p-3 rounded-3xl border border-orange-100 hover:bg-orange-100 active:scale-95 cursor-pointer ${
+                    className={`flex items-center gap-3 p-3 rounded-3xl hover:bg-gray-100 active:scale-95 cursor-pointer ${
                       selectedRecipientIds.includes(u.id)
-                        ? "bg-orange-200 border-orange-300"
+                        ? "bg-white"
                         : "bg-white"
                     }`}
                     style={{
-                      backgroundColor: selectedRecipientIds.includes(u.id)
-                        ? "#fed7aa"
-                        : "#ffffff",
-                      borderColor: selectedRecipientIds.includes(u.id)
-                        ? "#ea580c"
-                        : "#fed7aa",
+                      backgroundColor: "#ffffff",
                     }}
                   >
                     <div
@@ -2074,7 +2071,7 @@ export default function Main() {
                       <p
                         className={`text-lg truncate ${
                           selectedRecipientIds.includes(u.id)
-                            ? "font-bold text-orange-700"
+                            ? "font-bold text-black"
                             : "text-gray-700"
                         }`}
                       >
@@ -2107,28 +2104,19 @@ export default function Main() {
         className="fixed left-4 right-4 z-30 bg-white py-2 px-4 rounded-3xl"
         style={{ bottom: "calc(76px + env(safe-area-inset-bottom))" }}
       >
-        <div className="relative flex">
-          <span
-            className="absolute top-0 bottom-0 w-1/2 bg-orange-100 rounded-3xl transition-transform duration-300"
-            style={{
-              transform:
-                step === "select-message"
-                  ? "translateX(0%)"
-                  : "translateX(100%)",
-            }}
-          />
+        <div className="flex">
           <button
             onClick={() => setStep("select-message")}
-            className={`relative z-10 flex-1 py-2 text-center text-base font-bold rounded-3xl transition text-orange-600 ${
-              step === "select-message" ? "bg-orange-200 shadow" : ""
+            className={`flex-1 py-2 text-center text-base rounded-3xl transition text-black ${
+              step === "select-message" ? "font-extrabold" : "font-normal"
             }`}
           >
             マッチメッセージ
           </button>
           <button
             onClick={() => setStep("select-recipients")}
-            className={`relative z-10 flex-1 py-2 text-center text-base font-bold rounded-3xl transition text-orange-600 ${
-              step === "select-recipients" ? "bg-orange-200 shadow" : ""
+            className={`flex-1 py-2 text-center text-base rounded-3xl transition text-black ${
+              step === "select-recipients" ? "font-extrabold" : "font-normal"
             }`}
           >
             送信先リスト
