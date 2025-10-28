@@ -890,17 +890,14 @@ export default function Main() {
     [touchStart, isRefreshing, handleRefresh]
   );
 
-  const handleTouchEnd = useCallback(
-    (e: React.TouchEvent) => {
-      // Pull to Refresh用のタッチ終了
-      if (isPulling && !isRefreshing) {
-        setPullDistance(0);
-        setIsPulling(false);
-      }
-      setTouchStart(null);
-    },
-    [isPulling, isRefreshing]
-  );
+  const handleTouchEnd = useCallback(() => {
+    // Pull to Refresh用のタッチ終了
+    if (isPulling && !isRefreshing) {
+      setPullDistance(0);
+      setIsPulling(false);
+    }
+    setTouchStart(null);
+  }, [isPulling, isRefreshing]);
 
   const handleHistoryNavigation = () => router.push("/notifications");
 
