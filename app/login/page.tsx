@@ -17,7 +17,20 @@ export default function Login() {
   const [resetPassword, setResetPassword] = useState("");
   const [resetMessage, setResetMessage] = useState<string | null>(null);
   const [isResetting, setIsResetting] = useState(false);
+  const [isLocalDev, setIsLocalDev] = useState(false);
   const router = useRouter();
+
+  // ローカル開発環境かどうかを判定
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const hostname = window.location.hostname;
+      setIsLocalDev(
+        hostname === "localhost" ||
+          hostname === "127.0.0.1" ||
+          hostname === "[::1]"
+      );
+    }
+  }, []);
 
   // Service Worker とキャッシュをクリーンアップ（開発環境での問題回避）
   useEffect(() => {
@@ -281,69 +294,71 @@ export default function Login() {
       </div>
 
       {/* 開発/許可フラグ有効時のパスワードリセット機能 */}
-      <div className="mt-4 p-3 bg-gray-50 border border-gray-300 rounded-lg">
-        <div className="flex items-center justify-between mb-2">
-          <p className="text-xs text-gray-600 font-medium">
-            🔧 開発者向け: パスワードリセット
-          </p>
-          <button
-            type="button"
-            onClick={() => {
-              console.log("🔵 パスワードリセットトグルクリック", {
-                before: showPasswordReset,
-              });
-              setShowPasswordReset(!showPasswordReset);
-            }}
-            className="text-xs text-blue-600 hover:underline cursor-pointer"
-          >
-            {showPasswordReset ? "閉じる" : "開く"}
-          </button>
-        </div>
-
-        {showPasswordReset && (
-          <div className="mt-2 space-y-2">
-            <input
-              type="text"
-              placeholder="メールアドレスまたはユーザー名（例: taichi）"
-              value={resetIdentifier}
-              onChange={(e) => setResetIdentifier(e.target.value)}
-              className="border p-2 w-full text-sm"
-              disabled={isResetting}
-            />
-            <input
-              type="password"
-              placeholder="新しいパスワード（6文字以上）"
-              value={resetPassword}
-              onChange={(e) => setResetPassword(e.target.value)}
-              className="border p-2 w-full text-sm"
-              disabled={isResetting}
-            />
+      {isLocalDev && (
+        <div className="mt-4 p-3 bg-gray-50 border border-gray-300 rounded-lg">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs text-gray-600 font-medium">
+              🔧 開発者向け: パスワードリセット
+            </p>
             <button
               type="button"
-              onClick={handlePasswordReset}
-              disabled={isResetting}
-              className={`w-full p-2 text-sm text-white rounded ${
-                isResetting
-                  ? "bg-gray-400 cursor-not-allowed"
-                  : "bg-green-600 hover:bg-green-700"
-              }`}
+              onClick={() => {
+                console.log("🔵 パスワードリセットトグルクリック", {
+                  before: showPasswordReset,
+                });
+                setShowPasswordReset(!showPasswordReset);
+              }}
+              className="text-xs text-blue-600 hover:underline cursor-pointer"
             >
-              {isResetting ? "リセット中..." : "パスワードをリセット"}
+              {showPasswordReset ? "閉じる" : "開く"}
             </button>
-            {resetMessage && (
-              <div
-                className={`p-2 rounded text-xs whitespace-pre-line ${
-                  resetMessage.startsWith("✅")
-                    ? "bg-green-100 text-green-800 border border-green-300"
-                    : "bg-red-100 text-red-800 border border-red-300"
+          </div>
+
+          {showPasswordReset && (
+            <div className="mt-2 space-y-2">
+              <input
+                type="text"
+                placeholder="メールアドレスまたはユーザー名（例: taichi）"
+                value={resetIdentifier}
+                onChange={(e) => setResetIdentifier(e.target.value)}
+                className="border p-2 w-full text-sm"
+                disabled={isResetting}
+              />
+              <input
+                type="password"
+                placeholder="新しいパスワード（6文字以上）"
+                value={resetPassword}
+                onChange={(e) => setResetPassword(e.target.value)}
+                className="border p-2 w-full text-sm"
+                disabled={isResetting}
+              />
+              <button
+                type="button"
+                onClick={handlePasswordReset}
+                disabled={isResetting}
+                className={`w-full p-2 text-sm text-white rounded ${
+                  isResetting
+                    ? "bg-gray-400 cursor-not-allowed"
+                    : "bg-green-600 hover:bg-green-700"
                 }`}
               >
-                {resetMessage}
-              </div>
-            )}
-          </div>
-        )}
-      </div>
+                {isResetting ? "リセット中..." : "パスワードをリセット"}
+              </button>
+              {resetMessage && (
+                <div
+                  className={`p-2 rounded text-xs whitespace-pre-line ${
+                    resetMessage.startsWith("✅")
+                      ? "bg-green-100 text-green-800 border border-green-300"
+                      : "bg-red-100 text-red-800 border border-red-300"
+                  }`}
+                >
+                  {resetMessage}
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
