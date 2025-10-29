@@ -2080,22 +2080,26 @@ export default function Main() {
 
       {/* リスト切替トグル */}
       <div
-        className="fixed left-4 right-4 z-30 bg-white py-2 px-4 rounded-3xl"
+        className="fixed left-4 right-4 z-30 bg-white py-2 px-2 rounded-3xl border-2 border-gray-200 shadow-lg"
         style={{ bottom: "calc(76px + env(safe-area-inset-bottom))" }}
       >
-        <div className="flex">
+        <div className="flex gap-2">
           <button
             onClick={() => setStep("select-message")}
-            className={`flex-1 py-2 text-center text-base rounded-3xl transition text-black ${
-              step === "select-message" ? "font-extrabold" : "font-normal"
+            className={`flex-1 py-3 text-center text-base rounded-2xl transition-all font-bold shadow-sm hover:shadow-md ${
+              step === "select-message"
+                ? "bg-orange-50 text-orange-700 border-2 border-orange-500 shadow-md"
+                : "bg-white text-gray-700 border-2 border-gray-200 hover:bg-gray-50"
             }`}
           >
             マッチメッセージ
           </button>
           <button
             onClick={() => setStep("select-recipients")}
-            className={`flex-1 py-2 text-center text-base rounded-3xl transition text-black ${
-              step === "select-recipients" ? "font-extrabold" : "font-normal"
+            className={`flex-1 py-3 text-center text-base rounded-2xl transition-all font-bold shadow-sm hover:shadow-md ${
+              step === "select-recipients"
+                ? "bg-orange-50 text-orange-700 border-2 border-orange-500 shadow-md"
+                : "bg-white text-gray-700 border-2 border-gray-200 hover:bg-gray-50"
             }`}
           >
             送信先リスト
