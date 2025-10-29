@@ -1754,7 +1754,7 @@ export default function Main() {
                       }}
                       className={`w-full flex items-center gap-3 text-left px-5 py-3 rounded-2xl hover:bg-gray-100 active:scale-95 font-medium text-base ${
                         selectedMessage === msg.content
-                          ? "font-black text-black bg-gray-100 tracking-tighter"
+                          ? "font-black text-black bg-gray-100"
                           : "font-normal text-gray-700 bg-white"
                       }`}
                       style={{
@@ -1858,9 +1858,9 @@ export default function Main() {
                         setSelectedMessageContent(msg.content);
                         handleSelectMessage(msg.content, linkData);
                       }}
-                      className={`w-full flex items-center gap-3 text-left px-5 py-4 rounded-2xl hover:bg-gray-50 active:scale-95 font-medium text-base border-2 transition-all shadow-sm hover:shadow-md ${
+                      className={`w-full flex items-center gap-3 text-left px-5 py-4 rounded-2xl hover:bg-gray-50 font-medium text-base border-2 shadow-sm hover:shadow-md ${
                         selectedMessage === msg.content
-                          ? "font-black text-black bg-gray-100 tracking-tighter border-orange-500 shadow-md"
+                          ? "font-black text-black bg-gray-100 border-black shadow-md"
                           : "font-normal text-gray-700 bg-white border-gray-200"
                       }`}
                       style={{
@@ -1951,9 +1951,9 @@ export default function Main() {
                   <button
                     key={msg.id}
                     onClick={() => handleSelectMessage(msg.content)}
-                    className={`w-full flex flex-col text-left px-5 py-4 rounded-2xl hover:bg-gray-50 active:scale-95 font-medium text-base border-2 transition-all shadow-sm hover:shadow-md ${
+                    className={`w-full flex flex-col text-left px-5 py-4 rounded-2xl hover:bg-gray-50 font-medium text-base border-2 shadow-sm hover:shadow-md ${
                       selectedMessage === msg.content
-                        ? "font-black text-black bg-gray-100 tracking-tighter border-orange-500 shadow-md"
+                        ? "font-black text-black bg-gray-100 border-black shadow-md"
                         : "font-normal text-gray-700 bg-white border-gray-200"
                     }`}
                     style={{
@@ -2029,9 +2029,9 @@ export default function Main() {
                   <button
                     key={u.id}
                     onClick={() => toggleRecipient(u.id)}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl hover:bg-gray-50 active:scale-95 cursor-pointer border-2 transition-all shadow-sm hover:shadow-md text-left ${
+                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl hover:bg-gray-50 cursor-pointer border-2 shadow-sm hover:shadow-md text-left ${
                       selectedRecipientIds.includes(u.id)
-                        ? "bg-gray-100 border-orange-500 shadow-md"
+                        ? "bg-gray-100 border-black shadow-md"
                         : "bg-white border-gray-200"
                     }`}
                     style={{
@@ -2080,26 +2080,26 @@ export default function Main() {
 
       {/* リスト切替トグル */}
       <div
-        className="fixed left-4 right-4 z-30 bg-white py-2 px-2 rounded-3xl border-2 border-gray-200 shadow-lg"
+        className="fixed left-4 right-4 z-30 bg-gray-50 py-1 px-1 rounded-2xl border border-gray-200 shadow-sm backdrop-blur-sm"
         style={{ bottom: "calc(76px + env(safe-area-inset-bottom))" }}
       >
-        <div className="flex gap-2">
+        <div className="flex gap-1">
           <button
             onClick={() => setStep("select-message")}
-            className={`flex-1 py-3 text-center text-base rounded-2xl transition-all font-bold shadow-sm hover:shadow-md ${
+            className={`flex-1 py-2.5 text-center text-sm rounded-xl font-bold transition-all ${
               step === "select-message"
-                ? "bg-orange-50 text-orange-700 border-2 border-orange-500 shadow-md"
-                : "bg-white text-gray-700 border-2 border-gray-200 hover:bg-gray-50"
+                ? "bg-white text-black shadow-sm border border-gray-200"
+                : "bg-transparent text-gray-600 hover:text-gray-900"
             }`}
           >
             マッチメッセージ
           </button>
           <button
             onClick={() => setStep("select-recipients")}
-            className={`flex-1 py-3 text-center text-base rounded-2xl transition-all font-bold shadow-sm hover:shadow-md ${
+            className={`flex-1 py-2.5 text-center text-sm rounded-xl font-bold transition-all ${
               step === "select-recipients"
-                ? "bg-orange-50 text-orange-700 border-2 border-orange-500 shadow-md"
-                : "bg-white text-gray-700 border-2 border-gray-200 hover:bg-gray-50"
+                ? "bg-white text-black shadow-sm border border-gray-200"
+                : "bg-transparent text-gray-600 hover:text-gray-900"
             }`}
           >
             送信先リスト
