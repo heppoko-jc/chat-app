@@ -121,11 +121,9 @@ const mergeQueue = (
   for (const p of prev) map.set(keyOf(p), p);
   for (const n of incoming) map.set(keyOf(n), n);
 
-  // 表示済みマッチをフィルタリング
-  const shownMatches = userId ? getShownMatches(userId) : new Set();
-  const filtered = [...map.values()].filter(
-    (item) => !shownMatches.has(keyOf(item))
-  );
+  // 表示済みマッチのフィルタリングを一時的に無効化
+  // これにより先に送った側の通知も即座に表示される
+  const filtered = [...map.values()];
 
   return filtered.sort(
     (a, b) => new Date(a.matchedAt).getTime() - new Date(b.matchedAt).getTime()
@@ -821,7 +819,7 @@ export default function Main() {
       matchedUserName?: string;
       targetUserId?: string;
     }) => {
-      // 自分宛のみ
+      // 自分宛のみ（targetUserIdが指定されている場合はチェック、指定されていない場合は全て受け取る）
       if (data.targetUserId && data.targetUserId !== currentUserId) return;
 
       if (data.matchedUserId && data.matchedUserName) {
@@ -832,6 +830,8 @@ export default function Main() {
           matchedUser: { id: data.matchedUserId, name: data.matchedUserName },
           chatId: data.chatId,
         };
+
+        // 即座にキューに追加（フィルタリングは無効化済み）
         setMatchQueue((prev) => mergeQueue(prev, [item], currentUserId));
       }
 
@@ -1755,15 +1755,15 @@ export default function Main() {
                         setSelectedMessageLinkData(linkData);
                         handleSelectMessage(msg.content, linkData);
                       }}
-                      className={`w-full flex items-center gap-3 text-left px-5 py-3 rounded-3xl hover:bg-gray-100 active:scale-95 font-medium text-base ${
+                      className={`w-full flex items-center gap-3 text-left px-5 py-3 rounded-2xl hover:bg-gray-100 active:scale-95 font-medium text-base ${
                         selectedMessage === msg.content
-                          ? "font-black text-black bg-white tracking-tighter"
+                          ? "font-black text-black bg-gray-100 tracking-tighter"
                           : "font-normal text-gray-700 bg-white"
                       }`}
                       style={{
                         backgroundColor:
                           selectedMessage === msg.content
-                            ? "#fed7aa"
+                            ? "#f3f4f6"
                             : "#ffffff",
                         borderColor:
                           selectedMessage === msg.content
@@ -1861,15 +1861,15 @@ export default function Main() {
                         setSelectedMessageContent(msg.content);
                         handleSelectMessage(msg.content, linkData);
                       }}
-                      className={`w-full flex items-center gap-3 text-left px-5 py-3 rounded-3xl hover:bg-gray-100 active:scale-95 font-medium text-base ${
+                      className={`w-full flex items-center gap-3 text-left px-5 py-3 rounded-2xl hover:bg-gray-100 active:scale-95 font-medium text-base ${
                         selectedMessage === msg.content
-                          ? "font-black text-black bg-white tracking-tighter"
+                          ? "font-black text-black bg-gray-100 tracking-tighter"
                           : "font-normal text-gray-700 bg-white"
                       }`}
                       style={{
                         backgroundColor:
                           selectedMessage === msg.content
-                            ? "#fed7aa"
+                            ? "#f3f4f6"
                             : "#ffffff",
                         borderColor:
                           selectedMessage === msg.content
@@ -1958,13 +1958,14 @@ export default function Main() {
                   <button
                     key={msg.id}
                     onClick={() => handleSelectMessage(msg.content)}
-                    className={`w-full flex flex-col text-left px-5 py-3 rounded-3xl hover:bg-gray-100 active:scale-95 font-medium text-base ${
+                    className={`w-full flex flex-col text-left px-5 py-3 rounded-2xl hover:bg-gray-100 active:scale-95 font-medium text-base ${
                       selectedMessage === msg.content
-                        ? "font-black text-black bg-white tracking-tighter"
+                        ? "font-black text-black bg-gray-100 tracking-tighter"
                         : "font-normal text-gray-700 bg-white"
                     }`}
                     style={{
-                      backgroundColor: "#ffffff",
+                      backgroundColor:
+                        selectedMessage === msg.content ? "#f3f4f6" : "#ffffff",
                     }}
                   >
                     <span
@@ -2035,13 +2036,15 @@ export default function Main() {
                   <div
                     key={u.id}
                     onClick={() => toggleRecipient(u.id)}
-                    className={`flex items-center gap-3 p-3 rounded-3xl hover:bg-gray-100 active:scale-95 cursor-pointer ${
+                    className={`flex items-center gap-3 p-3 rounded-2xl hover:bg-gray-100 active:scale-95 cursor-pointer ${
                       selectedRecipientIds.includes(u.id)
-                        ? "bg-white"
+                        ? "bg-gray-100"
                         : "bg-white"
                     }`}
                     style={{
-                      backgroundColor: "#ffffff",
+                      backgroundColor: selectedRecipientIds.includes(u.id)
+                        ? "#f3f4f6"
+                        : "#ffffff",
                     }}
                   >
                     <div

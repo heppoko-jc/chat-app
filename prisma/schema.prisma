@@ -14,6 +14,9 @@ model User {
   password          String
   createdAt         DateTime           @default(now())
   bio               String?
+  // パスワードリセット用
+  passwordResetToken String?
+  passwordResetExpires DateTime?
   // 同意情報
   participantName    String?   // 実験参加者名
   consentDate        DateTime? // 同意日時

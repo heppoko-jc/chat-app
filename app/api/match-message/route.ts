@@ -308,7 +308,7 @@ export async function POST(req: NextRequest) {
           matchedAt: newMatchPair.matchedAt.toISOString(),
         };
 
-        // 送信者向け
+        // 送信者向け（先に送った側）
         socket.emit("matchEstablished", {
           ...payload,
           matchedUserId: matchedUser.id,
@@ -316,12 +316,26 @@ export async function POST(req: NextRequest) {
           targetUserId: senderId,
         });
 
-        // 受信者向け
+        // 受信者向け（後に送った側）
         socket.emit("matchEstablished", {
           ...payload,
           matchedUserId: senderUser.id,
           matchedUserName: senderUser.name,
           targetUserId: matchedUserId,
+        });
+
+        // 追加: 両方のユーザーに直接通知（targetUserIdを指定しない）
+        // これにより確実に両方のユーザーに通知が届く
+        socket.emit("matchEstablished", {
+          ...payload,
+          matchedUserId: matchedUser.id,
+          matchedUserName: matchedUser.name,
+        });
+
+        socket.emit("matchEstablished", {
+          ...payload,
+          matchedUserId: senderUser.id,
+          matchedUserName: senderUser.name,
         });
       } finally {
         setTimeout(() => socket.disconnect(), 50);
