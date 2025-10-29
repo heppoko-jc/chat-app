@@ -2,7 +2,6 @@
 
 "use client";
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import axios from "axios";
 import Link from "next/link";
 
@@ -10,7 +9,6 @@ export default function ForgotPassword() {
   const [email, setEmail] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState("");
-  const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

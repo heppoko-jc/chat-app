@@ -114,8 +114,7 @@ const addShownMatch = (userId: string, matchKey: string) => {
 
 const mergeQueue = (
   prev: MatchQueueItem[],
-  incoming: MatchQueueItem[],
-  userId: string | null
+  incoming: MatchQueueItem[]
 ): MatchQueueItem[] => {
   const map = new Map<string, MatchQueueItem>();
   for (const p of prev) map.set(keyOf(p), p);
@@ -782,7 +781,7 @@ export default function Main() {
           (a, b) =>
             new Date(a.matchedAt).getTime() - new Date(b.matchedAt).getTime()
         );
-        setMatchQueue((prev) => mergeQueue(prev, incoming, currentUserId));
+        setMatchQueue((prev) => mergeQueue(prev, incoming));
       }
     } catch (e) {
       console.error("未表示マッチの取得失敗:", e);
@@ -832,7 +831,7 @@ export default function Main() {
         };
 
         // 即座にキューに追加（フィルタリングは無効化済み）
-        setMatchQueue((prev) => mergeQueue(prev, [item], currentUserId));
+        setMatchQueue((prev) => mergeQueue(prev, [item]));
       }
 
       // 表示情報の同期
@@ -1281,9 +1280,7 @@ export default function Main() {
                 matchedUser: { id: matchedUser.id, name: matchedUser.name },
                 chatId: matchResponse.data.chatId,
               };
-              setMatchQueue((prev) =>
-                mergeQueue(prev, [selfItem], currentUserId)
-              );
+              setMatchQueue((prev) => mergeQueue(prev, [selfItem]));
             }
           }
           await Promise.all([
