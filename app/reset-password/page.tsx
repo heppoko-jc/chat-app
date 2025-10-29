@@ -1,12 +1,12 @@
 // app/reset-password/page.tsx
 
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import axios from "axios";
 import Link from "next/link";
 
-export default function ResetPassword() {
+function ResetPasswordForm() {
   const [token, setToken] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -131,5 +131,20 @@ export default function ResetPassword() {
         </Link>
       </div>
     </div>
+  );
+}
+
+export default function ResetPassword() {
+  return (
+    <Suspense
+      fallback={
+        <div className="p-5 max-w-md mx-auto">
+          <h1 className="text-xl mb-4">新しいパスワードを設定</h1>
+          <p className="text-sm text-gray-600">読み込み中...</p>
+        </div>
+      }
+    >
+      <ResetPasswordForm />
+    </Suspense>
   );
 }
