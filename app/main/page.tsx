@@ -1858,20 +1858,16 @@ export default function Main() {
                         setSelectedMessageContent(msg.content);
                         handleSelectMessage(msg.content, linkData);
                       }}
-                      className={`w-full flex items-center gap-3 text-left px-5 py-3 rounded-2xl hover:bg-gray-100 active:scale-95 font-medium text-base ${
+                      className={`w-full flex items-center gap-3 text-left px-5 py-4 rounded-2xl hover:bg-gray-50 active:scale-95 font-medium text-base border-2 transition-all shadow-sm hover:shadow-md ${
                         selectedMessage === msg.content
-                          ? "font-black text-black bg-gray-100 tracking-tighter"
-                          : "font-normal text-gray-700 bg-white"
+                          ? "font-black text-black bg-gray-100 tracking-tighter border-orange-500 shadow-md"
+                          : "font-normal text-gray-700 bg-white border-gray-200"
                       }`}
                       style={{
                         backgroundColor:
                           selectedMessage === msg.content
                             ? "#f3f4f6"
                             : "#ffffff",
-                        borderColor:
-                          selectedMessage === msg.content
-                            ? "#ea580c"
-                            : "#fed7aa",
                       }}
                     >
                       <div className="flex-1 min-w-0">
@@ -1955,10 +1951,10 @@ export default function Main() {
                   <button
                     key={msg.id}
                     onClick={() => handleSelectMessage(msg.content)}
-                    className={`w-full flex flex-col text-left px-5 py-3 rounded-2xl hover:bg-gray-100 active:scale-95 font-medium text-base ${
+                    className={`w-full flex flex-col text-left px-5 py-4 rounded-2xl hover:bg-gray-50 active:scale-95 font-medium text-base border-2 transition-all shadow-sm hover:shadow-md ${
                       selectedMessage === msg.content
-                        ? "font-black text-black bg-gray-100 tracking-tighter"
-                        : "font-normal text-gray-700 bg-white"
+                        ? "font-black text-black bg-gray-100 tracking-tighter border-orange-500 shadow-md"
+                        : "font-normal text-gray-700 bg-white border-gray-200"
                     }`}
                     style={{
                       backgroundColor:
@@ -2030,13 +2026,13 @@ export default function Main() {
                 </div>
               ) : (
                 visibleFriends.map((u) => (
-                  <div
+                  <button
                     key={u.id}
                     onClick={() => toggleRecipient(u.id)}
-                    className={`flex items-center gap-3 p-3 rounded-2xl hover:bg-gray-100 active:scale-95 cursor-pointer ${
+                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl hover:bg-gray-50 active:scale-95 cursor-pointer border-2 transition-all shadow-sm hover:shadow-md text-left ${
                       selectedRecipientIds.includes(u.id)
-                        ? "bg-gray-100"
-                        : "bg-white"
+                        ? "bg-gray-100 border-orange-500 shadow-md"
+                        : "bg-white border-gray-200"
                     }`}
                     style={{
                       backgroundColor: selectedRecipientIds.includes(u.id)
@@ -2074,7 +2070,7 @@ export default function Main() {
                         height={20}
                       />
                     )}
-                  </div>
+                  </button>
                 ))
               )}
             </div>
