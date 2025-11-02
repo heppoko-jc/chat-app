@@ -834,9 +834,11 @@ export default function Main() {
         setMatchQueue((prev) => mergeQueue(prev, [item]));
       }
 
-      // 表示情報の同期
+      // 表示情報の同期（少し遅延させてサーバー側のデータ更新を待つ）
       fetchPresetMessages();
-      fetchChatList(currentUserId);
+      setTimeout(() => {
+        fetchChatList(currentUserId);
+      }, 300);
     };
 
     socket.on("matchEstablished", handleMatchEstablished);

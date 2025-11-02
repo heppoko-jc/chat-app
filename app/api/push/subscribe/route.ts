@@ -2,10 +2,8 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import webpush from "web-push";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
 import { verifyJwt } from "@/lib/jwt";
-
-const prisma = new PrismaClient();
 
 webpush.setVapidDetails(
   "mailto:you@domain.com",
@@ -31,7 +29,10 @@ export async function POST(req: NextRequest) {
   try {
     const { subscription } = await req.json();
     if (!subscription?.endpoint) {
-      return NextResponse.json({ error: "Invalid subscription" }, { status: 400 });
+      return NextResponse.json(
+        { error: "Invalid subscription" },
+        { status: 400 }
+      );
     }
 
     await prisma.pushSubscription.upsert({
@@ -43,6 +44,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("🚨 Push subscribe error:", error);
-    return NextResponse.json({ error: "Failed to subscribe to push" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Failed to subscribe to push" },
+      { status: 500 }
+    );
   }
 }

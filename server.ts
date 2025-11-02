@@ -57,6 +57,44 @@ io.on("connection", (socket) => {
     }
   );
 
+  // マッチ成立通知（APIから送信されるイベントを受信してブロードキャスト）
+  socket.on(
+    "matchEstablished",
+    (data: {
+      matchId: string;
+      chatId?: string;
+      message: string;
+      matchedAt: string;
+      matchedUserId?: string;
+      matchedUserName?: string;
+      targetUserId?: string;
+    }) => {
+      console.log("🎯 マッチ成立通知受信:", {
+        matchId: data.matchId,
+        chatId: data.chatId,
+        targetUserId: data.targetUserId,
+        matchedUserId: data.matchedUserId,
+      });
+
+      // targetUserIdが指定されている場合は、そのユーザーにのみ送信
+      if (data.targetUserId) {
+        console.log(`📤 ユーザールーム user-${data.targetUserId} に送信`);
+        io.to(`user-${data.targetUserId}`).emit("matchEstablished", data);
+
+        // そのチャットを開いているユーザーにも送信（リアルタイム反映のため）
+        if (data.chatId) {
+          console.log(`📤 チャットルーム chat-${data.chatId} に送信`);
+          io.to(`chat-${data.chatId}`).emit("matchEstablished", data);
+        }
+      } else {
+        // targetUserIdが指定されていない場合は、matchedUserIdとsenderIdの両方に送信
+        // これは後方互換性のためのフォールバック
+        console.log(`📤 ブロードキャスト送信（targetUserId未指定）`);
+        io.emit("matchEstablished", data);
+      }
+    }
+  );
+
   socket.on("disconnect", () => {
     console.log("❌ ユーザーが切断しました:", socket.id);
     // ユーザーマップから削除

@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
 import webpush, { PushSubscription as WebPushSubscription } from "web-push";
 import { io as ioClient } from "socket.io-client";
 
-const prisma = new PrismaClient();
 const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL!;
 
 // VAPID 鍵の設定
@@ -297,9 +296,23 @@ export async function POST(req: NextRequest) {
       // WebSocket でリアルタイム通知
       const socket = ioClient(SOCKET_URL, { transports: ["websocket"] });
       try {
-        await new Promise<void>((resolve) =>
-          socket.on("connect", () => resolve())
-        );
+        await new Promise<void>((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            reject(new Error("Socket.IO接続タイムアウト"));
+          }, 5000);
+
+          socket.on("connect", () => {
+            clearTimeout(timeout);
+            console.log(`✅ Socket.IOサーバーに接続成功: ${socket.id}`);
+            resolve();
+          });
+
+          socket.on("connect_error", (error) => {
+            clearTimeout(timeout);
+            console.error(`❌ Socket.IO接続エラー:`, error);
+            reject(error);
+          });
+        });
 
         const payload = {
           matchId: newMatchPair.id,
@@ -324,19 +337,10 @@ export async function POST(req: NextRequest) {
           targetUserId: matchedUserId,
         });
 
-        // 追加: 両方のユーザーに直接通知（targetUserIdを指定しない）
-        // これにより確実に両方のユーザーに通知が届く
-        socket.emit("matchEstablished", {
-          ...payload,
-          matchedUserId: matchedUser.id,
-          matchedUserName: matchedUser.name,
-        });
-
-        socket.emit("matchEstablished", {
-          ...payload,
-          matchedUserId: senderUser.id,
-          matchedUserName: senderUser.name,
-        });
+        console.log(`✅ マッチ通知送信完了: ${senderId} と ${matchedUserId}`);
+      } catch (e) {
+        console.error("⚠️ WebSocket通知送信失敗（継続）:", e);
+        // 通知はベストエフォートなので続行
       } finally {
         setTimeout(() => socket.disconnect(), 50);
       }

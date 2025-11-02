@@ -53,8 +53,8 @@ export default function FriendsPage() {
       if (aIsFriend && !bIsFriend) return -1;
       if (!aIsFriend && bIsFriend) return 1;
 
-      // 同じフォロー状態の場合、登録順（createdAt順）
-      return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+      // 同じフォロー状態の場合、登録が新しい順（createdAt降順）
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
   };
 

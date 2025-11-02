@@ -1,10 +1,8 @@
 // app/api/match-message/count/route.ts
 
 import { NextRequest, NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
 import { getMatchExpiryDate } from "@/lib/match-utils";
-
-const prisma = new PrismaClient();
 
 /**
  * GET /api/match-message/count

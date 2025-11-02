@@ -2,9 +2,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
-import { PrismaClient } from "@prisma/client";
-
-const prisma = new PrismaClient();
+import { prisma } from "@/lib/prisma";
 
 export async function POST(req: NextRequest) {
   try {
@@ -16,7 +14,10 @@ export async function POST(req: NextRequest) {
     });
 
     if (existingUser) {
-      return NextResponse.json({ error: "This email is already in use." }, { status: 400 });
+      return NextResponse.json(
+        { error: "This email is already in use." },
+        { status: 400 }
+      );
     }
 
     // パスワードのハッシュ化
@@ -30,7 +31,9 @@ export async function POST(req: NextRequest) {
         password: hashedPassword,
         // 同意情報がある場合、保存
         participantName: consentInfo?.participantName || null,
-        consentDate: consentInfo?.consentDate ? new Date(consentInfo.consentDate) : null,
+        consentDate: consentInfo?.consentDate
+          ? new Date(consentInfo.consentDate)
+          : null,
         consentParticipated: consentInfo?.participation ?? null,
         consentInterview: consentInfo?.interview ?? null,
         consentDataUsage: consentInfo?.dataUsage ?? null,
@@ -44,9 +47,15 @@ export async function POST(req: NextRequest) {
       consentDate: user.consentDate,
     });
 
-    return NextResponse.json({ message: "User registered successfully!", user});
+    return NextResponse.json({
+      message: "User registered successfully!",
+      user,
+    });
   } catch (error) {
     console.error("Registration Error", error);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Internal Server Error" },
+      { status: 500 }
+    );
   }
 }

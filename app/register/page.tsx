@@ -9,6 +9,7 @@ export default function Register() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const router = useRouter();
 
@@ -67,8 +68,18 @@ export default function Register() {
   };
 
   const handleRegister = async () => {
-    if (!name.trim() || !email.trim() || !password.trim()) {
+    if (
+      !name.trim() ||
+      !email.trim() ||
+      !password.trim() ||
+      !confirmPassword.trim()
+    ) {
       alert("全ての項目を入力してください");
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      alert("パスワードが一致しません");
       return;
     }
 
@@ -78,7 +89,7 @@ export default function Register() {
       // 同意情報を取得
       const consentData = localStorage.getItem("experimentConsent");
       let consentInfo = null;
-      
+
       if (consentData) {
         try {
           consentInfo = JSON.parse(consentData);
@@ -181,6 +192,29 @@ export default function Register() {
               className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
               disabled={isSubmitting}
             />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              パスワード（確認） <span className="text-red-600">*</span>
+            </label>
+            <input
+              type="password"
+              placeholder="もう一度入力"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+              className={`w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 ${
+                confirmPassword && password !== confirmPassword
+                  ? "border-red-500"
+                  : "border-gray-300"
+              }`}
+              disabled={isSubmitting}
+            />
+            {confirmPassword && password !== confirmPassword && (
+              <p className="mt-1 text-sm text-red-600">
+                パスワードが一致しません
+              </p>
+            )}
           </div>
 
           <button

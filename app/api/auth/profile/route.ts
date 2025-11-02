@@ -2,9 +2,8 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import jwt from "jsonwebtoken";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
 
-const prisma = new PrismaClient();
 const SECRET_KEY: string = process.env.JWT_SECRET || "";
 
 if (!SECRET_KEY) {
@@ -48,7 +47,10 @@ export async function GET(req: NextRequest) {
   } catch (error) {
     // ここにはほとんど入らないはずですが、念のため
     console.error("Profile fetch unexpected error:", error);
-    return NextResponse.json({ error: "Failed to fetch profile" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Failed to fetch profile" },
+      { status: 500 }
+    );
   }
 }
 
@@ -73,6 +75,9 @@ export async function PUT(req: NextRequest) {
     return NextResponse.json(updatedUser);
   } catch (error) {
     console.error("Profile update error:", error);
-    return NextResponse.json({ error: "Failed to update profile" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Failed to update profile" },
+      { status: 500 }
+    );
   }
 }

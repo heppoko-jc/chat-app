@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import PushRegistrar from "./components/PushRegistrar";
+import AppOpenLogger from "./components/AppOpenLogger";
 import Providers from "./providers";
 import RegisterSW from "./register-sw"; // SW登録（client）
 import SWVisibilityPinger from "./components/SWVisibilityPinger"; // ← 追加（client）
@@ -46,13 +47,29 @@ export default function RootLayout({
         <meta name="format-detection" content="telephone=no" />
 
         <link rel="manifest" href="/manifest.json" />
-        <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png" />
-        <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192x192.png" />
-        <link rel="icon" type="image/png" sizes="512x512" href="/icons/icon-512x512.png" />
+        <link
+          rel="apple-touch-icon"
+          sizes="180x180"
+          href="/icons/apple-touch-icon.png"
+        />
+        <link
+          rel="icon"
+          type="image/png"
+          sizes="192x192"
+          href="/icons/icon-192x192.png"
+        />
+        <link
+          rel="icon"
+          type="image/png"
+          sizes="512x512"
+          href="/icons/icon-512x512.png"
+        />
         <meta name="theme-color" content="#ffffff" />
         <meta name="color-scheme" content="light" />
       </head>
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
+      <body
+        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
+      >
         {/* 先にSWを登録（ready に到達してから pinger が動きます） */}
         <RegisterSW />
 
@@ -66,6 +83,7 @@ export default function RootLayout({
         <Providers>
           {children}
           <PushRegistrar />
+          <AppOpenLogger />
         </Providers>
       </body>
     </html>

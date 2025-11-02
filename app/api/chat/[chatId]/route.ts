@@ -1,11 +1,10 @@
 // app/api/chat/[chatId]/route.ts
 
 import { NextRequest, NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
 import { io as ioClient } from "socket.io-client";
 import webpush, { PushSubscription as WebPushSubscription } from "web-push";
 
-const prisma = new PrismaClient();
 const SOCKET_URL =
   process.env.SOCKET_URL ||
   process.env.NEXT_PUBLIC_SOCKET_URL ||

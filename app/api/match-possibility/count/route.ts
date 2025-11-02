@@ -1,10 +1,8 @@
 // app/api/match-possibility/count/route.ts - マッチの可能性がある件数を取得するAPI
 
 import { NextRequest, NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
 import { getMatchExpiryDate } from "@/lib/match-utils";
-
-const prisma = new PrismaClient();
 
 export async function GET(req: NextRequest) {
   try {

@@ -128,3 +128,11 @@ model FriendRestriction {
   
   user       User     @relation("UserFriendRestriction", fields: [userId], references: [id])
 }
+
+model UserSession {
+  id        String   @id @default(uuid())
+  userId    String
+  startTime DateTime @default(now())
+
+  @@index([userId, startTime])
+}

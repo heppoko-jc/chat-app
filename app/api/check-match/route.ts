@@ -1,10 +1,9 @@
 // app/api/check-match/route.ts
 
 import { NextRequest, NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
 import { io as ioClient } from "socket.io-client";
 
-const prisma = new PrismaClient();
 const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL!;
 
 // 2人間のチャットIDを必ず返す（なければ作る）
@@ -63,32 +62,74 @@ export async function POST(req: NextRequest) {
       // チャットIDを確保
       const chatId = await ensureChatBetween(senderId, match.senderId);
 
-      // WebSocket サーバーにマッチ成立を通知 → socket-server はそれを受けて newMatch を broadcast
+      // ユーザー情報を取得
+      const [senderUser, matchedUser] = await Promise.all([
+        prisma.user.findUnique({
+          where: { id: senderId },
+          select: { id: true, name: true },
+        }),
+        prisma.user.findUnique({
+          where: { id: match.senderId },
+          select: { id: true, name: true },
+        }),
+      ]);
+
+      if (!senderUser || !matchedUser) {
+        console.error("🚨 ユーザー情報の取得に失敗");
+        continue;
+      }
+
+      // WebSocket サーバーにマッチ成立を通知
       const socket = ioClient(SOCKET_URL, { transports: ["websocket"] });
+      try {
+        await new Promise<void>((resolve, reject) => {
+          const timeout = setTimeout(() => {
+            reject(new Error("Socket.IO接続タイムアウト"));
+          }, 5000);
 
-      // 送信者への通知
-      socket.emit("matchEstablished", {
-        matchId: newPair.id,
-        message: newPair.message,
-        matchedAt: newPair.matchedAt.toISOString(),
-        matchedUserId: match.senderId,
-        matchedUserName: "マッチしたユーザー", // 必要に応じてユーザー情報を取得
-        chatId: chatId, // チャットIDを追加
-        targetUserId: senderId, // 送信先を指定
-      });
+          socket.on("connect", () => {
+            clearTimeout(timeout);
+            console.log(`✅ Socket.IOサーバーに接続成功: ${socket.id}`);
+            resolve();
+          });
 
-      // 受信者への通知
-      socket.emit("matchEstablished", {
-        matchId: newPair.id,
-        message: newPair.message,
-        matchedAt: newPair.matchedAt.toISOString(),
-        matchedUserId: senderId,
-        matchedUserName: "マッチしたユーザー", // 必要に応じてユーザー情報を取得
-        chatId: chatId, // チャットIDを追加
-        targetUserId: match.senderId, // 送信先を指定
-      });
+          socket.on("connect_error", (error) => {
+            clearTimeout(timeout);
+            console.error(`❌ Socket.IO接続エラー:`, error);
+            reject(error);
+          });
+        });
 
-      socket.disconnect();
+        const payload = {
+          matchId: newPair.id,
+          message: newPair.message,
+          matchedAt: newPair.matchedAt.toISOString(),
+          chatId,
+        };
+
+        // 送信者への通知
+        socket.emit("matchEstablished", {
+          ...payload,
+          matchedUserId: matchedUser.id,
+          matchedUserName: matchedUser.name,
+          targetUserId: senderId,
+        });
+
+        // 受信者への通知
+        socket.emit("matchEstablished", {
+          ...payload,
+          matchedUserId: senderUser.id,
+          matchedUserName: senderUser.name,
+          targetUserId: match.senderId,
+        });
+
+        console.log(`✅ マッチ通知送信完了: ${senderId} と ${match.senderId}`);
+      } catch (e) {
+        console.error("⚠️ WebSocket通知送信失敗（継続）:", e);
+        // 通知はベストエフォートなので続行
+      } finally {
+        setTimeout(() => socket.disconnect(), 50);
+      }
     }
 
     return NextResponse.json({ message: "Match check complete." });

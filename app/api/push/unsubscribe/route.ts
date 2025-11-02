@@ -1,10 +1,8 @@
 // app/api/push/unsubscribe/route.ts
 
 import { NextRequest, NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
 import { verifyJwt } from "@/lib/jwt";
-
-const prisma = new PrismaClient();
 
 export async function POST(req: NextRequest) {
   try {
@@ -31,6 +29,9 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("🚨 Push unsubscribe error:", error);
-    return NextResponse.json({ error: "Failed to unsubscribe from push" }, { status: 500 });
+    return NextResponse.json(
+      { error: "Failed to unsubscribe from push" },
+      { status: 500 }
+    );
   }
 }

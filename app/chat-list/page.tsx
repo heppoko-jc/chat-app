@@ -378,32 +378,68 @@ export default function ChatList() {
       if (realChatId) {
         socket.emit("joinChat", realChatId);
 
+        // 即座に状態を更新（WebSocketで受信したデータを優先）
         setChats((prev) => {
           const idx = prev.findIndex(
             (c) =>
               c.matchedUser.id === data.matchedUserId || c.chatId === realChatId
           );
-          if (idx === -1) return prev;
+
+          // チャットがまだリストにない場合は新規追加（dummy-チャットの可能性）
+          if (idx === -1) {
+            // dummy-チャットを探す
+            const dummyIdx = prev.findIndex(
+              (c) =>
+                c.chatId.startsWith("dummy-") &&
+                c.matchedUser.id === data.matchedUserId
+            );
+
+            if (dummyIdx !== -1) {
+              // dummy-チャットを実際のIDに変換
+              const next = [...prev];
+              const item = { ...next[dummyIdx] };
+              item.chatId = realChatId;
+              item.matchMessage = data.message;
+              item.matchMessageMatchedAt = data.matchedAt;
+              item.matchHistory = [
+                { message: data.message, matchedAt: data.matchedAt },
+              ];
+              next[dummyIdx] = item;
+              return next;
+            }
+            // 見つからない場合は既存のリストをそのまま返す（後でfetchChatsで取得）
+            return prev;
+          }
+
           const next = [...prev];
           const item = { ...next[idx] };
 
           if (item.chatId.startsWith("dummy-")) item.chatId = realChatId;
 
-          const list = [
-            ...(item.matchHistory || []),
-            { message: data.message, matchedAt: data.matchedAt },
-          ];
-          const map = new Map(
-            list.map((m) => [`${m.matchedAt}|${m.message}`, m])
+          // 重複チェック（同じmatchedAtとmessageの組み合わせを防ぐ）
+          const existingMatch = item.matchHistory?.find(
+            (m) => m.matchedAt === data.matchedAt && m.message === data.message
           );
-          item.matchHistory = Array.from(map.values()).sort(
-            (a, b) =>
-              new Date(a.matchedAt).getTime() - new Date(b.matchedAt).getTime()
-          );
-          item.matchMessage = data.message;
-          item.matchMessageMatchedAt = data.matchedAt;
 
-          next[idx] = item;
+          if (!existingMatch) {
+            const list = [
+              ...(item.matchHistory || []),
+              { message: data.message, matchedAt: data.matchedAt },
+            ];
+            const map = new Map(
+              list.map((m) => [`${m.matchedAt}|${m.message}`, m])
+            );
+            item.matchHistory = Array.from(map.values()).sort(
+              (a, b) =>
+                new Date(a.matchedAt).getTime() -
+                new Date(b.matchedAt).getTime()
+            );
+            item.matchMessage = data.message;
+            item.matchMessageMatchedAt = data.matchedAt;
+
+            next[idx] = item;
+          }
+
           return next;
         });
 
@@ -419,7 +455,11 @@ export default function ChatList() {
         });
       }
 
-      fetchChats();
+      // サーバーから再取得は遅延実行（状態更新後に確実に最新データを取得）
+      // 500ms待機してからfetchChatsを呼ぶことで、サーバー側のデータ更新が完了していることを確認
+      setTimeout(() => {
+        fetchChats();
+      }, 500);
     };
 
     socket.on("matchEstablished", handleMatchEstablished);
