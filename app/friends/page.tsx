@@ -471,16 +471,16 @@ export default function FriendsPage() {
       {showInfoPopup && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-2xl p-6 mx-4 max-w-sm w-full">
-            <h3 className="text-lg font-bold text-gray-800 mb-4 text-center">
+            <h3 className="text-2xl font-bold text-orange-500 mb-3 text-center">
               フォローはあなただけのものです。
             </h3>
-            <p className="text-sm text-gray-600 mb-4 text-center">
+            <p className="text-lg font-semibold text-gray-800 mb-6 text-center">
               フォローしても相手には通知されません。
             </p>
             <div className="space-y-2">
               <button
                 onClick={() => setShowInfoPopup(false)}
-                className="w-full bg-gray-200 text-gray-700 py-3 rounded-xl font-bold"
+                className="w-full bg-gray-200 text-gray-700 py-2 rounded-xl text-sm font-semibold"
               >
                 閉じる
               </button>
@@ -492,7 +492,7 @@ export default function FriendsPage() {
                   }
                   setShowInfoPopup(false);
                 }}
-                className="w-full bg-orange-500 text-white py-3 rounded-xl font-bold"
+                className="w-full bg-orange-500 text-white py-2 rounded-xl text-sm font-semibold"
               >
                 理解したので次からはこの通知は表示しない
               </button>

@@ -58,6 +58,9 @@ export default function Notifications() {
   const [sentMessages, setSentMessages] = useState<SentMessage[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
   const [cancelPopup, setCancelPopup] = useState<SentMessage | null>(null);
+  const [cancelGroupPopup, setCancelGroupPopup] = useState<
+    SentMessage[] | null
+  >(null);
   const [animateExit, setAnimateExit] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [linkPopup, setLinkPopup] = useState<SentMessage | null>(null);
@@ -72,6 +75,75 @@ export default function Notifications() {
     const matched = sentMessages.filter((m) => m.isMatched);
     return { unmatchedMessages: unmatched, matchedMessages: matched };
   }, [sentMessages]);
+
+  // ──────────── "同時送信"グルーピング ────────────
+  type Group = {
+    key: string; // message + baseTime でユニーク化
+    message: string;
+    linkTitle?: string;
+    linkImage?: string;
+    createdAtBase: string; // グループ基準時刻（最初の要素）
+    items: SentMessage[];
+    isMatchedBlock: boolean; // セクション識別
+  };
+
+  // 許容ウィンドウ（秒）
+  const SAME_WINDOW_SEC = 5;
+
+  const toSec = (iso: string) => Math.floor(new Date(iso).getTime() / 1000);
+
+  const groupBySimultaneous = (
+    list: SentMessage[],
+    isMatchedBlock: boolean
+  ): Group[] => {
+    if (list.length === 0) return [];
+    // createdAt desc で並んでいる前提。異なるならここでソート
+    const sorted = [...list].sort(
+      (a, b) =>
+        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    );
+
+    const groups: Group[] = [];
+    let current: Group | null = null;
+
+    for (const m of sorted) {
+      if (
+        current &&
+        current.message === m.message &&
+        Math.abs(toSec(current.createdAtBase) - toSec(m.createdAt)) <=
+          SAME_WINDOW_SEC
+      ) {
+        current.items.push(m);
+      } else {
+        if (current) groups.push(current);
+        current = {
+          key: `${m.message}|${m.createdAt}`,
+          message: m.message,
+          linkTitle: m.linkTitle,
+          linkImage: m.linkImage,
+          createdAtBase: m.createdAt,
+          items: [m],
+          isMatchedBlock,
+        };
+      }
+    }
+    if (current) groups.push(current);
+    return groups;
+  };
+
+  const unmatchedGroups = useMemo(
+    () => groupBySimultaneous(unmatchedMessages, false),
+    [unmatchedMessages]
+  );
+  const matchedGroups = useMemo(
+    () => groupBySimultaneous(matchedMessages, true),
+    [matchedMessages]
+  );
+
+  // トグル開閉状態
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>({});
+  const toggleGroup = (key: string) =>
+    setOpenGroups((prev) => ({ ...prev, [key]: !prev[key] }));
 
   // ──────────── データ取得 ────────────
   useEffect(() => {
@@ -206,129 +278,217 @@ export default function Notifications() {
                       まだマッチしてないことば
                     </h3>
                     <ul className="space-y-3">
-                      {unmatchedMessages.map((msg) => (
-                        <li
-                          key={msg.id}
-                          onClick={() => handleMessageClick(msg)}
-                          className="
-                            list-none flex items-center justify-between p-3
-                            bg-white shadow rounded-3xl
-                            transition-all duration-300 ease-out active:scale-90
-                            cursor-pointer
-                          "
-                        >
-                          {/* アイコン＋送信相手＋テキスト */}
-                          <div className="flex items-start gap-3 flex-1 min-w-0">
-                            <div
-                              className="w-11 h-11 rounded-full flex items-center justify-center text-white font-bold"
-                              style={{
-                                backgroundColor: getBgColor(msg.receiver.name),
-                              }}
+                      {unmatchedGroups.map((g) => {
+                        const isMulti = g.items.length > 1;
+                        const isOpen = !!openGroups[g.key];
+                        const first = g.items[0];
+                        return (
+                          <li key={g.key} className="list-none">
+                            {/* ヘッダー行（トグルボタン） */}
+                            <button
+                              onClick={() =>
+                                isMulti
+                                  ? toggleGroup(g.key)
+                                  : handleMessageClick(first)
+                              }
+                              className="
+                                w-full flex items-center justify-between p-3
+                                bg-white shadow rounded-3xl
+                                transition-all duration-300 ease-out active:scale-95
+                                text-left
+                              "
                             >
-                              {msg.receiver.name.charAt(0)}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-semibold truncate">
-                                To {msg.receiver.name}
-                              </p>
-                              {msg.linkTitle || msg.linkImage ? (
-                                // リンクメタデータがある場合のプレビュー表示
-                                <div className="flex items-start gap-2 mt-1">
-                                  {msg.linkImage ? (
-                                    <Image
-                                      src={msg.linkImage}
-                                      alt={msg.linkTitle || msg.message}
-                                      width={48}
-                                      height={48}
-                                      className="w-12 h-12 object-cover rounded-lg border border-orange-200 flex-shrink-0"
-                                      onError={(e) => {
-                                        e.currentTarget.style.display = "none";
-                                        e.currentTarget.nextElementSibling?.classList.remove(
-                                          "hidden"
-                                        );
-                                      }}
-                                    />
-                                  ) : null}
-                                  <div
-                                    className={`w-8 h-8 rounded-lg bg-orange-100 border border-orange-200 flex items-center justify-center text-orange-600 font-bold text-xs flex-shrink-0 ${
-                                      msg.linkImage ? "hidden" : ""
-                                    }`}
-                                  >
-                                    URL
-                                  </div>
-                                  <div className="flex-1 min-w-0 overflow-hidden">
-                                    {msg.linkTitle &&
-                                    (msg.message.includes(" ") ||
-                                      msg.message.includes("　") ||
-                                      msg.message.match(
-                                        /^(https?:\/\/[a-zA-Z0-9\-._~:/?#[\]@!$&'()*+,;=%]+)([^a-zA-Z0-9\-._~:/?#[\]@!$&'()*+,;=%].+)$/
-                                      )) ? (
-                                      // リンク+テキストの場合
-                                      <>
-                                        <p className="text-sm font-bold text-gray-800">
-                                          {msg.linkTitle}
-                                        </p>
-                                        <p className="text-xs text-gray-500 truncate mt-1">
-                                          {msg.message
-                                            .replace(
-                                              /^(https?:\/\/[a-zA-Z0-9\-._~:/?#[\]@!$&'()*+,;=%]+)/,
-                                              ""
-                                            )
-                                            .trim()}
-                                        </p>
-                                      </>
-                                    ) : (
-                                      // 通常のリンクの場合
-                                      <>
-                                        <p className="text-sm font-bold text-gray-800">
-                                          {msg.linkTitle || msg.message}
-                                        </p>
-                                      </>
+                              <div className="flex items-start gap-3 flex-1 min-w-0">
+                                <div
+                                  className="w-11 h-11 rounded-full flex items-center justify-center text-white font-bold"
+                                  style={{
+                                    backgroundColor: getBgColor(
+                                      first.receiver.name
+                                    ),
+                                  }}
+                                >
+                                  {first.receiver.name.charAt(0)}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-semibold truncate">
+                                    {isMulti
+                                      ? `To ${first.receiver.name} ほか${
+                                          g.items.length - 1
+                                        }人`
+                                      : `To ${first.receiver.name}`}
+                                  </p>
+
+                                  {g.linkTitle || g.linkImage ? (
+                                    <div className="flex items-start gap-2 mt-1">
+                                      {g.linkImage ? (
+                                        <Image
+                                          src={g.linkImage}
+                                          alt={g.linkTitle || g.message}
+                                          width={48}
+                                          height={48}
+                                          className="w-12 h-12 object-cover rounded-lg border border-orange-200 flex-shrink-0"
+                                          onError={(e) => {
+                                            e.currentTarget.style.display =
+                                              "none";
+                                            e.currentTarget.nextElementSibling?.classList.remove(
+                                              "hidden"
+                                            );
+                                          }}
+                                        />
+                                      ) : null}
+                                      <div
+                                        className={`w-8 h-8 rounded-lg bg-orange-100 border border-orange-200 flex items-center justify-center text-orange-600 font-bold text-xs flex-shrink-0 ${
+                                          g.linkImage ? "hidden" : ""
+                                        }`}
+                                      >
+                                        URL
+                                      </div>
+                                      <div className="flex-1 min-w-0 overflow-hidden">
+                                        {g.linkTitle &&
+                                        (g.message.includes(" ") ||
+                                          g.message.includes("　") ||
+                                          g.message.match(
+                                            /^(https?:\/\/[a-zA-Z0-9\-._~:/?#[\]@!$&'()*+,;=%]+)([^a-zA-Z0-9\-._~:/?#[\]@!$&'()*+,;=%].+)$/
+                                          )) ? (
+                                          <>
+                                            <p className="text-sm font-bold text-gray-800">
+                                              {g.linkTitle}
+                                            </p>
+                                            <p className="text-xs text-gray-500 truncate mt-1">
+                                              {g.message
+                                                .replace(
+                                                  /^(https?:\/\/[a-zA-Z0-9\-._~:/?#[\]@!$&'()*+,;=%]+)/,
+                                                  ""
+                                                )
+                                                .trim()}
+                                            </p>
+                                          </>
+                                        ) : (
+                                          <>
+                                            <p className="text-sm font-bold text-gray-800">
+                                              {g.linkTitle || g.message}
+                                            </p>
+                                          </>
+                                        )}
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <p className="text-medium whitespace-normal break-words mt-1">
+                                      {g.message}
+                                    </p>
+                                  )}
+
+                                  <div className="flex items-center justify-end gap-2 mt-2">
+                                    {formatDate(g.createdAtBase) && (
+                                      <span className="text-xs text-gray-500 whitespace-nowrap">
+                                        {formatDate(g.createdAtBase)}
+                                      </span>
+                                    )}
+                                    {g.items.some((m) => m.isExpired) && (
+                                      <span className="text-xs px-2 py-1 rounded-full bg-gray-200 text-gray-600 font-semibold whitespace-nowrap">
+                                        24時間期限切れ
+                                      </span>
+                                    )}
+                                    {isMulti && (
+                                      <span className="text-xs px-2 py-1 rounded-full bg-gray-200 text-gray-700 font-semibold whitespace-nowrap">
+                                        同時に{g.items.length}人
+                                      </span>
                                     )}
                                   </div>
                                 </div>
-                              ) : (
-                                // 通常のテキストメッセージの場合
-                                <p className="text-medium whitespace-normal break-words mt-1">
-                                  {msg.message}
-                                </p>
-                              )}
-
-                              {/* 新しい行: メタデータ情報 */}
-                              <div className="flex items-center justify-end gap-2 mt-2">
-                                {formatDate(msg.createdAt) && (
-                                  <span className="text-xs text-gray-500 whitespace-nowrap">
-                                    {formatDate(msg.createdAt)}
-                                  </span>
-                                )}
-                                {msg.isExpired && (
-                                  <span className="text-xs px-2 py-1 rounded-full bg-gray-200 text-gray-600 font-semibold whitespace-nowrap">
-                                    24時間期限切れ
-                                  </span>
-                                )}
                               </div>
-                            </div>
-                          </div>
-                          {/* アクションボタン（未マッチのみ） */}
-                          <div className="flex-none shrink-0 ml-2">
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setCancelPopup(msg);
-                              }}
-                              className="p-2 transition-transform duration-200 ease-out active:scale-90"
-                              aria-label="more"
-                            >
-                              <Image
-                                src="/icons/more.png"
-                                alt="More"
-                                width={18}
-                                height={18}
-                              />
+                              <div className="flex items-center gap-2">
+                                {isMulti && (
+                                  <div className="text-gray-500 text-sm">
+                                    {isOpen ? "▲" : "▼"}
+                                  </div>
+                                )}
+                                <div className="flex-none shrink-0">
+                                  <button
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      if (isMulti) {
+                                        setCancelGroupPopup(g.items);
+                                      } else {
+                                        setCancelPopup(first);
+                                      }
+                                    }}
+                                    className="p-2 transition-transform duration-200 ease-out active:scale-90"
+                                    aria-label="more"
+                                  >
+                                    <Image
+                                      src="/icons/more.png"
+                                      alt="More"
+                                      width={18}
+                                      height={18}
+                                    />
+                                  </button>
+                                </div>
+                              </div>
                             </button>
-                          </div>
-                        </li>
-                      ))}
+
+                            {/* 明細（展開時のみ） */}
+                            {isMulti && isOpen && (
+                              <ul className="mt-2 space-y-2 pl-3">
+                                {g.items.map((m) => (
+                                  <li
+                                    key={m.id}
+                                    onClick={() => handleMessageClick(m)}
+                                    className="list-none flex items-center justify-between p-3 bg-white shadow rounded-2xl active:scale-95 transition cursor-pointer"
+                                  >
+                                    <div className="flex items-start gap-3 flex-1 min-w-0">
+                                      <div
+                                        className="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-bold"
+                                        style={{
+                                          backgroundColor: getBgColor(
+                                            m.receiver.name
+                                          ),
+                                        }}
+                                      >
+                                        {m.receiver.name.charAt(0)}
+                                      </div>
+                                      <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-semibold truncate">
+                                          To {m.receiver.name}
+                                        </p>
+                                        <div className="flex items-center gap-2 mt-1">
+                                          {formatDate(m.createdAt) && (
+                                            <span className="text-xs text-gray-500">
+                                              {formatDate(m.createdAt)}
+                                            </span>
+                                          )}
+                                          {m.isExpired && (
+                                            <span className="text-xs px-2 py-1 rounded-full bg-gray-200 text-gray-600 font-semibold">
+                                              24時間期限切れ
+                                            </span>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </div>
+                                    <div className="flex-none shrink-0 ml-2">
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setCancelPopup(m);
+                                        }}
+                                        className="p-2 transition-transform duration-200 ease-out active:scale-90"
+                                        aria-label="more"
+                                      >
+                                        <Image
+                                          src="/icons/more.png"
+                                          alt="More"
+                                          width={18}
+                                          height={18}
+                                        />
+                                      </button>
+                                    </div>
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </li>
+                        );
+                      })}
                     </ul>
                   </section>
                 )}
@@ -340,114 +500,183 @@ export default function Notifications() {
                       マッチしたことば
                     </h3>
                     <ul className="space-y-3">
-                      {matchedMessages.map((msg) => (
-                        <li
-                          key={msg.id}
-                          onClick={() => handleMessageClick(msg)}
-                          className="
-                            list-none flex items-center justify-between p-3
-                            bg-white shadow rounded-3xl
-                            cursor-pointer
-                            transition-all duration-300 ease-out active:scale-90
-                          "
-                        >
-                          {/* アイコン＋送信相手＋テキスト */}
-                          <div className="flex items-start gap-3 flex-1 min-w-0">
-                            <div
-                              className="w-11 h-11 rounded-full flex items-center justify-center text-white font-bold"
-                              style={{
-                                backgroundColor: getBgColor(msg.receiver.name),
-                              }}
+                      {matchedGroups.map((g) => {
+                        const isMulti = g.items.length > 1;
+                        const isOpen = !!openGroups[g.key];
+                        const first = g.items[0];
+                        return (
+                          <li key={g.key} className="list-none">
+                            <button
+                              onClick={() =>
+                                isMulti
+                                  ? toggleGroup(g.key)
+                                  : handleMessageClick(first)
+                              }
+                              className="
+                                w-full flex items-center justify-between p-3
+                                bg-white shadow rounded-3xl
+                                transition-all duration-300 ease-out active:scale-95
+                                text-left
+                              "
                             >
-                              {msg.receiver.name.charAt(0)}
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="text-sm font-semibold truncate">
-                                To {msg.receiver.name}
-                              </p>
-                              {msg.linkTitle || msg.linkImage ? (
-                                // リンクメタデータがある場合のプレビュー表示
-                                <div className="flex items-start gap-2 mt-1">
-                                  {msg.linkImage ? (
-                                    <Image
-                                      src={msg.linkImage}
-                                      alt={msg.linkTitle || msg.message}
-                                      width={48}
-                                      height={48}
-                                      className="w-12 h-12 object-cover rounded-lg border border-orange-200 flex-shrink-0"
-                                      onError={(e) => {
-                                        e.currentTarget.style.display = "none";
-                                        e.currentTarget.nextElementSibling?.classList.remove(
-                                          "hidden"
-                                        );
-                                      }}
-                                    />
-                                  ) : null}
-                                  <div
-                                    className={`w-8 h-8 rounded-lg bg-orange-100 border border-orange-200 flex items-center justify-center text-orange-600 font-bold text-xs flex-shrink-0 ${
-                                      msg.linkImage ? "hidden" : ""
-                                    }`}
-                                  >
-                                    URL
-                                  </div>
-                                  <div className="flex-1 min-w-0 overflow-hidden">
-                                    {msg.linkTitle &&
-                                    (msg.message.includes(" ") ||
-                                      msg.message.includes("　") ||
-                                      msg.message.match(
-                                        /^(https?:\/\/[a-zA-Z0-9\-._~:/?#[\]@!$&'()*+,;=%]+)([^a-zA-Z0-9\-._~:/?#[\]@!$&'()*+,;=%].+)$/
-                                      )) ? (
-                                      // リンク+テキストの場合
-                                      <>
-                                        <p className="text-sm font-bold text-gray-800">
-                                          {msg.linkTitle}
-                                        </p>
-                                        <p className="text-xs text-gray-500 truncate mt-1">
-                                          {msg.message
-                                            .replace(
-                                              /^(https?:\/\/[a-zA-Z0-9\-._~:/?#[\]@!$&'()*+,;=%]+)/,
-                                              ""
-                                            )
-                                            .trim()}
-                                        </p>
-                                      </>
-                                    ) : (
-                                      // 通常のリンクの場合
-                                      <>
-                                        <p className="text-sm font-bold text-gray-800">
-                                          {msg.linkTitle || msg.message}
-                                        </p>
-                                      </>
+                              <div className="flex items-start gap-3 flex-1 min-w-0">
+                                <div
+                                  className="w-11 h-11 rounded-full flex items-center justify-center text-white font-bold"
+                                  style={{
+                                    backgroundColor: getBgColor(
+                                      first.receiver.name
+                                    ),
+                                  }}
+                                >
+                                  {first.receiver.name.charAt(0)}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-semibold truncate">
+                                    {isMulti
+                                      ? `To ${first.receiver.name} ほか${
+                                          g.items.length - 1
+                                        }人`
+                                      : `To ${first.receiver.name}`}
+                                  </p>
+
+                                  {g.linkTitle || g.linkImage ? (
+                                    <div className="flex items-start gap-2 mt-1">
+                                      {g.linkImage ? (
+                                        <Image
+                                          src={g.linkImage}
+                                          alt={g.linkTitle || g.message}
+                                          width={48}
+                                          height={48}
+                                          className="w-12 h-12 object-cover rounded-lg border border-orange-200 flex-shrink-0"
+                                          onError={(e) => {
+                                            e.currentTarget.style.display =
+                                              "none";
+                                            e.currentTarget.nextElementSibling?.classList.remove(
+                                              "hidden"
+                                            );
+                                          }}
+                                        />
+                                      ) : null}
+                                      <div
+                                        className={`w-8 h-8 rounded-lg bg-orange-100 border border-orange-200 flex items-center justify-center text-orange-600 font-bold text-xs flex-shrink-0 ${
+                                          g.linkImage ? "hidden" : ""
+                                        }`}
+                                      >
+                                        URL
+                                      </div>
+                                      <div className="flex-1 min-w-0 overflow-hidden">
+                                        {g.linkTitle &&
+                                        (g.message.includes(" ") ||
+                                          g.message.includes("　") ||
+                                          g.message.match(
+                                            /^(https?:\/\/[a-zA-Z0-9\-._~:/?#[\]@!$&'()*+,;=%]+)([^a-zA-Z0-9\-._~:/?#[\]@!$&'()*+,;=%].+)$/
+                                          )) ? (
+                                          <>
+                                            <p className="text-sm font-bold text-gray-800">
+                                              {g.linkTitle}
+                                            </p>
+                                            <p className="text-xs text-gray-500 truncate mt-1">
+                                              {g.message
+                                                .replace(
+                                                  /^(https?:\/\/[a-zA-Z0-9\-._~:/?#[\]@!$&'()*+,;=%]+)/,
+                                                  ""
+                                                )
+                                                .trim()}
+                                            </p>
+                                          </>
+                                        ) : (
+                                          <>
+                                            <p className="text-sm font-bold text-gray-800">
+                                              {g.linkTitle || g.message}
+                                            </p>
+                                          </>
+                                        )}
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <p className="text-medium whitespace-normal break-words mt-1">
+                                      {g.message}
+                                    </p>
+                                  )}
+
+                                  <div className="flex items-center justify-end gap-2 mt-2">
+                                    {formatDate(g.createdAtBase) && (
+                                      <span className="text-xs text-gray-500 whitespace-nowrap">
+                                        {formatDate(g.createdAtBase)}
+                                      </span>
+                                    )}
+                                    {g.items.some((m) => m.isExpired) && (
+                                      <span className="text-xs px-2 py-1 rounded-full bg-gray-200 text-gray-600 font-semibold whitespace-nowrap">
+                                        24時間期限切れ
+                                      </span>
+                                    )}
+                                    {isMulti && (
+                                      <span className="text-xs px-2 py-1 rounded-full bg-green-100 text-green-700 font-semibold whitespace-nowrap">
+                                        同時に{g.items.length}人（マッチ済）
+                                      </span>
+                                    )}
+                                    {!isMulti && (
+                                      <span className="text-xs px-2 py-1 rounded-full bg-green-100 text-green-600 font-semibold">
+                                        マッチ済
+                                      </span>
                                     )}
                                   </div>
                                 </div>
-                              ) : (
-                                // 通常のテキストメッセージの場合
-                                <p className="text-medium whitespace-normal break-words mt-1">
-                                  {msg.message}
-                                </p>
-                              )}
-
-                              {/* 新しい行: メタデータ情報 */}
-                              <div className="flex items-center justify-end gap-2 mt-2">
-                                {formatDate(msg.createdAt) && (
-                                  <span className="text-xs text-gray-500 whitespace-nowrap">
-                                    {formatDate(msg.createdAt)}
-                                  </span>
-                                )}
-                                {msg.isExpired && (
-                                  <span className="text-xs px-2 py-1 rounded-full bg-gray-200 text-gray-600 font-semibold whitespace-nowrap">
-                                    24時間期限切れ
-                                  </span>
-                                )}
-                                <span className="text-xs px-2 py-1 rounded-full bg-green-100 text-green-600 font-semibold">
-                                  マッチ済
-                                </span>
                               </div>
-                            </div>
-                          </div>
-                        </li>
-                      ))}
+                              {isMulti && (
+                                <div className="ml-3 text-gray-500 text-sm">
+                                  {isOpen ? "▲" : "▼"}
+                                </div>
+                              )}
+                            </button>
+
+                            {isMulti && isOpen && (
+                              <ul className="mt-2 space-y-2 pl-3">
+                                {g.items.map((m) => (
+                                  <li
+                                    key={m.id}
+                                    onClick={() => handleMessageClick(m)}
+                                    className="list-none flex items-center justify-between p-3 bg-white shadow rounded-2xl active:scale-95 transition cursor-pointer"
+                                  >
+                                    <div className="flex items-start gap-3 flex-1 min-w-0">
+                                      <div
+                                        className="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-bold"
+                                        style={{
+                                          backgroundColor: getBgColor(
+                                            m.receiver.name
+                                          ),
+                                        }}
+                                      >
+                                        {m.receiver.name.charAt(0)}
+                                      </div>
+                                      <div className="flex-1 min-w-0">
+                                        <p className="text-sm font-semibold truncate">
+                                          To {m.receiver.name}
+                                        </p>
+                                        <div className="flex items-center gap-2 mt-1">
+                                          {formatDate(m.createdAt) && (
+                                            <span className="text-xs text-gray-500">
+                                              {formatDate(m.createdAt)}
+                                            </span>
+                                          )}
+                                          {m.isExpired && (
+                                            <span className="text-xs px-2 py-1 rounded-full bg-gray-200 text-gray-600 font-semibold">
+                                              24時間期限切れ
+                                            </span>
+                                          )}
+                                          <span className="text-xs px-2 py-1 rounded-full bg-green-100 text-green-600 font-semibold">
+                                            マッチ済
+                                          </span>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </li>
+                        );
+                      })}
                     </ul>
                   </section>
                 )}
@@ -508,6 +737,66 @@ export default function Notifications() {
           </div>
         </div>
       )}
+
+      {/* ─── グループ取り消し確認ポップアップ（未マッチのみ表示） ─── */}
+      {cancelGroupPopup &&
+        cancelGroupPopup.length > 0 &&
+        !cancelGroupPopup[0].isMatched && (
+          <div className="fixed inset-0 flex items-center justify-center bg-black/50 z-50">
+            <div className="bg-white p-5 rounded-3xl shadow-lg w-11/12 max-w-sm">
+              <h3 className="text-lg font-bold mb-2">シェアの取り消し</h3>
+              <p className="mb-1">
+                <strong>件数:</strong> {cancelGroupPopup.length}件
+              </p>
+              <p className="mb-1">
+                <strong>Message:</strong> {cancelGroupPopup[0].message}
+              </p>
+              <p className="mb-2 text-sm text-gray-600">
+                <strong>To:</strong>{" "}
+                {cancelGroupPopup.map((m) => m.receiver.name).join(", ")}
+              </p>
+              <p className="text-sm text-red-500 mb-2">
+                一度取り消すと、復元できません。
+              </p>
+              <div className="flex justify-center gap-3">
+                <button
+                  onClick={async () => {
+                    const ids = cancelGroupPopup.map((m) => m.id);
+                    setCancelGroupPopup(null);
+                    try {
+                      await axios.delete("/api/cancel-message", {
+                        data: { messageIds: ids, senderId: userId },
+                      });
+                      setSentMessages((prev) =>
+                        prev.filter((m) => !ids.includes(m.id))
+                      );
+
+                      // サーバー側でカウントが適切に管理されるため、
+                      // フロントエンド側での手動調整は不要
+                    } catch {
+                      alert("取り消しに失敗しました");
+                    }
+                  }}
+                  className="
+                  bg-red-500 text-white px-6 py-2 rounded-3xl hover:bg-red-600
+                  transition-transform duration-200 ease-out active:scale-90
+                "
+                >
+                  全て取り消す
+                </button>
+                <button
+                  onClick={() => setCancelGroupPopup(null)}
+                  className="
+                  bg-gray-500 text-white px-6 py-2 rounded-3xl hover:bg-gray-600
+                  transition-transform duration-200 ease-out active:scale-90
+                "
+                >
+                  もどる
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
       {/* ─── リンクアクションポップアップ ─── */}
       {linkPopup && (

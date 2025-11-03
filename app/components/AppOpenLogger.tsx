@@ -51,6 +51,12 @@ export default function AppOpenLogger() {
     if (typeof window === "undefined" || typeof navigator === "undefined")
       return;
 
+    // Service Workerがサポートされているか確認
+    if (!("serviceWorker" in navigator)) {
+      console.log("Service Worker is not supported");
+      return;
+    }
+
     const handleMessage = (event: MessageEvent) => {
       if (event.data?.type === "PENDING_NOTIFICATION") {
         const notificationData = event.data.data;
@@ -73,10 +79,27 @@ export default function AppOpenLogger() {
       }
     };
 
-    navigator.serviceWorker.addEventListener("message", handleMessage);
+    // Service Workerが準備できるまで待つ
+    navigator.serviceWorker.ready
+      .then((registration) => {
+        // Service Workerが準備できたらリスナーを追加
+        if (registration.active) {
+          navigator.serviceWorker.addEventListener("message", handleMessage);
+        }
+      })
+      .catch((error) => {
+        console.error("Service Worker ready error:", error);
+      });
 
+    // クリーンアップ関数
     return () => {
-      navigator.serviceWorker.removeEventListener("message", handleMessage);
+      if (navigator.serviceWorker) {
+        try {
+          navigator.serviceWorker.removeEventListener("message", handleMessage);
+        } catch (e) {
+          // Service Workerが利用できない場合は無視
+        }
+      }
     };
   }, []);
 

@@ -5,64 +5,84 @@ import { prisma } from "@/lib/prisma";
 
 export async function DELETE(req: NextRequest) {
   try {
-    const { messageId, senderId } = await req.json();
+    const { messageId, messageIds, senderId } = await req.json();
 
-    if (!messageId || !senderId) {
+    // messageIds（配列）またはmessageId（単一）のどちらかが必要
+    const ids = messageIds || (messageId ? [messageId] : []);
+
+    if (!ids.length || !senderId) {
       return NextResponse.json(
-        { error: "messageId and senderId are required" },
+        { error: "messageId(s) and senderId are required" },
         { status: 400 }
       );
     }
 
     // メッセージが本人のものか確認
-    const message = await prisma.sentMessage.findUnique({
-      where: { id: messageId },
+    const messages = await prisma.sentMessage.findMany({
+      where: {
+        id: { in: ids },
+      },
     });
 
-    if (!message || message.senderId !== senderId) {
+    // 全てのメッセージが本人のものか確認
+    const unauthorizedMessages = messages.filter(
+      (msg) => msg.senderId !== senderId
+    );
+    if (unauthorizedMessages.length > 0) {
       return NextResponse.json(
-        { error: "Message not found or unauthorized" },
+        { error: "Some messages not found or unauthorized" },
         { status: 403 }
       );
     }
 
-    // PresetMessageのカウントを減算
-    const presetMessage = await prisma.presetMessage.findFirst({
-      where: { content: message.message },
-    });
+    // メッセージごとにPresetMessageのカウントを減算
+    const messageContentMap = new Map<string, number>();
+    for (const message of messages) {
+      const count = messageContentMap.get(message.message) || 0;
+      messageContentMap.set(message.message, count + 1);
+    }
 
-    if (presetMessage) {
-      // この送信者の同じメッセージの送信回数をチェック
-      const sameUserSentMessages = await prisma.sentMessage.findMany({
-        where: {
-          senderId: senderId,
-          message: message.message,
-        },
+    // 各メッセージ内容についてPresetMessageを更新
+    for (const [messageContent, deleteCount] of messageContentMap.entries()) {
+      const presetMessage = await prisma.presetMessage.findFirst({
+        where: { content: messageContent },
       });
 
-      // 削除対象を除いた残りの送信回数をチェック
-      const remainingSentMessages = sameUserSentMessages.filter(
-        (msg) => msg.id !== messageId
-      );
+      if (presetMessage) {
+        // この送信者の同じメッセージの送信回数をチェック
+        const sameUserSentMessages = await prisma.sentMessage.findMany({
+          where: {
+            senderId: senderId,
+            message: messageContent,
+          },
+        });
 
-      // この送信者の送信記録が全てなくなる場合のみsenderCountを減算
-      const shouldDecreaseSenderCount = remainingSentMessages.length === 0;
+        // 削除対象を除いた残りの送信回数をチェック
+        const remainingSentMessages = sameUserSentMessages.filter(
+          (msg) => !ids.includes(msg.id)
+        );
 
-      await prisma.presetMessage.update({
-        where: { id: presetMessage.id },
-        data: {
-          count: Math.max(0, presetMessage.count - 1),
-          // 送信記録が全てなくなる場合のみsenderCountを減算
-          senderCount: shouldDecreaseSenderCount
-            ? Math.max(0, presetMessage.senderCount - 1)
-            : presetMessage.senderCount,
-        },
-      });
+        // この送信者の送信記録が全てなくなる場合のみsenderCountを減算
+        const shouldDecreaseSenderCount = remainingSentMessages.length === 0;
+
+        await prisma.presetMessage.update({
+          where: { id: presetMessage.id },
+          data: {
+            count: Math.max(0, presetMessage.count - deleteCount),
+            // 送信記録が全てなくなる場合のみsenderCountを減算
+            senderCount: shouldDecreaseSenderCount
+              ? Math.max(0, presetMessage.senderCount - 1)
+              : presetMessage.senderCount,
+          },
+        });
+      }
     }
 
     // メッセージを削除
-    await prisma.sentMessage.delete({
-      where: { id: messageId },
+    await prisma.sentMessage.deleteMany({
+      where: {
+        id: { in: ids },
+      },
     });
 
     return NextResponse.json({ success: true });
