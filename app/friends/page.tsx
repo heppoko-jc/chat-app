@@ -255,8 +255,13 @@ export default function FriendsPage() {
 
           setLoading(false);
 
-          // 情報ポップアップを表示
-          setShowInfoPopup(true);
+          // 情報ポップアップを表示（ユーザーが表示しないと選択していない場合のみ）
+          const shouldShowInfo = !localStorage.getItem(
+            `hideFollowInfoPopup-${uid}`
+          );
+          if (shouldShowInfo) {
+            setShowInfoPopup(true);
+          }
         })
         .catch((error) => {
           console.error("データ取得エラー:", error);
@@ -472,12 +477,26 @@ export default function FriendsPage() {
             <p className="text-sm text-gray-600 mb-4 text-center">
               フォローしても相手には通知されません。
             </p>
-            <button
-              onClick={() => setShowInfoPopup(false)}
-              className="w-full bg-orange-500 text-white py-3 rounded-xl font-bold"
-            >
-              閉じる
-            </button>
+            <div className="space-y-2">
+              <button
+                onClick={() => setShowInfoPopup(false)}
+                className="w-full bg-gray-200 text-gray-700 py-3 rounded-xl font-bold"
+              >
+                閉じる
+              </button>
+              <button
+                onClick={() => {
+                  const uid = localStorage.getItem("userId");
+                  if (uid) {
+                    localStorage.setItem(`hideFollowInfoPopup-${uid}`, "true");
+                  }
+                  setShowInfoPopup(false);
+                }}
+                className="w-full bg-orange-500 text-white py-3 rounded-xl font-bold"
+              >
+                理解したので次からはこの通知は表示しない
+              </button>
+            </div>
           </div>
         </div>
       )}
