@@ -912,7 +912,16 @@ export default function Main() {
       return;
     }
 
-    setSelectedMessage((prev) => (prev === msg ? null : msg));
+    setSelectedMessage((prev) => {
+      // 新しく選択した場合（以前の選択と異なる場合）のみ送信先リストに遷移
+      if (prev !== msg) {
+        // 次のレンダリングサイクルで遷移するようにsetTimeoutを使用
+        setTimeout(() => {
+          setStep("select-recipients");
+        }, 0);
+      }
+      return prev === msg ? null : msg;
+    });
     setInputMessage("");
     setSelectedMessageLinkData(null);
   };
@@ -955,6 +964,10 @@ export default function Main() {
       setInputMessage("");
       setShowLinkActionMenu(false);
       setIsInputMode(true);
+      // 送信先リストに自動的に遷移
+      setTimeout(() => {
+        setStep("select-recipients");
+      }, 0);
     }
   };
   const toggleRecipient = (id: string) => {
