@@ -277,7 +277,7 @@ self.addEventListener("notificationclick", (event) => {
 
   event.waitUntil(
     (async () => {
-      await clearNotificationsAndBadge();
+      // 自動クリアを無効化: await clearNotificationsAndBadge();
       const wins = await clients.matchAll({
         type: "window",
         includeUncontrolled: true,
@@ -292,15 +292,16 @@ self.addEventListener("notificationclick", (event) => {
 });
 
 // =============== 前面化時の通知クリア ===============
-self.addEventListener("message", (event) => {
-  const data = event.data || {};
-  if (data.type === "FOREGROUND_STATE") {
-    event.waitUntil(
-      (async () => {
-        if (data.visible || data.focused) {
-          await clearNotificationsAndBadge();
-        }
-      })()
-    );
-  }
-});
+// 自動クリアを無効化
+// self.addEventListener("message", (event) => {
+//   const data = event.data || {};
+//   if (data.type === "FOREGROUND_STATE") {
+//     event.waitUntil(
+//       (async () => {
+//         if (data.visible || data.focused) {
+//           await clearNotificationsAndBadge();
+//         }
+//       })()
+//     );
+//   }
+// });
