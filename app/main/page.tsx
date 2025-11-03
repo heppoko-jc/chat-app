@@ -804,6 +804,82 @@ export default function Main() {
     return () => document.removeEventListener("visibilitychange", onVis);
   }, [fetchPresetMessages, fetchChatList, pullPendingMatches]);
 
+  // 通知から開いた時の通知データを読み取ってポップアップを表示
+  useEffect(() => {
+    const handlePendingNotification = (event: CustomEvent) => {
+      const notificationData = event.detail;
+      console.log("通知データの受信:", notificationData);
+
+      if (
+        notificationData.type === "match" &&
+        notificationData.matchedUserId &&
+        notificationData.matchedUserName
+      ) {
+        const item: MatchQueueItem = {
+          matchedAt: new Date(notificationData.timestamp).toISOString(),
+          message: notificationData.message,
+          matchedUser: {
+            id: notificationData.matchedUserId,
+            name: notificationData.matchedUserName,
+          },
+          chatId: notificationData.chatId,
+        };
+
+        setMatchQueue((prev) => mergeQueue(prev, [item]));
+
+        // localStorageからクリア
+        try {
+          localStorage.removeItem("pendingMatchNotification");
+        } catch (e) {
+          console.error("通知データのクリアエラー:", e);
+        }
+      }
+    };
+
+    // カスタムイベントをリッスン
+    window.addEventListener(
+      "pendingNotification",
+      handlePendingNotification as EventListener
+    );
+
+    // 起動時にlocalStorageからも読み取る（通知から開いた場合のフォールバック）
+    try {
+      const stored = localStorage.getItem("pendingMatchNotification");
+      if (stored) {
+        const notificationData = JSON.parse(stored);
+        if (
+          notificationData.type === "match" &&
+          notificationData.matchedUserId &&
+          notificationData.matchedUserName
+        ) {
+          const item: MatchQueueItem = {
+            matchedAt: new Date(notificationData.timestamp).toISOString(),
+            message: notificationData.message,
+            matchedUser: {
+              id: notificationData.matchedUserId,
+              name: notificationData.matchedUserName,
+            },
+            chatId: notificationData.chatId,
+          };
+
+          setMatchQueue((prev) => mergeQueue(prev, [item]));
+
+          // localStorageからクリア
+          localStorage.removeItem("pendingMatchNotification");
+        }
+      }
+    } catch (e) {
+      console.error("保存された通知データの読み取りエラー:", e);
+    }
+
+    return () => {
+      window.removeEventListener(
+        "pendingNotification",
+        handlePendingNotification as EventListener
+      );
+    };
+  }, []);
+
   // ソケット：両者に通知 → 即キューへ
   useEffect(() => {
     if (!currentUserId) return;

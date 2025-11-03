@@ -46,5 +46,39 @@ export default function AppOpenLogger() {
     };
   }, []);
 
+  // 通知からの通知データを受信してlocalStorageに保存
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof navigator === "undefined")
+      return;
+
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data?.type === "PENDING_NOTIFICATION") {
+        const notificationData = event.data.data;
+        console.log("通知データを受信:", notificationData);
+
+        // localStorageに保存（表示用）
+        try {
+          localStorage.setItem(
+            "pendingMatchNotification",
+            JSON.stringify(notificationData)
+          );
+
+          // カスタムイベントを発火してアプリに通知
+          window.dispatchEvent(
+            new CustomEvent("pendingNotification", { detail: notificationData })
+          );
+        } catch (e) {
+          console.error("通知データの保存エラー:", e);
+        }
+      }
+    };
+
+    navigator.serviceWorker.addEventListener("message", handleMessage);
+
+    return () => {
+      navigator.serviceWorker.removeEventListener("message", handleMessage);
+    };
+  }, []);
+
   return null;
 }

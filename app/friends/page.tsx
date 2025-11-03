@@ -36,6 +36,7 @@ export default function FriendsPage() {
   >(null);
   const [remainingTime, setRemainingTime] = useState<string>("");
   const [isRestricted, setIsRestricted] = useState(false);
+  const [showInfoPopup, setShowInfoPopup] = useState(false);
 
   // ページ滞在中の表示順序を固定するための状態
   const [displayUsers, setDisplayUsers] = useState<User[]>([]);
@@ -253,6 +254,9 @@ export default function FriendsPage() {
           }
 
           setLoading(false);
+
+          // 情報ポップアップを表示
+          setShowInfoPopup(true);
         })
         .catch((error) => {
           console.error("データ取得エラー:", error);
@@ -457,6 +461,26 @@ export default function FriendsPage() {
           ))}
         </div>
       </div>
+
+      {/* 情報ポップアップ */}
+      {showInfoPopup && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl p-6 mx-4 max-w-sm w-full">
+            <h3 className="text-lg font-bold text-gray-800 mb-4 text-center">
+              フォローはあなただけのものです。
+            </h3>
+            <p className="text-sm text-gray-600 mb-4 text-center">
+              フォローしても相手には通知されません。
+            </p>
+            <button
+              onClick={() => setShowInfoPopup(false)}
+              className="w-full bg-orange-500 text-white py-3 rounded-xl font-bold"
+            >
+              閉じる
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* 警告ポップアップ */}
       {showWarning && (
