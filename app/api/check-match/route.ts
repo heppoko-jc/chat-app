@@ -44,9 +44,13 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 自分が receiver になっているメッセージを取得
+    // 自分が receiver になっているメッセージを取得（非表示を除外）
     const matches = await prisma.sentMessage.findMany({
-      where: { receiverId: senderId, message },
+      where: {
+        receiverId: senderId,
+        message,
+        isHidden: false, // ← 追加
+      },
     });
 
     for (const match of matches) {

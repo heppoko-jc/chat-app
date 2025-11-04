@@ -19,11 +19,12 @@ export async function GET(req: NextRequest) {
       friendIds = friends.map((f) => f.friendId);
     }
 
-    // ともだちが24時間以内に送信したメッセージの内容を取得
+    // ともだちが24時間以内に送信したメッセージの内容を取得（非表示を除外）
     const sentByFriends = await prisma.sentMessage.findMany({
       where: {
         senderId: { in: friendIds },
         createdAt: { gte: expiryDate },
+        isHidden: false, // ← 追加
       },
       select: {
         message: true,
@@ -98,8 +99,12 @@ export async function POST(req: NextRequest) {
 
     if (existingMessage) {
       // 実際のユニーク送信者数を動的に計算（より確実な方法）
+      // ✅ 非表示メッセージは除外
       const uniqueSenders = await prisma.sentMessage.findMany({
-        where: { message: content },
+        where: {
+          message: content,
+          isHidden: false, // ← 追加
+        },
         select: { senderId: true },
         distinct: ["senderId"],
       });

@@ -79,10 +79,11 @@ async function getAllUsersUnmatchedCounts(): Promise<Map<string, number>> {
   const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
   try {
-    // 1) 24時間以内の受信メッセージを全て取得
+    // 1) 24時間以内の受信メッセージを全て取得（非表示を除外）
     const recentMessages = await prisma.sentMessage.findMany({
       where: {
         createdAt: { gte: twentyFourHoursAgo },
+        isHidden: false, // ← 追加
       },
       select: {
         receiverId: true,

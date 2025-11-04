@@ -15,9 +15,11 @@ export async function GET(req: NextRequest) {
     const expiryDate = getMatchExpiryDate();
 
     // 自分宛に送信された未マッチのメッセージを取得
+    // ✅ 非表示メッセージも除外
     const unMatchedMessages = await prisma.sentMessage.findMany({
       where: {
         receiverId: userId,
+        isHidden: false, // ← 追加
         // マッチしていないメッセージを取得するため、MatchPairに存在しないものを探す
         NOT: {
           // この条件は後で実装

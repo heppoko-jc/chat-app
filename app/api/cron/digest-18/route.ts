@@ -10,12 +10,13 @@ async function getNewUnmatchedReceivedCount24h(
   userId: string
 ): Promise<number> {
   try {
-    // 自分が受信したメッセージのうち、直近24時間に届いたものを取得
+    // 自分が受信したメッセージのうち、直近24時間に届いたものを取得（非表示を除外）
     const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
     const recentReceivedMessages = await prisma.sentMessage.findMany({
       where: {
         receiverId: userId,
         createdAt: { gte: twentyFourHoursAgo },
+        isHidden: false, // ← 追加
       },
       select: {
         id: true,

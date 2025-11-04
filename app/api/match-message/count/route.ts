@@ -19,9 +19,11 @@ export async function GET(req: NextRequest) {
   try {
     // 自分が受信したメッセージのうち、マッチしていないものをカウント
     // 取り消されたメッセージは既にDBから削除されているため、自動的に除外される
+    // ✅ 非表示メッセージも除外
     const unmatchedMessages = await prisma.sentMessage.findMany({
       where: {
         receiverId: userId,
+        isHidden: false, // ← 追加
       },
       select: {
         id: true,

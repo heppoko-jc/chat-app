@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import webpush, { PushSubscription as WebPushSubscription } from "web-push";
 import { io as ioClient } from "socket.io-client";
+import { shouldHideMessage } from "@/lib/content-filter";
 
 const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL!;
 
@@ -120,6 +121,9 @@ export async function POST(req: NextRequest) {
     let matchedUserId: string | null = null;
     let myLatestCreatedAt: Date | null = null;
 
+    // ✅ キーワードチェック（メッセージ送信前にチェック）
+    const isHidden = shouldHideMessage(message);
+
     // 1) 送信メッセージを保存しつつ、マッチを探す
     for (const receiverId of receiverIds) {
       // 自分の送信をまず保存（createdAt を取得）
@@ -130,10 +134,17 @@ export async function POST(req: NextRequest) {
           message,
           linkTitle: finalLinkTitle,
           linkImage: finalLinkImage,
+          isHidden: isHidden, // ← 追加
         },
         select: { id: true, createdAt: true },
       });
       myLatestCreatedAt = mySend.createdAt;
+
+      // ✅ 非表示メッセージはマッチ判定から除外
+      if (isHidden) {
+        // 非表示メッセージはマッチ判定をスキップ
+        continue;
+      }
 
       // この2人 & この message の直近マッチを取得
       const lastMatch = await prisma.matchPair.findFirst({
@@ -150,12 +161,14 @@ export async function POST(req: NextRequest) {
       const since = lastMatch?.matchedAt ?? new Date(0);
 
       // 「前回マッチ以降」に相手が自分宛に同じ message を送っているか
+      // ✅ 非表示メッセージは除外
       const reciprocalAfterLastMatch = await prisma.sentMessage.findFirst({
         where: {
           senderId: receiverId,
           receiverId: senderId,
           message,
           createdAt: { gt: since },
+          isHidden: false, // ← 追加
         },
         orderBy: { createdAt: "desc" },
         select: { id: true, createdAt: true },
@@ -176,8 +189,12 @@ export async function POST(req: NextRequest) {
     });
     if (existingPresetMessage) {
       // 実際のユニーク送信者数を動的に計算（より確実な方法）
+      // ✅ 非表示メッセージは除外
       const uniqueSenders = await prisma.sentMessage.findMany({
-        where: { message: message },
+        where: {
+          message: message,
+          isHidden: false, // ← 追加
+        },
         select: { senderId: true },
         distinct: ["senderId"],
       });
@@ -354,6 +371,14 @@ export async function POST(req: NextRequest) {
     }
 
     // マッチ未成立
+    // ✅ 非表示メッセージの場合はマッチ成立させない
+    if (isHidden) {
+      return NextResponse.json({
+        message: "Message sent (hidden)",
+        hidden: true,
+      });
+    }
+
     return NextResponse.json({ message: "Message sent, waiting for a match!" });
   } catch (error) {
     console.error("🚨 マッチングエラー:", error);

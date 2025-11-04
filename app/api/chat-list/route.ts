@@ -115,9 +115,65 @@ export async function GET(req: NextRequest) {
             select: { message: true, matchedAt: true },
           });
 
-          const latestMatch = matchHistory.length
-            ? matchHistory[matchHistory.length - 1]
-            : null;
+          // ✅ 非表示マッチを除外して、表示可能なマッチのみを取得
+          // パフォーマンス最適化：一括でSentMessageを取得
+          const matchMessages = matchHistory.map((m) => m.message);
+          const relevantSentMessages = await prisma.sentMessage.findMany({
+            where: {
+              message: { in: matchMessages },
+              OR: [
+                { senderId: chat.user1Id, receiverId: chat.user2Id },
+                { senderId: chat.user2Id, receiverId: chat.user1Id },
+              ],
+            },
+            select: {
+              message: true,
+              senderId: true,
+              receiverId: true,
+              isHidden: true,
+            },
+          });
+
+          // メッセージごとにグループ化
+          const messageMap = new Map<
+            string,
+            Array<{ senderId: string; receiverId: string; isHidden: boolean }>
+          >();
+          for (const sm of relevantSentMessages) {
+            if (!messageMap.has(sm.message)) {
+              messageMap.set(sm.message, []);
+            }
+            messageMap.get(sm.message)!.push({
+              senderId: sm.senderId,
+              receiverId: sm.receiverId,
+              isHidden: sm.isHidden,
+            });
+          }
+
+          // 非表示でないマッチのみをフィルタ
+          const visibleMatches = matchHistory.filter((match) => {
+            const sentMessages = messageMap.get(match.message) || [];
+            // 両方向のSentMessageが存在し、どちらも非表示でないことを確認
+            const hasUser1ToUser2 = sentMessages.some(
+              (sm) =>
+                sm.senderId === chat.user1Id &&
+                sm.receiverId === chat.user2Id &&
+                !sm.isHidden
+            );
+            const hasUser2ToUser1 = sentMessages.some(
+              (sm) =>
+                sm.senderId === chat.user2Id &&
+                sm.receiverId === chat.user1Id &&
+                !sm.isHidden
+            );
+            return hasUser1ToUser2 && hasUser2ToUser1;
+          });
+
+          // ✅ 最新の表示可能なマッチを取得（直前のマッチメッセージ）
+          const latestMatch =
+            visibleMatches.length > 0
+              ? visibleMatches[visibleMatches.length - 1]
+              : null;
 
           return {
             chatId: chat.id,
@@ -126,7 +182,7 @@ export async function GET(req: NextRequest) {
             matchMessageMatchedAt: latestMatch
               ? latestMatch.matchedAt.toISOString()
               : null,
-            matchHistory: matchHistory.map((m) => ({
+            matchHistory: visibleMatches.map((m) => ({
               message: m.message,
               matchedAt: m.matchedAt.toISOString(),
             })),

@@ -13,9 +13,12 @@ export async function GET(req: NextRequest) {
   }
 
   try {
-    // ✅ 自分が送信したマッチメッセージ履歴
+    // ✅ 自分が送信したマッチメッセージ履歴（非表示を除外）
     const sentMessages = await prisma.sentMessage.findMany({
-      where: { senderId: userId },
+      where: {
+        senderId: userId,
+        isHidden: false, // ← 追加
+      },
       include: {
         receiver: { select: { id: true, name: true } },
       },

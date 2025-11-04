@@ -97,7 +97,10 @@ export async function GET() {
 
       const [recentMessages, allMatches] = await Promise.all([
         prisma.sentMessage.findMany({
-          where: { createdAt: { gte: twentyFourHoursAgo } },
+          where: {
+            createdAt: { gte: twentyFourHoursAgo },
+            isHidden: false, // ← 追加（診断用なのでオプション）
+          },
           select: {
             receiverId: true,
             senderId: true,
