@@ -46,8 +46,11 @@ model SentMessage {
   createdAt  DateTime @default(now())
   linkImage  String?
   linkTitle  String?
+  isHidden   Boolean  @default(false) // 非表示フラグ（キーワードフィルタまたは管理者による非表示）
   receiver   User     @relation("ReceivedMessages", fields: [receiverId], references: [id])
   sender     User     @relation("SentMessages", fields: [senderId], references: [id])
+  
+  @@index([isHidden]) // 検索パフォーマンス向上
 }
 
 model MatchPair {
