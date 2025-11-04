@@ -43,7 +43,11 @@ export async function GET(req: NextRequest) {
 
     // SentMessageを検索
     const includeHidden = searchParams.get("includeHidden") === "true";
-    let whereClause: any = {};
+    const whereClause: {
+      message?: { contains: string };
+      OR?: Array<{ senderId: string } | { receiverId: string }>;
+      isHidden?: boolean;
+    } = {};
     if (message) {
       whereClause.message = { contains: message };
     }

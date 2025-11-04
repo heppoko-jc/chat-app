@@ -5,8 +5,14 @@ import { useState } from "react";
 export default function HideByKeywordsPage() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<string | null>(null);
-  const [dryRunResult, setDryRunResult] = useState<any>(null);
-  const [isDryRun, setIsDryRun] = useState(true);
+  const [dryRunResult, setDryRunResult] = useState<{
+    found?: {
+      totalMessages: number;
+      messagesToHide: number;
+      keywordList: string[];
+    };
+    sampleMessages?: Array<{ id: string; message: string }>;
+  } | null>(null);
 
   // 管理者APIキー（環境変数から取得、またはデフォルト値）
   const adminApiKey = process.env.NEXT_PUBLIC_ADMIN_API_KEY || "admin-key-123";
@@ -204,7 +210,7 @@ export default function HideByKeywordsPage() {
                 サンプルメッセージ（最初の10件）:
               </h3>
               <div className="space-y-2">
-                {dryRunResult.sampleMessages.map((msg: any, idx: number) => (
+                {dryRunResult.sampleMessages.map((msg) => (
                   <div
                     key={msg.id}
                     className="p-3 bg-yellow-50 border border-yellow-200 rounded text-sm"

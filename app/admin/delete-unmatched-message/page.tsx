@@ -4,7 +4,20 @@ import { useState } from "react";
 
 export default function DeleteUnmatchedMessagePage() {
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchResult, setSearchResult] = useState<any>(null);
+  const [searchResult, setSearchResult] = useState<{
+    unmatchedMessages: Array<{
+      id: string;
+      message: string;
+      senderId: string;
+      receiverId: string;
+      createdAt: string;
+      sender: { id: string; name: string; email: string };
+      receiver: { id: string; name: string; email: string };
+      linkTitle?: string;
+      linkImage?: string;
+    }>;
+    count: number;
+  } | null>(null);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [deleteResult, setDeleteResult] = useState<string | null>(null);
@@ -81,7 +94,7 @@ export default function DeleteUnmatchedMessagePage() {
           setSearchResult({
             ...searchResult,
             unmatchedMessages: searchResult.unmatchedMessages.filter(
-              (msg: any) => msg.id !== messageId
+              (msg) => msg.id !== messageId
             ),
             count: searchResult.count - 1,
           });
@@ -124,7 +137,7 @@ export default function DeleteUnmatchedMessagePage() {
           setSearchResult({
             ...searchResult,
             unmatchedMessages: searchResult.unmatchedMessages.filter(
-              (msg: any) => msg.id !== messageId
+              (msg) => msg.id !== messageId
             ),
             count: searchResult.count - 1,
           });
@@ -180,7 +193,7 @@ export default function DeleteUnmatchedMessagePage() {
                 検索結果: {searchResult.count}件（未マッチメッセージのみ）
               </h3>
               <div className="space-y-4">
-                {searchResult.unmatchedMessages.map((msg: any) => (
+                {searchResult.unmatchedMessages.map((msg) => (
                   <div
                     key={msg.id}
                     className="border border-gray-200 rounded-lg p-4"

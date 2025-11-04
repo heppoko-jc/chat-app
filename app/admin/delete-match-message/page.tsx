@@ -4,10 +4,18 @@ import { useState } from "react";
 
 export default function DeleteMatchMessagePage() {
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchResult, setSearchResult] = useState<any>(null);
+  const [searchResult, setSearchResult] = useState<{
+    matchPairs: Array<{
+      id: string;
+      message: string;
+      user1: { id: string; name: string; email: string };
+      user2: { id: string; name: string; email: string };
+      matchedAt: string;
+    }>;
+    count: number;
+  } | null>(null);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [deleteResult, setDeleteResult] = useState<string | null>(null);
 
   // 管理者APIキー（環境変数から取得、またはデフォルト値）
@@ -82,7 +90,7 @@ export default function DeleteMatchMessagePage() {
           setSearchResult({
             ...searchResult,
             matchPairs: searchResult.matchPairs.filter(
-              (mp: any) => mp.id !== matchPairId
+              (mp) => mp.id !== matchPairId
             ),
             count: searchResult.count - 1,
           });
@@ -127,7 +135,7 @@ export default function DeleteMatchMessagePage() {
           setSearchResult({
             ...searchResult,
             matchPairs: searchResult.matchPairs.filter(
-              (mp: any) => mp.id !== matchPairId
+              (mp) => mp.id !== matchPairId
             ),
             count: searchResult.count - 1,
           });
@@ -181,7 +189,7 @@ export default function DeleteMatchMessagePage() {
                 検索結果: {searchResult.count}件
               </h3>
               <div className="space-y-4">
-                {searchResult.matchPairs.map((mp: any) => (
+                {searchResult.matchPairs.map((mp) => (
                   <div
                     key={mp.id}
                     className="border border-gray-200 rounded-lg p-4"
