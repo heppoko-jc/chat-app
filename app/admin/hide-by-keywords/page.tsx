@@ -159,6 +159,7 @@ export default function HideByKeywordsPage() {
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="max-w-4xl mx-auto">
         <h1 className="text-3xl font-bold mb-6">キーワード非表示機能</h1>
+        {/* Updated: 2025-11-04 */}
 
         <div className="bg-white rounded-lg shadow p-6 mb-6">
           <h2 className="text-xl font-semibold mb-4">
