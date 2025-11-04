@@ -96,7 +96,7 @@ export default function AppOpenLogger() {
       if (navigator.serviceWorker) {
         try {
           navigator.serviceWorker.removeEventListener("message", handleMessage);
-        } catch (e) {
+        } catch {
           // Service Workerが利用できない場合は無視
         }
       }

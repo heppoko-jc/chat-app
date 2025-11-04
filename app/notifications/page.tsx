@@ -1,7 +1,7 @@
 // app/notifications/page.tsx
 "use client";
 
-import { useEffect, useState, useRef, useMemo } from "react";
+import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import axios from "axios";
 import Image from "next/image";
@@ -92,52 +92,52 @@ export default function Notifications() {
 
   const toSec = (iso: string) => Math.floor(new Date(iso).getTime() / 1000);
 
-  const groupBySimultaneous = (
-    list: SentMessage[],
-    isMatchedBlock: boolean
-  ): Group[] => {
-    if (list.length === 0) return [];
-    // createdAt desc で並んでいる前提。異なるならここでソート
-    const sorted = [...list].sort(
-      (a, b) =>
-        new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    );
+  const groupBySimultaneous = useCallback(
+    (list: SentMessage[], isMatchedBlock: boolean): Group[] => {
+      if (list.length === 0) return [];
+      // createdAt desc で並んでいる前提。異なるならここでソート
+      const sorted = [...list].sort(
+        (a, b) =>
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
 
-    const groups: Group[] = [];
-    let current: Group | null = null;
+      const groups: Group[] = [];
+      let current: Group | null = null;
 
-    for (const m of sorted) {
-      if (
-        current &&
-        current.message === m.message &&
-        Math.abs(toSec(current.createdAtBase) - toSec(m.createdAt)) <=
-          SAME_WINDOW_SEC
-      ) {
-        current.items.push(m);
-      } else {
-        if (current) groups.push(current);
-        current = {
-          key: `${m.message}|${m.createdAt}`,
-          message: m.message,
-          linkTitle: m.linkTitle,
-          linkImage: m.linkImage,
-          createdAtBase: m.createdAt,
-          items: [m],
-          isMatchedBlock,
-        };
+      for (const m of sorted) {
+        if (
+          current &&
+          current.message === m.message &&
+          Math.abs(toSec(current.createdAtBase) - toSec(m.createdAt)) <=
+            SAME_WINDOW_SEC
+        ) {
+          current.items.push(m);
+        } else {
+          if (current) groups.push(current);
+          current = {
+            key: `${m.message}|${m.createdAt}`,
+            message: m.message,
+            linkTitle: m.linkTitle,
+            linkImage: m.linkImage,
+            createdAtBase: m.createdAt,
+            items: [m],
+            isMatchedBlock,
+          };
+        }
       }
-    }
-    if (current) groups.push(current);
-    return groups;
-  };
+      if (current) groups.push(current);
+      return groups;
+    },
+    []
+  );
 
   const unmatchedGroups = useMemo(
     () => groupBySimultaneous(unmatchedMessages, false),
-    [unmatchedMessages]
+    [unmatchedMessages, groupBySimultaneous]
   );
   const matchedGroups = useMemo(
     () => groupBySimultaneous(matchedMessages, true),
-    [matchedMessages]
+    [matchedMessages, groupBySimultaneous]
   );
 
   // トグル開閉状態
