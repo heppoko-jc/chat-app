@@ -22,10 +22,22 @@ export function shouldHideMessage(message: string): boolean {
   const keywords = getHiddenKeywords();
   if (keywords.length === 0) return false;
 
+  // メッセージを正規化（小文字化）
   const normalizedMessage = message.toLowerCase();
 
   // いずれかのキーワードが含まれているかチェック
-  return keywords.some((keyword) =>
-    normalizedMessage.includes(keyword.toLowerCase())
-  );
+  const matches = keywords.some((keyword) => {
+    const normalizedKeyword = keyword.toLowerCase().trim();
+    const contains = normalizedMessage.includes(normalizedKeyword);
+    if (contains) {
+      console.log("🔍 Keyword match found:", {
+        keyword,
+        normalizedKeyword,
+        messagePreview: message.substring(0, 50),
+      });
+    }
+    return contains;
+  });
+
+  return matches;
 }

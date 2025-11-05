@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
     const keywords = getHiddenKeywords();
     console.log("🔍 HIDDEN_KEYWORDS:", process.env.HIDDEN_KEYWORDS);
     console.log("🔍 Parsed keywords:", keywords);
-
+    
     if (keywords.length === 0) {
       return NextResponse.json(
         {
@@ -60,10 +60,25 @@ export async function POST(req: NextRequest) {
       },
     });
 
+    console.log("🔍 Total messages found:", allMessages.length);
+
+    // デバッグ: 最初の10件のメッセージをログに出力
+    const sampleMessages = allMessages.slice(0, 10).map(m => m.message);
+    console.log("🔍 Sample messages (first 10):", sampleMessages);
+
     // キーワードを含むメッセージをフィルタ
-    const messagesToHide = allMessages.filter((msg) =>
-      shouldHideMessage(msg.message)
-    );
+    const messagesToHide = allMessages.filter((msg) => {
+      const shouldHide = shouldHideMessage(msg.message);
+      if (shouldHide) {
+        console.log("🔍 Found message to hide:", {
+          id: msg.id,
+          message: msg.message.substring(0, 50),
+        });
+      }
+      return shouldHide;
+    });
+
+    console.log("🔍 Messages to hide count:", messagesToHide.length);
 
     if (dryRun) {
       // ドライラン: 実際には非表示にしない
