@@ -11,6 +11,25 @@ self.addEventListener("activate", (event) => {
 // Workbox InjectManifest：ビルド時に __WB_MANIFEST が差し込まれる
 workbox.precaching.precacheAndRoute(self.__WB_MANIFEST);
 
+// =============== ページルートのフォールバック戦略 ===============
+// プリキャッシュに含まれていないページ（/mainなど）へのアクセス時、
+// ネットワークファースト戦略を使用（ネットワーク優先、失敗時のみキャッシュ）
+// これにより、常に最新のページを取得しようとし、404エラーを防ぐ
+workbox.routing.registerRoute(
+  ({ request }) => request.mode === "navigate",
+  new workbox.strategies.NetworkFirst({
+    cacheName: "pages-cache",
+    plugins: [
+      {
+        cacheKeyWillBeUsed: async ({ request }) => {
+          // リクエストURLをそのままキャッシュキーとして使用
+          return request.url;
+        },
+      },
+    ],
+  })
+);
+
 // =============== 共通ヘルパ ===============
 const normalizePath = (urlString) => {
   try {

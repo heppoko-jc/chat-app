@@ -23,6 +23,14 @@ interface ApiResponse {
 }
 
 // ──────────── ユーティリティ関数 ────────────
+function getInitials(name: string) {
+  return name
+    .split(" ")
+    .map((w) => w[0])
+    .join("")
+    .toUpperCase();
+}
+
 function getBgColor(name: string) {
   let hash = 0;
   for (let i = 0; i < name.length; i++) {
@@ -70,8 +78,9 @@ export default function Notifications() {
   );
 
   // セクション分割（未マッチ／マッチ済み）
+  // 時間切れでマッチしなかったメッセージは表示しない
   const { unmatchedMessages, matchedMessages } = useMemo(() => {
-    const unmatched = sentMessages.filter((m) => !m.isMatched);
+    const unmatched = sentMessages.filter((m) => !m.isMatched && !m.isExpired);
     const matched = sentMessages.filter((m) => m.isMatched);
     return { unmatchedMessages: unmatched, matchedMessages: matched };
   }, [sentMessages]);
@@ -277,7 +286,7 @@ export default function Notifications() {
                     <h3 className="text-lg font-bold text-gray-800 mb-3">
                       まだマッチしてないことば
                     </h3>
-                    <ul className="space-y-3">
+                    <ul className="space-y-2">
                       {unmatchedGroups.map((g) => {
                         const isMulti = g.items.length > 1;
                         const isOpen = !!openGroups[g.key];
@@ -292,25 +301,26 @@ export default function Notifications() {
                                   : handleMessageClick(first)
                               }
                               className="
-                                w-full flex items-center justify-between p-3
-                                bg-white shadow rounded-3xl
+                                w-full flex items-center justify-between px-4 py-3
+                                bg-white border-2 border-gray-200 shadow-sm hover:shadow-md
+                                rounded-2xl
                                 transition-all duration-300 ease-out active:scale-95
                                 text-left
                               "
                             >
                               <div className="flex items-start gap-3 flex-1 min-w-0">
                                 <div
-                                  className="w-11 h-11 rounded-full flex items-center justify-center text-white font-bold"
+                                  className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold shadow"
                                   style={{
                                     backgroundColor: getBgColor(
                                       first.receiver.name
                                     ),
                                   }}
                                 >
-                                  {first.receiver.name.charAt(0)}
+                                  {getInitials(first.receiver.name)}
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                  <p className="text-sm font-semibold truncate">
+                                  <p className="text-lg font-semibold truncate">
                                     {isMulti
                                       ? `To ${first.receiver.name} ほか${
                                           g.items.length - 1
@@ -351,10 +361,10 @@ export default function Notifications() {
                                             /^(https?:\/\/[a-zA-Z0-9\-._~:/?#[\]@!$&'()*+,;=%]+)([^a-zA-Z0-9\-._~:/?#[\]@!$&'()*+,;=%].+)$/
                                           )) ? (
                                           <>
-                                            <p className="text-sm font-bold text-gray-800">
+                                            <p className="text-base font-bold text-gray-800">
                                               {g.linkTitle}
                                             </p>
-                                            <p className="text-xs text-gray-500 truncate mt-1">
+                                            <p className="text-sm text-gray-500 truncate mt-1">
                                               {g.message
                                                 .replace(
                                                   /^(https?:\/\/[a-zA-Z0-9\-._~:/?#[\]@!$&'()*+,;=%]+)/,
@@ -365,7 +375,7 @@ export default function Notifications() {
                                           </>
                                         ) : (
                                           <>
-                                            <p className="text-sm font-bold text-gray-800">
+                                            <p className="text-base font-bold text-gray-800">
                                               {g.linkTitle || g.message}
                                             </p>
                                           </>
@@ -373,7 +383,7 @@ export default function Notifications() {
                                       </div>
                                     </div>
                                   ) : (
-                                    <p className="text-medium whitespace-normal break-words mt-1">
+                                    <p className="text-base whitespace-normal break-words mt-1">
                                       {g.message}
                                     </p>
                                   )}
@@ -434,21 +444,21 @@ export default function Notifications() {
                                   <li
                                     key={m.id}
                                     onClick={() => handleMessageClick(m)}
-                                    className="list-none flex items-center justify-between p-3 bg-white shadow rounded-2xl active:scale-95 transition cursor-pointer"
+                                    className="list-none flex items-center justify-between px-4 py-3 bg-white border-2 border-gray-200 shadow-sm hover:shadow-md rounded-2xl active:scale-95 transition cursor-pointer"
                                   >
                                     <div className="flex items-start gap-3 flex-1 min-w-0">
                                       <div
-                                        className="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-bold"
+                                        className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold shadow"
                                         style={{
                                           backgroundColor: getBgColor(
                                             m.receiver.name
                                           ),
                                         }}
                                       >
-                                        {m.receiver.name.charAt(0)}
+                                        {getInitials(m.receiver.name)}
                                       </div>
                                       <div className="flex-1 min-w-0">
-                                        <p className="text-sm font-semibold truncate">
+                                        <p className="text-lg font-semibold truncate">
                                           To {m.receiver.name}
                                         </p>
                                         <div className="flex items-center gap-2 mt-1">
@@ -499,7 +509,7 @@ export default function Notifications() {
                     <h3 className="text-lg font-bold text-gray-800 mb-3">
                       マッチしたことば
                     </h3>
-                    <ul className="space-y-3">
+                    <ul className="space-y-2">
                       {matchedGroups.map((g) => {
                         const isMulti = g.items.length > 1;
                         const isOpen = !!openGroups[g.key];
@@ -513,25 +523,26 @@ export default function Notifications() {
                                   : handleMessageClick(first)
                               }
                               className="
-                                w-full flex items-center justify-between p-3
-                                bg-white shadow rounded-3xl
+                                w-full flex items-center justify-between px-4 py-3
+                                bg-white border-2 border-gray-200 shadow-sm hover:shadow-md
+                                rounded-2xl
                                 transition-all duration-300 ease-out active:scale-95
                                 text-left
                               "
                             >
                               <div className="flex items-start gap-3 flex-1 min-w-0">
                                 <div
-                                  className="w-11 h-11 rounded-full flex items-center justify-center text-white font-bold"
+                                  className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold shadow"
                                   style={{
                                     backgroundColor: getBgColor(
                                       first.receiver.name
                                     ),
                                   }}
                                 >
-                                  {first.receiver.name.charAt(0)}
+                                  {getInitials(first.receiver.name)}
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                  <p className="text-sm font-semibold truncate">
+                                  <p className="text-lg font-semibold truncate">
                                     {isMulti
                                       ? `To ${first.receiver.name} ほか${
                                           g.items.length - 1
@@ -572,10 +583,10 @@ export default function Notifications() {
                                             /^(https?:\/\/[a-zA-Z0-9\-._~:/?#[\]@!$&'()*+,;=%]+)([^a-zA-Z0-9\-._~:/?#[\]@!$&'()*+,;=%].+)$/
                                           )) ? (
                                           <>
-                                            <p className="text-sm font-bold text-gray-800">
+                                            <p className="text-base font-bold text-gray-800">
                                               {g.linkTitle}
                                             </p>
-                                            <p className="text-xs text-gray-500 truncate mt-1">
+                                            <p className="text-sm text-gray-500 truncate mt-1">
                                               {g.message
                                                 .replace(
                                                   /^(https?:\/\/[a-zA-Z0-9\-._~:/?#[\]@!$&'()*+,;=%]+)/,
@@ -586,7 +597,7 @@ export default function Notifications() {
                                           </>
                                         ) : (
                                           <>
-                                            <p className="text-sm font-bold text-gray-800">
+                                            <p className="text-base font-bold text-gray-800">
                                               {g.linkTitle || g.message}
                                             </p>
                                           </>
@@ -594,7 +605,7 @@ export default function Notifications() {
                                       </div>
                                     </div>
                                   ) : (
-                                    <p className="text-medium whitespace-normal break-words mt-1">
+                                    <p className="text-base whitespace-normal break-words mt-1">
                                       {g.message}
                                     </p>
                                   )}
@@ -636,21 +647,21 @@ export default function Notifications() {
                                   <li
                                     key={m.id}
                                     onClick={() => handleMessageClick(m)}
-                                    className="list-none flex items-center justify-between p-3 bg-white shadow rounded-2xl active:scale-95 transition cursor-pointer"
+                                    className="list-none flex items-center justify-between px-4 py-3 bg-white border-2 border-gray-200 shadow-sm hover:shadow-md rounded-2xl active:scale-95 transition cursor-pointer"
                                   >
                                     <div className="flex items-start gap-3 flex-1 min-w-0">
                                       <div
-                                        className="w-9 h-9 rounded-full flex items-center justify-center text-white text-sm font-bold"
+                                        className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold shadow"
                                         style={{
                                           backgroundColor: getBgColor(
                                             m.receiver.name
                                           ),
                                         }}
                                       >
-                                        {m.receiver.name.charAt(0)}
+                                        {getInitials(m.receiver.name)}
                                       </div>
                                       <div className="flex-1 min-w-0">
-                                        <p className="text-sm font-semibold truncate">
+                                        <p className="text-lg font-semibold truncate">
                                           To {m.receiver.name}
                                         </p>
                                         <div className="flex items-center gap-2 mt-1">
