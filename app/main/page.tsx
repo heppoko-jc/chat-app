@@ -993,6 +993,8 @@ export default function Main() {
       if (prev !== msg) {
         // 次のレンダリングサイクルで遷移するようにsetTimeoutを使用
         setTimeout(() => {
+          // 全員をデフォルトで選択
+          selectAllFriends();
           setStep("select-recipients");
         }, 0);
       }
@@ -1042,6 +1044,8 @@ export default function Main() {
       setIsInputMode(true);
       // 送信先リストに自動的に遷移
       setTimeout(() => {
+        // 全員をデフォルトで選択
+        selectAllFriends();
         setStep("select-recipients");
       }, 0);
     }
@@ -1050,6 +1054,14 @@ export default function Main() {
     setSelectedRecipientIds((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
     );
+  };
+
+  // 全員をデフォルトで選択する関数
+  const selectAllFriends = () => {
+    const allFriendIds = users
+      .filter((u) => u.id !== currentUserId && friends.has(u.id))
+      .map((u) => u.id);
+    setSelectedRecipientIds(allFriendIds);
   };
 
   // 表示用：count>0 & 「最新送信順」
@@ -1105,6 +1117,8 @@ export default function Main() {
         image: linkPreview.image,
       });
       setIsInputMode(false);
+      // 全員をデフォルトで選択
+      selectAllFriends();
       setStep("select-recipients");
       return;
     }
@@ -1150,6 +1164,8 @@ export default function Main() {
         } catch (error) {
           console.error("[main] リンクメタデータ取得エラー:", error);
         }
+        // 全員をデフォルトで選択
+        selectAllFriends();
         setStep("select-recipients");
         return;
       }
@@ -1201,8 +1217,12 @@ export default function Main() {
         }
       }
 
+      // 全員をデフォルトで選択
+      selectAllFriends();
       setStep("select-recipients");
     } else if (selectedMessage) {
+      // 全員をデフォルトで選択
+      selectAllFriends();
       setStep("select-recipients");
     } else if (!selectedMessage && selectedRecipientIds.length > 0) {
       // メッセージが未選択で送信先が選択されている場合、メッセージリストに遷移
@@ -1609,6 +1629,8 @@ export default function Main() {
                   if (e.key === "Enter" && inputMessage.trim()) {
                     setSelectedMessage(inputMessage.trim());
                     // setIsInputMode(false); // 入力モードを維持してキーボードを開いたままにする
+                    // 全員をデフォルトで選択
+                    selectAllFriends();
                     setStep("select-recipients");
                   }
                 }}
@@ -1616,6 +1638,8 @@ export default function Main() {
                   if (inputMessage.trim()) {
                     setSelectedMessage(inputMessage.trim());
                     // setIsInputMode(false); // 入力モードを維持してキーボードを開いたままにする
+                    // 全員をデフォルトで選択
+                    selectAllFriends();
                     setStep("select-recipients");
                   }
                 }}

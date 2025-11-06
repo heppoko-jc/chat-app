@@ -38,7 +38,7 @@ export async function POST(req: NextRequest) {
     const keywords = getHiddenKeywords();
     console.log("🔍 HIDDEN_KEYWORDS:", process.env.HIDDEN_KEYWORDS);
     console.log("🔍 Parsed keywords:", keywords);
-    
+
     if (keywords.length === 0) {
       return NextResponse.json(
         {
@@ -74,14 +74,25 @@ export async function POST(req: NextRequest) {
 
     // 両方のメッセージを結合してキーワードチェック
     const allMessages = [
-      ...sentMessages.map((m) => ({ id: m.id, message: m.message, type: "sent" as const })),
-      ...presetMessages.map((m) => ({ id: m.id, message: m.content, type: "preset" as const })),
+      ...sentMessages.map((m) => ({
+        id: m.id,
+        message: m.message,
+        type: "sent" as const,
+      })),
+      ...presetMessages.map((m) => ({
+        id: m.id,
+        message: m.content,
+        type: "preset" as const,
+      })),
     ];
 
-    console.log("🔍 Total messages (SentMessage + PresetMessage):", allMessages.length);
+    console.log(
+      "🔍 Total messages (SentMessage + PresetMessage):",
+      allMessages.length
+    );
 
     // デバッグ: 最初の10件のメッセージをログに出力
-    const sampleMessages = allMessages.slice(0, 10).map(m => m.message);
+    const sampleMessages = allMessages.slice(0, 10).map((m) => m.message);
     console.log("🔍 Sample messages (first 10):", sampleMessages);
 
     // キーワードを含むメッセージをフィルタ
@@ -99,8 +110,8 @@ export async function POST(req: NextRequest) {
 
     console.log("🔍 Messages to hide count:", messagesToHide.length);
     console.log("🔍 Breakdown by type:", {
-      sent: messagesToHide.filter(m => m.type === "sent").length,
-      preset: messagesToHide.filter(m => m.type === "preset").length,
+      sent: messagesToHide.filter((m) => m.type === "sent").length,
+      preset: messagesToHide.filter((m) => m.type === "preset").length,
     });
 
     if (dryRun) {
@@ -122,7 +133,9 @@ export async function POST(req: NextRequest) {
 
     // 実際に非表示にする
     const sentMessagesToHide = messagesToHide.filter((m) => m.type === "sent");
-    const presetMessagesToHide = messagesToHide.filter((m) => m.type === "preset");
+    const presetMessagesToHide = messagesToHide.filter(
+      (m) => m.type === "preset"
+    );
 
     if (sentMessagesToHide.length === 0 && presetMessagesToHide.length === 0) {
       return NextResponse.json({
