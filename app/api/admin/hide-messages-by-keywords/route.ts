@@ -49,8 +49,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 現在非表示でないメッセージを全て取得
-    const allMessages = await prisma.sentMessage.findMany({
+    // ✅ SentMessageテーブルから検索（マッチメッセージ用）
+    const sentMessages = await prisma.sentMessage.findMany({
       where: {
         isHidden: false,
       },
@@ -60,7 +60,25 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    console.log("🔍 Total messages found:", allMessages.length);
+    console.log("🔍 SentMessage total found:", sentMessages.length);
+
+    // ✅ PresetMessageテーブルからも検索（PresetMessageリストに表示されるメッセージ）
+    const presetMessages = await prisma.presetMessage.findMany({
+      select: {
+        id: true,
+        content: true,
+      },
+    });
+
+    console.log("🔍 PresetMessage total found:", presetMessages.length);
+
+    // 両方のメッセージを結合してキーワードチェック
+    const allMessages = [
+      ...sentMessages.map((m) => ({ id: m.id, message: m.message, type: "sent" as const })),
+      ...presetMessages.map((m) => ({ id: m.id, message: m.content, type: "preset" as const })),
+    ];
+
+    console.log("🔍 Total messages (SentMessage + PresetMessage):", allMessages.length);
 
     // デバッグ: 最初の10件のメッセージをログに出力
     const sampleMessages = allMessages.slice(0, 10).map(m => m.message);
@@ -72,6 +90,7 @@ export async function POST(req: NextRequest) {
       if (shouldHide) {
         console.log("🔍 Found message to hide:", {
           id: msg.id,
+          type: msg.type,
           message: msg.message.substring(0, 50),
         });
       }
@@ -79,6 +98,10 @@ export async function POST(req: NextRequest) {
     });
 
     console.log("🔍 Messages to hide count:", messagesToHide.length);
+    console.log("🔍 Breakdown by type:", {
+      sent: messagesToHide.filter(m => m.type === "sent").length,
+      preset: messagesToHide.filter(m => m.type === "preset").length,
+    });
 
     if (dryRun) {
       // ドライラン: 実際には非表示にしない
@@ -98,8 +121,10 @@ export async function POST(req: NextRequest) {
     }
 
     // 実際に非表示にする
-    const messageIds = messagesToHide.map((m) => m.id);
-    if (messageIds.length === 0) {
+    const sentMessagesToHide = messagesToHide.filter((m) => m.type === "sent");
+    const presetMessagesToHide = messagesToHide.filter((m) => m.type === "preset");
+
+    if (sentMessagesToHide.length === 0 && presetMessagesToHide.length === 0) {
       return NextResponse.json({
         success: true,
         message: "非表示にするメッセージはありませんでした",
@@ -109,27 +134,54 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // バッチ処理で更新（一度に多く更新するとタイムアウトする可能性があるため）
-    const batchSize = 100;
-    let totalUpdated = 0;
+    // SentMessageを非表示にする
+    let sentMessageCount = 0;
+    if (sentMessagesToHide.length > 0) {
+      const sentMessageIds = sentMessagesToHide.map((m) => m.id);
+      const batchSize = 100;
 
-    for (let i = 0; i < messageIds.length; i += batchSize) {
-      const batch = messageIds.slice(i, i + batchSize);
-      const result = await prisma.sentMessage.updateMany({
-        where: {
-          id: { in: batch },
-        },
-        data: {
-          isHidden: true,
-        },
-      });
-      totalUpdated += result.count;
+      for (let i = 0; i < sentMessageIds.length; i += batchSize) {
+        const batch = sentMessageIds.slice(i, i + batchSize);
+        const result = await prisma.sentMessage.updateMany({
+          where: {
+            id: { in: batch },
+          },
+          data: {
+            isHidden: true,
+          },
+        });
+        sentMessageCount += result.count;
+      }
+    }
+
+    // PresetMessageに対応するSentMessageを非表示にする
+    // （PresetMessage自体は削除せず、対応するSentMessageを非表示にする）
+    let presetMessageCount = 0;
+    if (presetMessagesToHide.length > 0) {
+      const presetContents = presetMessagesToHide.map((m) => m.message);
+      const batchSize = 100;
+
+      for (let i = 0; i < presetContents.length; i += batchSize) {
+        const batch = presetContents.slice(i, i + batchSize);
+        const result = await prisma.sentMessage.updateMany({
+          where: {
+            message: { in: batch },
+            isHidden: false, // まだ非表示でないもののみ
+          },
+          data: {
+            isHidden: true,
+          },
+        });
+        presetMessageCount += result.count;
+      }
     }
 
     return NextResponse.json({
       success: true,
       hidden: {
-        count: totalUpdated,
+        sentMessages: sentMessageCount,
+        presetMessages: presetMessageCount,
+        total: sentMessageCount + presetMessageCount,
       },
       keywordList: keywords,
     });
