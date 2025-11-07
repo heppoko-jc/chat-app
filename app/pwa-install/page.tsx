@@ -22,16 +22,18 @@ export default function PWAInstall() {
         true;
     setIsInStandaloneMode(isStandalone);
 
-    // 既にPWAモードで開いている場合は自動的にログインページへ
+    // 既にPWAモードで開いている場合は自動的に同意ページへ
     if (isStandalone) {
+      localStorage.setItem("pwaInstallAcknowledged", "true");
       setTimeout(() => {
-        router.push("/login");
-      }, 2000);
+        router.push("/consent");
+      }, 1500);
     }
   }, [router]);
 
   const handleContinue = () => {
-    router.push("/login");
+    localStorage.setItem("pwaInstallAcknowledged", "true");
+    router.push("/consent");
   };
 
   if (isInStandaloneMode) {
@@ -45,7 +47,7 @@ export default function PWAInstall() {
           <p className="text-gray-600 mb-4">
             PWAモードで正常に動作しています。
             <br />
-            ログインページに移動します...
+            同意ページに移動します...
           </p>
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
         </div>
@@ -125,7 +127,7 @@ export default function PWAInstall() {
               onClick={handleContinue}
               className="w-full bg-green-600 text-white py-3 px-4 rounded-lg font-semibold hover:bg-green-700"
             >
-              次へ
+              同意画面へ進む
             </button>
           </div>
         </div>
