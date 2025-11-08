@@ -10,8 +10,7 @@ import { prisma } from "@/lib/prisma";
 export async function GET() {
   try {
     // 非表示にするユーザーIDを取得
-    const hiddenUserIds =
-      process.env.HIDDEN_USER_IDS?.split(",").filter(Boolean) || [];
+    const hiddenUserIds = process.env.HIDDEN_USER_IDS?.split(",") || [];
 
     const users = await prisma.user.findMany({
       where: {

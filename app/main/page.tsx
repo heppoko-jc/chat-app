@@ -8,7 +8,6 @@ import FixedTabBar from "../components/FixedTabBar";
 import { useRouter } from "next/navigation";
 import { useChatData, PresetMessage } from "../contexts/ChatDataContext";
 import MatchNotification from "../components/MatchNotification";
-import NameRegistrationModal from "../components/NameRegistrationModal";
 import socket, { setSocketUserId } from "../socket";
 import type { ChatItem } from "../chat-list/page";
 
@@ -170,9 +169,6 @@ export default function Main() {
     title: string;
     image?: string;
   } | null>(null);
-
-  const [showNameModal, setShowNameModal] = useState(false);
-  const [currentUserName, setCurrentUserName] = useState<string>("");
 
   // Phase 2.1: 安全なキャッシュ基盤の構築（一時的に無効化）
   // const useMessageCache = () => {
@@ -724,6 +720,9 @@ export default function Main() {
     const uid = localStorage.getItem("userId");
     setCurrentUserId(uid);
 
+    if (uid) {
+    }
+
     axios
       .get<User[]>("/api/users")
       .then((res) => setUsers(res.data))
@@ -767,34 +766,6 @@ export default function Main() {
     if (uid) fetchChatList(uid);
   }, [fetchPresetMessages, fetchChatList]);
 
-  useEffect(() => {
-    const token = localStorage.getItem("token");
-    const userId = localStorage.getItem("userId");
-
-    if (!token || !userId) return;
-
-    const checkNameRegistration = async () => {
-      try {
-        const res = await axios.get("/api/auth/profile", {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-
-        setCurrentUserName(res.data.name || "");
-
-        const hasNoSearchNames =
-          !res.data.nameEn && !res.data.nameJa && !res.data.nameOther;
-
-        if (hasNoSearchNames) {
-          setShowNameModal(true);
-        }
-      } catch (error) {
-        console.error("プロフィール取得エラー:", error);
-      }
-    };
-
-    checkNameRegistration();
-  }, []);
-
   // 非表示中に溜まったマッチを取り込み（成立順でキューへ）
   const pullPendingMatches = useCallback(async () => {
     if (!currentUserId || !lastSeenKey) return;
@@ -832,82 +803,6 @@ export default function Main() {
     onVis();
     return () => document.removeEventListener("visibilitychange", onVis);
   }, [fetchPresetMessages, fetchChatList, pullPendingMatches]);
-
-  // 通知から開いた時の通知データを読み取ってポップアップを表示
-  useEffect(() => {
-    const handlePendingNotification = (event: CustomEvent) => {
-      const notificationData = event.detail;
-      console.log("通知データの受信:", notificationData);
-
-      if (
-        notificationData.type === "match" &&
-        notificationData.matchedUserId &&
-        notificationData.matchedUserName
-      ) {
-        const item: MatchQueueItem = {
-          matchedAt: new Date(notificationData.timestamp).toISOString(),
-          message: notificationData.message,
-          matchedUser: {
-            id: notificationData.matchedUserId,
-            name: notificationData.matchedUserName,
-          },
-          chatId: notificationData.chatId,
-        };
-
-        setMatchQueue((prev) => mergeQueue(prev, [item]));
-
-        // localStorageからクリア
-        try {
-          localStorage.removeItem("pendingMatchNotification");
-        } catch (e) {
-          console.error("通知データのクリアエラー:", e);
-        }
-      }
-    };
-
-    // カスタムイベントをリッスン
-    window.addEventListener(
-      "pendingNotification",
-      handlePendingNotification as EventListener
-    );
-
-    // 起動時にlocalStorageからも読み取る（通知から開いた場合のフォールバック）
-    try {
-      const stored = localStorage.getItem("pendingMatchNotification");
-      if (stored) {
-        const notificationData = JSON.parse(stored);
-        if (
-          notificationData.type === "match" &&
-          notificationData.matchedUserId &&
-          notificationData.matchedUserName
-        ) {
-          const item: MatchQueueItem = {
-            matchedAt: new Date(notificationData.timestamp).toISOString(),
-            message: notificationData.message,
-            matchedUser: {
-              id: notificationData.matchedUserId,
-              name: notificationData.matchedUserName,
-            },
-            chatId: notificationData.chatId,
-          };
-
-          setMatchQueue((prev) => mergeQueue(prev, [item]));
-
-          // localStorageからクリア
-          localStorage.removeItem("pendingMatchNotification");
-        }
-      }
-    } catch (e) {
-      console.error("保存された通知データの読み取りエラー:", e);
-    }
-
-    return () => {
-      window.removeEventListener(
-        "pendingNotification",
-        handlePendingNotification as EventListener
-      );
-    };
-  }, []);
 
   // ソケット：両者に通知 → 即キューへ
   useEffect(() => {
@@ -1022,8 +917,6 @@ export default function Main() {
       if (prev !== msg) {
         // 次のレンダリングサイクルで遷移するようにsetTimeoutを使用
         setTimeout(() => {
-          // 全員をデフォルトで選択
-          selectAllFriends();
           setStep("select-recipients");
         }, 0);
       }
@@ -1073,8 +966,6 @@ export default function Main() {
       setIsInputMode(true);
       // 送信先リストに自動的に遷移
       setTimeout(() => {
-        // 全員をデフォルトで選択
-        selectAllFriends();
         setStep("select-recipients");
       }, 0);
     }
@@ -1083,14 +974,6 @@ export default function Main() {
     setSelectedRecipientIds((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
     );
-  };
-
-  // 全員をデフォルトで選択する関数
-  const selectAllFriends = () => {
-    const allFriendIds = users
-      .filter((u) => u.id !== currentUserId && friends.has(u.id))
-      .map((u) => u.id);
-    setSelectedRecipientIds(allFriendIds);
   };
 
   // 表示用：count>0 & 「最新送信順」
@@ -1146,8 +1029,6 @@ export default function Main() {
         image: linkPreview.image,
       });
       setIsInputMode(false);
-      // 全員をデフォルトで選択
-      selectAllFriends();
       setStep("select-recipients");
       return;
     }
@@ -1193,8 +1074,6 @@ export default function Main() {
         } catch (error) {
           console.error("[main] リンクメタデータ取得エラー:", error);
         }
-        // 全員をデフォルトで選択
-        selectAllFriends();
         setStep("select-recipients");
         return;
       }
@@ -1246,12 +1125,8 @@ export default function Main() {
         }
       }
 
-      // 全員をデフォルトで選択
-      selectAllFriends();
       setStep("select-recipients");
     } else if (selectedMessage) {
-      // 全員をデフォルトで選択
-      selectAllFriends();
       setStep("select-recipients");
     } else if (!selectedMessage && selectedRecipientIds.length > 0) {
       // メッセージが未選択で送信先が選択されている場合、メッセージリストに遷移
@@ -1658,8 +1533,6 @@ export default function Main() {
                   if (e.key === "Enter" && inputMessage.trim()) {
                     setSelectedMessage(inputMessage.trim());
                     // setIsInputMode(false); // 入力モードを維持してキーボードを開いたままにする
-                    // 全員をデフォルトで選択
-                    selectAllFriends();
                     setStep("select-recipients");
                   }
                 }}
@@ -1667,8 +1540,6 @@ export default function Main() {
                   if (inputMessage.trim()) {
                     setSelectedMessage(inputMessage.trim());
                     // setIsInputMode(false); // 入力モードを維持してキーボードを開いたままにする
-                    // 全員をデフォルトで選択
-                    selectAllFriends();
                     setStep("select-recipients");
                   }
                 }}
@@ -2273,13 +2144,6 @@ export default function Main() {
         matchedUser={queueHead?.matchedUser ?? undefined}
         message={queueHead?.message ?? undefined}
         chatId={queueHead?.chatId}
-      />
-
-      <NameRegistrationModal
-        isOpen={showNameModal}
-        onClose={() => setShowNameModal(false)}
-        onSave={() => setShowNameModal(false)}
-        currentName={currentUserName}
       />
 
       <FixedTabBar />

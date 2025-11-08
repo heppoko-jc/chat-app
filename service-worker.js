@@ -11,25 +11,6 @@ self.addEventListener("activate", (event) => {
 // Workbox InjectManifest：ビルド時に __WB_MANIFEST が差し込まれる
 workbox.precaching.precacheAndRoute(self.__WB_MANIFEST);
 
-// =============== ページルートのフォールバック戦略 ===============
-// プリキャッシュに含まれていないページ（/mainなど）へのアクセス時、
-// ネットワークファースト戦略を使用（ネットワーク優先、失敗時のみキャッシュ）
-// これにより、常に最新のページを取得しようとし、404エラーを防ぐ
-workbox.routing.registerRoute(
-  ({ request }) => request.mode === "navigate",
-  new workbox.strategies.NetworkFirst({
-    cacheName: "pages-cache",
-    plugins: [
-      {
-        cacheKeyWillBeUsed: async ({ request }) => {
-          // リクエストURLをそのままキャッシュキーとして使用
-          return request.url;
-        },
-      },
-    ],
-  })
-);
-
 // =============== 共通ヘルパ ===============
 const normalizePath = (urlString) => {
   try {
@@ -280,7 +261,7 @@ self.addEventListener("push", (event) => {
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const data = event.notification?.data || {};
-  const { type, matchId, chatId, matchedUserId, matchedUserName, body } = data;
+  const { type, matchId, chatId } = data;
 
   const targetUrl =
     // digest は利用導線としてチャット一覧へ（必要なら '/main' 等に変更可）
@@ -296,69 +277,16 @@ self.addEventListener("notificationclick", (event) => {
 
   event.waitUntil(
     (async () => {
-      // マッチ通知の場合、通知データをlocalStorageに保存（ポップアップ表示用）
-      if (type === "match" && matchedUserId && matchedUserName && body) {
-        try {
-          // 全ウィンドウに通知データを送信してlocalStorageに保存
-          const wins = await clients.matchAll({
-            type: "window",
-            includeUncontrolled: true,
-          });
-          const notificationData = {
-            type: "match",
-            matchedUserId,
-            matchedUserName,
-            message: body.match(/「([^」]+)」/)
-              ? body.match(/「([^」]+)」/)[1]
-              : body,
-            chatId: chatId || matchId,
-            timestamp: Date.now(),
-          };
-
-          for (const win of wins) {
-            win.postMessage({
-              type: "PENDING_NOTIFICATION",
-              data: notificationData,
-            });
-          }
-
-          // 新しいウィンドウを開く前に設定（開いた後に適用される）
-          // ただし、既存のウィンドウがある場合はそちらを使う
-          const targetPath = normalizePath(targetUrl);
-          for (const w of wins) {
-            if (normalizePath(w.url) === targetPath) {
-              // データ送信後にフォーカス
-              return w.focus();
-            }
-          }
-
-          // 新しいウィンドウを開く
-          const newWin = await clients.openWindow(targetUrl);
-          if (newWin) {
-            // 新しいウィンドウが開かれたら、少し待ってからデータを送信
-            setTimeout(() => {
-              newWin.postMessage({
-                type: "PENDING_NOTIFICATION",
-                data: notificationData,
-              });
-            }, 100);
-          }
-          return newWin;
-        } catch (e) {
-          console.error("通知データの保存エラー:", e);
-        }
-      } else {
-        // マッチ通知以外は通常の処理
-        const wins = await clients.matchAll({
-          type: "window",
-          includeUncontrolled: true,
-        });
-        const targetPath = normalizePath(targetUrl);
-        for (const w of wins) {
-          if (normalizePath(w.url) === targetPath) return w.focus();
-        }
-        return clients.openWindow(targetUrl);
+      // 自動クリアを無効化: await clearNotificationsAndBadge();
+      const wins = await clients.matchAll({
+        type: "window",
+        includeUncontrolled: true,
+      });
+      const targetPath = normalizePath(targetUrl);
+      for (const w of wins) {
+        if (normalizePath(w.url) === targetPath) return w.focus();
       }
+      return clients.openWindow(targetUrl);
     })()
   );
 });

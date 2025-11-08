@@ -1,7 +1,7 @@
 // app/friends/page.tsx
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import axios from "axios";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -41,45 +41,49 @@ export default function FriendsPage() {
   const [isRestricted, setIsRestricted] = useState(false);
   const [showInfoPopup, setShowInfoPopup] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [popularityMap, setPopularityMap] = useState<Record<string, number>>(
-    {}
-  );
 
   // ページ滞在中の表示順序を固定するための状態
   const [displayUsers, setDisplayUsers] = useState<User[]>([]);
 
-  const katakanaToHiragana = (value: string): string =>
-    value.replace(/[\u30A1-\u30F6]/g, (char) =>
-      String.fromCharCode(char.charCodeAt(0) - 0x60)
-    );
-
-  const normalizeForSearch = (value: string): string => {
-    if (!value) return "";
-    return katakanaToHiragana(value).toLowerCase();
-  };
-
-  const getFilteredUsers = (source: User[], query: string): User[] => {
-    if (!query.trim()) return source;
-    const normalizedQuery = normalizeForSearch(query.trim());
-
-    return source.filter((user) => {
-      const fields = [
-        user.name,
-        user.nameEn ?? "",
-        user.nameJa ?? "",
-        user.nameOther ?? "",
-      ];
-
-      return fields.some((field) =>
-        normalizeForSearch(field).includes(normalizedQuery)
-      );
+  // カタカナをひらがなに変換する関数（検索用）
+  const katakanaToHiragana = (str: string): string => {
+    return str.replace(/[\u30A1-\u30F6]/g, (match) => {
+      return String.fromCharCode(match.charCodeAt(0) - 0x60);
     });
   };
 
-  const filteredUsers = useMemo(
-    () => getFilteredUsers(displayUsers, searchQuery),
-    [displayUsers, searchQuery]
-  );
+  // 検索用の正規化関数（ひらがな/カタカナを統一、大文字小文字を統一）
+  const normalizeForSearch = (str: string): string => {
+    if (!str) return "";
+    // ひらがなに統一
+    let normalized = katakanaToHiragana(str);
+    // 小文字に統一
+    normalized = normalized.toLowerCase();
+    return normalized;
+  };
+
+  // 検索フィルタリング関数
+  const getFilteredUsers = (users: User[], query: string): User[] => {
+    if (!query.trim()) return users;
+
+    const normalizedQuery = normalizeForSearch(query);
+
+    return users.filter((user) => {
+      // 検索対象のフィールドを取得
+      const searchableFields = [
+        user.name,
+        user.nameEn,
+        user.nameJa,
+        user.nameOther,
+      ].filter(Boolean) as string[];
+
+      // 各フィールドで部分一致チェック
+      return searchableFields.some((field) => {
+        const normalizedField = normalizeForSearch(field);
+        return normalizedField.includes(normalizedQuery);
+      });
+    });
+  };
 
   // 初期表示時のみのソート関数
   const createSortedUsersList = (
@@ -97,41 +101,6 @@ export default function FriendsPage() {
       // 同じフォロー状態の場合、登録が新しい順（createdAt降順）
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
-  };
-
-  const buildDisplayUsers = (
-    usersList: User[],
-    friendsSet: Set<string>,
-    popularity: Record<string, number>
-  ) => {
-    const baseSorted = createSortedUsersList(usersList, friendsSet);
-    const popularityEntries = Object.entries(popularity);
-
-    if (popularityEntries.length === 0) {
-      return baseSorted;
-    }
-
-    const userMap = new Map(usersList.map((user) => [user.id, user]));
-
-    const popularUsers = popularityEntries
-      .filter(
-        ([userId, count]) =>
-          count > 0 && !friendsSet.has(userId) && userMap.has(userId)
-      )
-      .map(([userId, count]) => ({
-        user: userMap.get(userId)!,
-        count,
-      }))
-      .sort((a, b) => b.count - a.count);
-
-    if (popularUsers.length === 0) {
-      return baseSorted;
-    }
-
-    const popularIds = new Set(popularUsers.map(({ user }) => user.id));
-    const remainder = baseSorted.filter((user) => !popularIds.has(user.id));
-
-    return [...popularUsers.map(({ user }) => user), ...remainder];
   };
 
   // 変更の検出
@@ -300,49 +269,26 @@ export default function FriendsPage() {
     setCurrentUserId(uid);
 
     if (uid) {
-      const fetchData = async () => {
-        try {
-          const usersPromise = axios.get<User[]>("/api/users");
-          const friendsPromise = axios.get<Friend[]>("/api/friends", {
-            headers: { userId: uid },
-          });
-          const restrictionPromise = axios.get("/api/friends/restriction", {
-            headers: { userId: uid },
-          });
-          const popularityPromise = axios
-            .get<{ userId: string; count: number }[]>(
-              "/api/friends/popularity",
-              {
-                headers: { userId: uid },
-              }
-            )
-            .then((res) => res.data)
-            .catch((error) => {
-              console.warn("人気ユーザー取得エラー:", error);
-              return [];
-            });
-
-          const [usersRes, friendsRes, restrictionRes, popularityData] =
-            await Promise.all([
-              usersPromise,
-              friendsPromise,
-              restrictionPromise,
-              popularityPromise,
-            ]);
-
+      Promise.all([
+        axios.get<User[]>("/api/users"),
+        axios.get<Friend[]>("/api/friends", {
+          headers: { userId: uid },
+        }),
+        // 制限状態もチェック
+        axios.get("/api/friends/restriction", {
+          headers: { userId: uid },
+        }),
+      ])
+        .then(([usersRes, friendsRes, restrictionRes]) => {
           const filteredUsers = usersRes.data.filter((u) => u.id !== uid);
           setUsers(filteredUsers);
           const friendsSet = new Set(friendsRes.data.map((f) => f.friendId));
           setFriends(friendsSet);
           setInitialFriends(new Set(friendsSet));
 
-          const popularityRecord = popularityData.reduce<
-            Record<string, number>
-          >((acc, item) => {
-            acc[item.userId] = item.count;
-            return acc;
-          }, {});
-          setPopularityMap(popularityRecord);
+          // 初期表示順序を設定（ページ滞在中はこの順序を維持）
+          const sortedUsers = createSortedUsersList(filteredUsers, friendsSet);
+          setDisplayUsers(sortedUsers);
 
           // 制限状態をチェック
           const { canChange, remainingTime } = restrictionRes.data;
@@ -360,34 +306,13 @@ export default function FriendsPage() {
           if (shouldShowInfo) {
             setShowInfoPopup(true);
           }
-        } catch (error) {
+        })
+        .catch((error) => {
           console.error("データ取得エラー:", error);
           setLoading(false);
-        }
-      };
-
-      fetchData();
+        });
     }
   }, []);
-
-  useEffect(() => {
-    if (!users.length) return;
-
-    setDisplayUsers((prev) => {
-      const latestById = new Map(users.map((user) => [user.id, user]));
-
-      const baseOrder = prev.length
-        ? prev
-            .map((user) => latestById.get(user.id))
-            .filter((user): user is User => Boolean(user))
-        : buildDisplayUsers(users, friends, popularityMap);
-
-      const existingIds = new Set(baseOrder.map((user) => user.id));
-      const newUsers = users.filter((user) => !existingIds.has(user.id));
-
-      return [...baseOrder, ...newUsers];
-    });
-  }, [users, friends, popularityMap]);
 
   // ともだちタグの切り替え（楽観的更新 + ボタン無効化）
   const toggleFriend = async (userId: string) => {
@@ -517,6 +442,7 @@ export default function FriendsPage() {
           </p>
         )}
 
+        {/* 検索バー */}
         <div className="mt-3 relative">
           <input
             type="text"
@@ -528,7 +454,7 @@ export default function FriendsPage() {
           {searchQuery && (
             <button
               onClick={() => setSearchQuery("")}
-              className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
               aria-label="検索をクリア"
             >
               <svg
@@ -552,105 +478,107 @@ export default function FriendsPage() {
 
       {/* コンテンツ（スクロール可能） */}
       <div className="flex-1 overflow-y-auto px-4 py-6 pb-24">
-        {filteredUsers.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12">
-            <p className="text-gray-500 text-base">
-              {searchQuery.trim()
-                ? `「${searchQuery}」に該当するユーザーが見つかりませんでした`
-                : "ユーザーが見つかりませんでした"}
-            </p>
-            {searchQuery.trim() && (
-              <p className="text-gray-400 text-sm mt-2">
-                （全{displayUsers.length}件中）
-              </p>
-            )}
-          </div>
-        ) : (
-          <div className="space-y-3">
-            {filteredUsers.map((user) => (
-              <div
-                key={user.id}
-                className="flex items-center gap-3 p-4 rounded-2xl border border-orange-200 bg-white"
-              >
-                <div
-                  className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold"
-                  style={{ backgroundColor: getBgColor(user.name) }}
-                >
-                  {getInitials(user.name)}
-                </div>
+        {(() => {
+          const filteredUsers = getFilteredUsers(displayUsers, searchQuery);
 
-                <div className="flex-1 min-w-0">
-                  <p className="text-lg text-gray-800 truncate">{user.name}</p>
-                  {user.bio && (
-                    <p className="text-sm text-gray-600 truncate">{user.bio}</p>
-                  )}
-                </div>
-
-                <button
-                  onClick={() => toggleFriend(user.id)}
-                  disabled={processingUsers.has(user.id)}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-full transition-opacity ${
-                    processingUsers.has(user.id) ||
-                    (isRestricted &&
-                      !(!friends.has(user.id) && isNewUser(user.id)))
-                      ? "opacity-50 cursor-not-allowed"
-                      : ""
-                  }`}
-                  style={{
-                    backgroundColor: friends.has(user.id)
-                      ? "#f97316"
-                      : "#fbbf24",
-                    color: "white",
-                  }}
-                >
-                  {processingUsers.has(user.id) ? (
-                    <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                  ) : (
-                    <Image
-                      src={
-                        friends.has(user.id)
-                          ? "/icons/add-friend.png"
-                          : "/icons/add.png"
-                      }
-                      alt={
-                        friends.has(user.id) ? "フォロー解除" : "フォロー追加"
-                      }
-                      width={20}
-                      height={20}
-                    />
-                  )}
-                  {processingUsers.has(user.id) ? (
-                    <span className="text-sm font-bold">処理中...</span>
-                  ) : isRestricted &&
-                    !(!friends.has(user.id) && isNewUser(user.id)) ? (
-                    <span className="text-sm font-bold">制限中</span>
-                  ) : friends.has(user.id) ? (
-                    <span className="text-sm font-bold">フォロー中</span>
-                  ) : null}
-                </button>
+          if (searchQuery && filteredUsers.length === 0) {
+            return (
+              <div className="flex flex-col items-center justify-center py-12">
+                <p className="text-gray-500 text-base">
+                  該当するユーザーが見つかりませんでした
+                </p>
               </div>
-            ))}
-          </div>
-        )}
+            );
+          }
+
+          return (
+            <div className="space-y-3">
+              {filteredUsers.map((user) => (
+                <div
+                  key={user.id}
+                  className="flex items-center gap-3 p-4 rounded-2xl border border-orange-200 bg-white"
+                >
+                  {/* アバター */}
+                  <div
+                    className="w-12 h-12 rounded-full flex items-center justify-center text-white font-bold"
+                    style={{ backgroundColor: getBgColor(user.name) }}
+                  >
+                    {getInitials(user.name)}
+                  </div>
+
+                  {/* ユーザー情報 */}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-lg text-gray-800 truncate">
+                      {user.name}
+                    </p>
+                    {user.bio && (
+                      <p className="text-sm text-gray-600 truncate">
+                        {user.bio}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* ともだちボタン */}
+                  <button
+                    onClick={() => toggleFriend(user.id)}
+                    disabled={processingUsers.has(user.id)}
+                    className={`flex items-center gap-2 px-3 py-2 rounded-full transition-opacity ${
+                      processingUsers.has(user.id) ||
+                      (isRestricted &&
+                        !(!friends.has(user.id) && isNewUser(user.id)))
+                        ? "opacity-50 cursor-not-allowed"
+                        : ""
+                    }`}
+                    style={{
+                      backgroundColor: friends.has(user.id)
+                        ? "#f97316"
+                        : "#fbbf24",
+                      color: "white",
+                    }}
+                  >
+                    {processingUsers.has(user.id) ? (
+                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                    ) : (
+                      <Image
+                        src={
+                          friends.has(user.id)
+                            ? "/icons/add-friend.png"
+                            : "/icons/add.png"
+                        }
+                        alt={
+                          friends.has(user.id) ? "フォロー解除" : "フォロー追加"
+                        }
+                        width={20}
+                        height={20}
+                      />
+                    )}
+                    {processingUsers.has(user.id) ? (
+                      <span className="text-sm font-bold">処理中...</span>
+                    ) : isRestricted &&
+                      !(!friends.has(user.id) && isNewUser(user.id)) ? (
+                      <span className="text-sm font-bold">制限中</span>
+                    ) : friends.has(user.id) ? (
+                      <span className="text-sm font-bold">フォロー中</span>
+                    ) : null}
+                  </button>
+                </div>
+              ))}
+            </div>
+          );
+        })()}
       </div>
 
       {/* 情報ポップアップ */}
       {showInfoPopup && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-2xl p-6 mx-4 max-w-sm w-full">
-            <h3 className="text-2xl font-bold text-orange-500 mb-3 text-center">
+            <h3 className="text-lg font-bold text-orange-500 mb-2 text-center whitespace-nowrap leading-tight">
               フォローはあなただけのものです。
             </h3>
-            <p className="text-lg font-semibold text-gray-800 mb-6 text-center">
+            <p className="text-base font-semibold text-gray-800 mb-5 text-center whitespace-nowrap leading-tight">
               フォローしても相手には通知されません。
             </p>
-            <div className="space-y-2">
-              <button
-                onClick={() => setShowInfoPopup(false)}
-                className="w-full bg-gray-200 text-gray-700 py-2 rounded-xl text-sm font-semibold"
-              >
-                閉じる
-              </button>
+            <div className="space-y-2 flex flex-col items-center">
               <button
                 onClick={() => {
                   const uid = localStorage.getItem("userId");
@@ -659,9 +587,15 @@ export default function FriendsPage() {
                   }
                   setShowInfoPopup(false);
                 }}
-                className="w-full bg-orange-500 text-white py-2 rounded-xl text-sm font-semibold"
+                className="w-full max-w-[260px] bg-orange-500 text-white px-4 py-2 rounded-xl text-sm font-semibold leading-snug text-center"
               >
                 理解したので次からはこの通知は表示しない
+              </button>
+              <button
+                onClick={() => setShowInfoPopup(false)}
+                className="w-full max-w-[260px] bg-gray-200 text-gray-700 px-4 py-2 rounded-xl text-sm font-semibold text-center"
+              >
+                閉じる
               </button>
             </div>
           </div>
