@@ -372,7 +372,21 @@ export default function FriendsPage() {
 
   useEffect(() => {
     if (!users.length) return;
-    setDisplayUsers(buildDisplayUsers(users, friends, popularityMap));
+
+    setDisplayUsers((prev) => {
+      const latestById = new Map(users.map((user) => [user.id, user]));
+
+      const baseOrder = prev.length
+        ? prev
+            .map((user) => latestById.get(user.id))
+            .filter((user): user is User => Boolean(user))
+        : buildDisplayUsers(users, friends, popularityMap);
+
+      const existingIds = new Set(baseOrder.map((user) => user.id));
+      const newUsers = users.filter((user) => !existingIds.has(user.id));
+
+      return [...baseOrder, ...newUsers];
+    });
   }, [users, friends, popularityMap]);
 
   // ともだちタグの切り替え（楽観的更新 + ボタン無効化）
