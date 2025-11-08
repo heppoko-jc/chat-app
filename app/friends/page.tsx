@@ -422,10 +422,10 @@ export default function FriendsPage() {
           <div className="w-10" />
         </div>
         <p className="text-sm text-gray-600 text-center mt-2">
-          ここで選んだ人とマッチします。
+          マッチしたい人を選びましょう。
         </p>
         <p className="text-xs text-red-600 text-center mt-1 font-bold">
-          相手には何も通知されません。
+          フォローしても相手には通知されません。
         </p>
         {!isRestricted && (
           <p className="text-xs text-gray-500 text-center mt-1">
