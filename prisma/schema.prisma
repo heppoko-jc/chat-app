@@ -10,6 +10,9 @@ datasource db {
 model User {
   id                String             @id @default(uuid())
   name              String
+  nameEn            String?
+  nameJa            String?
+  nameOther         String?
   email             String             @unique
   password          String
   createdAt         DateTime           @default(now())
@@ -36,6 +39,10 @@ model User {
   friends           Friend[]           @relation("UserFriends")
   friendOf          Friend[]           @relation("FriendOf")
   friendRestriction FriendRestriction? @relation("UserFriendRestriction")
+
+  @@index([nameEn])
+  @@index([nameJa])
+  @@index([nameOther])
 }
 
 model SentMessage {

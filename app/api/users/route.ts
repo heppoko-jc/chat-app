@@ -10,7 +10,8 @@ import { prisma } from "@/lib/prisma";
 export async function GET() {
   try {
     // 非表示にするユーザーIDを取得
-    const hiddenUserIds = process.env.HIDDEN_USER_IDS?.split(",") || [];
+    const hiddenUserIds =
+      process.env.HIDDEN_USER_IDS?.split(",").filter(Boolean) || [];
 
     const users = await prisma.user.findMany({
       where: {
@@ -27,7 +28,15 @@ export async function GET() {
           },
         ],
       },
-      select: { id: true, name: true, bio: true, createdAt: true },
+      select: {
+        id: true,
+        name: true,
+        nameEn: true,
+        nameJa: true,
+        nameOther: true,
+        bio: true,
+        createdAt: true,
+      },
     });
 
     return NextResponse.json(users);

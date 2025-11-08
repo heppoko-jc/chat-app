@@ -36,14 +36,21 @@ export async function GET(req: NextRequest) {
 
     const user = await prisma.user.findUnique({
       where: { id: decoded.id },
-      select: { name: true, email: true, bio: true }, // ✅ bioを取得
     });
 
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
-    return NextResponse.json(user);
+    const typedUser = user as typeof user & {
+      nameEn: string | null;
+      nameJa: string | null;
+      nameOther: string | null;
+    };
+
+    const { name, nameEn, nameJa, nameOther, email, bio } = typedUser;
+
+    return NextResponse.json({ name, nameEn, nameJa, nameOther, email, bio });
   } catch (error) {
     // ここにはほとんど入らないはずですが、念のため
     console.error("Profile fetch unexpected error:", error);
@@ -57,7 +64,7 @@ export async function GET(req: NextRequest) {
 // ✅ ユーザー情報を更新（名前・自己紹介）
 export async function PUT(req: NextRequest) {
   try {
-    const { name, bio } = await req.json();
+    const { name, nameEn, nameJa, nameOther, bio } = await req.json();
 
     const authHeader = req.headers.get("Authorization");
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -67,9 +74,22 @@ export async function PUT(req: NextRequest) {
     const token = authHeader.split(" ")[1];
     const decoded = jwt.verify(token, SECRET_KEY) as { id: string };
 
+    const updateData: {
+      name?: string;
+      nameEn?: string | null;
+      nameJa?: string | null;
+      nameOther?: string | null;
+      bio?: string;
+    } = {};
+    if (name !== undefined) updateData.name = name;
+    if (nameEn !== undefined) updateData.nameEn = nameEn || null;
+    if (nameJa !== undefined) updateData.nameJa = nameJa || null;
+    if (nameOther !== undefined) updateData.nameOther = nameOther || null;
+    if (bio !== undefined) updateData.bio = bio;
+
     const updatedUser = await prisma.user.update({
       where: { id: decoded.id },
-      data: { name, bio },
+      data: updateData,
     });
 
     return NextResponse.json(updatedUser);

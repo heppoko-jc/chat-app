@@ -26,6 +26,9 @@ function getBgColor(name: string) {
 
 interface User {
   name: string;
+  nameEn?: string | null;
+  nameJa?: string | null;
+  nameOther?: string | null;
   email: string;
   bio: string;
 }
@@ -34,6 +37,9 @@ export default function Profile() {
   const router = useRouter();
   const [user, setUser] = useState<User | null>(null);
   const [name, setName] = useState("");
+  const [nameEn, setNameEn] = useState("");
+  const [nameJa, setNameJa] = useState("");
+  const [nameOther, setNameOther] = useState("");
   const [bio, setBio] = useState("");
   const [isEditing, setIsEditing] = useState(false);
   const [showSavedPopup, setShowSavedPopup] = useState(false);
@@ -57,6 +63,9 @@ export default function Profile() {
         });
         setUser(res.data);
         setName(res.data.name);
+        setNameEn(res.data.nameEn || "");
+        setNameJa(res.data.nameJa || "");
+        setNameOther(res.data.nameOther || "");
         setBio(res.data.bio || "");
       } catch {
         // 期限切れ or 無効トークンならクリアしてログイン画面へ
@@ -77,7 +86,13 @@ export default function Profile() {
     try {
       const res = await axios.put(
         "/api/auth/profile",
-        { name, bio },
+        {
+          name,
+          nameEn: nameEn.trim() || null,
+          nameJa: nameJa.trim() || null,
+          nameOther: nameOther.trim() || null,
+          bio,
+        },
         { headers: { Authorization: `Bearer ${token}` } }
       );
       setUser(res.data);
@@ -193,6 +208,50 @@ export default function Profile() {
                   className="border border-orange-200 p-2 w-full h-24 rounded-lg focus:ring-2 focus:ring-orange-200 outline-none text-base"
                 />
               </div>
+              <div className="border-t border-gray-200 pt-4 mt-4">
+                <p className="text-sm font-semibold text-gray-700 mb-3">
+                  検索用名前（検索しやすくするための追加の名前）
+                </p>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block mb-1 font-semibold text-gray-700 text-sm">
+                      English Name（任意）
+                    </label>
+                    <input
+                      type="text"
+                      value={nameEn}
+                      onChange={(e) => setNameEn(e.target.value)}
+                      placeholder="例: Taro Yamada"
+                      className="border border-orange-200 p-2 w-full rounded-lg focus:ring-2 focus:ring-orange-200 outline-none text-base"
+                    />
+                  </div>
+                  <div>
+                    <label className="block mb-1 font-semibold text-gray-700 text-sm">
+                      Japanese Name（任意）
+                    </label>
+                    <input
+                      type="text"
+                      value={nameJa}
+                      onChange={(e) => setNameJa(e.target.value)}
+                      placeholder="例: やまだたろう"
+                      className="border border-orange-200 p-2 w-full rounded-lg focus:ring-2 focus:ring-orange-200 outline-none text-base"
+                    />
+                  </div>
+                  <div>
+                    <label className="block mb-1 font-semibold text-gray-700 text-sm">
+                      Other（任意）
+                    </label>
+                    <input
+                      type="text"
+                      value={nameOther}
+                      onChange={(e) => setNameOther(e.target.value)}
+                      placeholder="例: ニックネーム、別名など"
+                      className="border border-orange-200 p-2 w-full rounded-lg focus:ring-2 focus:ring-orange-200 outline-none text-base"
+                    />
+                  </div>
+                </div>
+              </div>
+
               <div className="flex justify-center gap-4 mt-4">
                 <button
                   onClick={handleUpdateProfile}

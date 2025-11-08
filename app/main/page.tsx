@@ -8,6 +8,7 @@ import FixedTabBar from "../components/FixedTabBar";
 import { useRouter } from "next/navigation";
 import { useChatData, PresetMessage } from "../contexts/ChatDataContext";
 import MatchNotification from "../components/MatchNotification";
+import NameRegistrationModal from "../components/NameRegistrationModal";
 import socket, { setSocketUserId } from "../socket";
 import type { ChatItem } from "../chat-list/page";
 
@@ -169,6 +170,9 @@ export default function Main() {
     title: string;
     image?: string;
   } | null>(null);
+
+  const [showNameModal, setShowNameModal] = useState(false);
+  const [currentUserName, setCurrentUserName] = useState<string>("");
 
   // Phase 2.1: 安全なキャッシュ基盤の構築（一時的に無効化）
   // const useMessageCache = () => {
@@ -720,9 +724,6 @@ export default function Main() {
     const uid = localStorage.getItem("userId");
     setCurrentUserId(uid);
 
-    if (uid) {
-    }
-
     axios
       .get<User[]>("/api/users")
       .then((res) => setUsers(res.data))
@@ -765,6 +766,34 @@ export default function Main() {
     fetchPresetMessages();
     if (uid) fetchChatList(uid);
   }, [fetchPresetMessages, fetchChatList]);
+
+  useEffect(() => {
+    const token = localStorage.getItem("token");
+    const userId = localStorage.getItem("userId");
+
+    if (!token || !userId) return;
+
+    const checkNameRegistration = async () => {
+      try {
+        const res = await axios.get("/api/auth/profile", {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        setCurrentUserName(res.data.name || "");
+
+        const hasNoSearchNames =
+          !res.data.nameEn && !res.data.nameJa && !res.data.nameOther;
+
+        if (hasNoSearchNames) {
+          setShowNameModal(true);
+        }
+      } catch (error) {
+        console.error("プロフィール取得エラー:", error);
+      }
+    };
+
+    checkNameRegistration();
+  }, []);
 
   // 非表示中に溜まったマッチを取り込み（成立順でキューへ）
   const pullPendingMatches = useCallback(async () => {
@@ -2244,6 +2273,13 @@ export default function Main() {
         matchedUser={queueHead?.matchedUser ?? undefined}
         message={queueHead?.message ?? undefined}
         chatId={queueHead?.chatId}
+      />
+
+      <NameRegistrationModal
+        isOpen={showNameModal}
+        onClose={() => setShowNameModal(false)}
+        onSave={() => setShowNameModal(false)}
+        currentName={currentUserName}
       />
 
       <FixedTabBar />
