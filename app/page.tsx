@@ -13,6 +13,15 @@ export default function Home() {
     let cancelled = false;
 
     const checkAndRedirect = async () => {
+      // 0. PWAインストール確認
+      const pwaInstallAcknowledged = localStorage.getItem(
+        "pwaInstallAcknowledged"
+      );
+      if (!pwaInstallAcknowledged) {
+        if (!cancelled) router.replace("/pwa-install");
+        return;
+      }
+
       // 1. まず同意書チェック
       const consentData = localStorage.getItem("experimentConsent");
       if (!consentData) {
