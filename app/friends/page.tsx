@@ -41,6 +41,9 @@ export default function FriendsPage() {
   const [isRestricted, setIsRestricted] = useState(false);
   const [showInfoPopup, setShowInfoPopup] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [popularityMap, setPopularityMap] = useState<Record<string, number>>(
+    {}
+  );
 
   // ページ滞在中の表示順序を固定するための状態
   const [displayUsers, setDisplayUsers] = useState<User[]>([]);
@@ -101,6 +104,31 @@ export default function FriendsPage() {
       // 同じフォロー状態の場合、登録が新しい順（createdAt降順）
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
     });
+  };
+
+  const buildDisplayUsers = (
+    usersList: User[],
+    friendsSet: Set<string>,
+    popularity: Record<string, number>
+  ) => {
+    const popularCandidates = usersList
+      .filter((user) => {
+        const count = popularity[user.id] ?? 0;
+        return count > 0 && !friendsSet.has(user.id);
+      })
+      .sort((a, b) => {
+        const diff = (popularity[b.id] ?? 0) - (popularity[a.id] ?? 0);
+        if (diff !== 0) return diff;
+        return (
+          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+        );
+      });
+
+    const popularIds = new Set(popularCandidates.map((user) => user.id));
+    const remainder = usersList.filter((user) => !popularIds.has(user.id));
+    const remainderSorted = createSortedUsersList(remainder, friendsSet);
+
+    return [...popularCandidates, ...remainderSorted];
   };
 
   // 変更の検出
@@ -274,20 +302,41 @@ export default function FriendsPage() {
         axios.get<Friend[]>("/api/friends", {
           headers: { userId: uid },
         }),
+        axios
+          .get<{ userId: string; count: number }[]>("/api/friends/popularity", {
+            headers: { userId: uid },
+          })
+          .then((res) => res.data)
+          .catch((error) => {
+            console.warn("人気ユーザー取得エラー:", error);
+            return [];
+          }),
         // 制限状態もチェック
         axios.get("/api/friends/restriction", {
           headers: { userId: uid },
         }),
       ])
-        .then(([usersRes, friendsRes, restrictionRes]) => {
+        .then(([usersRes, friendsRes, popularityData, restrictionRes]) => {
           const filteredUsers = usersRes.data.filter((u) => u.id !== uid);
           setUsers(filteredUsers);
           const friendsSet = new Set(friendsRes.data.map((f) => f.friendId));
           setFriends(friendsSet);
           setInitialFriends(new Set(friendsSet));
 
+          const popularityRecord = popularityData.reduce<
+            Record<string, number>
+          >((acc, item) => {
+            acc[item.userId] = item.count;
+            return acc;
+          }, {});
+          setPopularityMap(popularityRecord);
+
           // 初期表示順序を設定（ページ滞在中はこの順序を維持）
-          const sortedUsers = createSortedUsersList(filteredUsers, friendsSet);
+          const sortedUsers = buildDisplayUsers(
+            filteredUsers,
+            friendsSet,
+            popularityRecord
+          );
           setDisplayUsers(sortedUsers);
 
           // 制限状態をチェック
@@ -313,6 +362,25 @@ export default function FriendsPage() {
         });
     }
   }, []);
+
+  useEffect(() => {
+    if (!users.length) return;
+
+    setDisplayUsers((prev) => {
+      const latestById = new Map(users.map((user) => [user.id, user]));
+
+      const baseOrder = prev.length
+        ? prev
+            .map((user) => latestById.get(user.id))
+            .filter((user): user is User => Boolean(user))
+        : buildDisplayUsers(users, friends, popularityMap);
+
+      const existingIds = new Set(baseOrder.map((user) => user.id));
+      const newUsers = users.filter((user) => !existingIds.has(user.id));
+
+      return [...baseOrder, ...newUsers];
+    });
+  }, [users, friends, popularityMap]);
 
   // ともだちタグの切り替え（楽観的更新 + ボタン無効化）
   const toggleFriend = async (userId: string) => {
