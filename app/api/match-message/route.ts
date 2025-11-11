@@ -118,8 +118,11 @@ export async function POST(req: NextRequest) {
       `[match-message] 最終メタデータ: title=${finalLinkTitle}, image=${finalLinkImage}`
     );
 
-    let matchedUserId: string | null = null;
-    let myLatestCreatedAt: Date | null = null;
+    const matchedCandidates: {
+      receiverId: string;
+      reciprocalCreatedAt: Date;
+      mySendCreatedAt: Date;
+    }[] = [];
 
     // ✅ キーワードチェック（メッセージ送信前にチェック）
     const isHidden = shouldHideMessage(message);
@@ -138,7 +141,7 @@ export async function POST(req: NextRequest) {
         },
         select: { id: true, createdAt: true },
       });
-      myLatestCreatedAt = mySend.createdAt;
+      const mySendCreatedAt = mySend.createdAt;
 
       // ✅ 非表示メッセージはマッチ判定から除外
       if (isHidden) {
@@ -176,8 +179,11 @@ export async function POST(req: NextRequest) {
 
       // 相手の送信が「前回マッチ以降」に存在すればマッチ成立
       if (reciprocalAfterLastMatch) {
-        matchedUserId = receiverId;
-        break;
+        matchedCandidates.push({
+          receiverId,
+          reciprocalCreatedAt: reciprocalAfterLastMatch.createdAt,
+          mySendCreatedAt,
+        });
       }
       // なければ次の候補ユーザーへ（マッチはまだ）
     }
@@ -239,135 +245,168 @@ export async function POST(req: NextRequest) {
       console.log(`[match-message] PresetMessage作成完了`);
     }
 
-    // 2) マッチ成立時の処理
-    if (matchedUserId) {
-      // ユーザー情報
+    // 2) マッチ成立時の処理（複数対応）
+    if (matchedCandidates.length > 0) {
       const senderUser = await prisma.user.findUnique({
         where: { id: senderId },
         select: { id: true, name: true },
       });
-      const matchedUser = await prisma.user.findUnique({
-        where: { id: matchedUserId },
-        select: { id: true, name: true },
-      });
-      if (!senderUser || !matchedUser) {
-        throw new Error("User not found");
+      if (!senderUser) {
+        throw new Error("Sender user not found");
       }
 
-      // 直近の二重作成を避けるため、マッチ作成前に最終確認（同一ペア & message の直近マッチが直近N秒にないか）
-      // 競合対策の“保険”。必要なければ省略可。
-      const duplicateGuard = await prisma.matchPair.findFirst({
-        where: {
-          message,
-          OR: [
-            { user1Id: senderId, user2Id: matchedUserId },
-            { user1Id: matchedUserId, user2Id: senderId },
-          ],
-        },
-        orderBy: { matchedAt: "desc" },
-        select: { id: true, matchedAt: true },
-      });
-      if (duplicateGuard && myLatestCreatedAt) {
-        // もしすでに自分の送信時刻より新しいマッチが存在すれば再作成しない
-        if (duplicateGuard.matchedAt >= myLatestCreatedAt) {
-          // 既存を採用（以降の処理は継続）
-        }
-      }
+      const matchResults: {
+        matchedUserId: string;
+        matchedUserName: string;
+        chatId: string;
+      }[] = [];
 
-      // MatchPair（履歴）
-      const newMatchPair = await prisma.matchPair.create({
-        data: { user1Id: senderId, user2Id: matchedUserId, message },
-      });
+      for (const candidate of matchedCandidates) {
+        const { receiverId, reciprocalCreatedAt, mySendCreatedAt } = candidate;
 
-      // 2人のチャットIDを確保（無ければ作成）
-      const chatId = await ensureChatBetween(senderId, matchedUserId);
-
-      // Web Push 通知（両者）
-      const subs = await prisma.pushSubscription.findMany({
-        where: {
-          OR: [
-            { userId: senderId, isActive: true },
-            { userId: matchedUserId, isActive: true },
-          ],
-        },
-      });
-      await Promise.all(
-        subs.map((s) => {
-          const other = s.userId === senderId ? matchedUser : senderUser;
-          const payload = JSON.stringify({
-            type: "match",
-            matchId: newMatchPair.id,
-            title: "マッチング成立！",
-            body: `あなたは ${other.name} さんと「${message}」でマッチしました！`,
-            matchedUserId: other.id,
-            matchedUserName: other.name,
-            chatId,
-          });
-          return webpush.sendNotification(
-            s.subscription as unknown as WebPushSubscription,
-            payload
+        const matchedUser = await prisma.user.findUnique({
+          where: { id: receiverId },
+          select: { id: true, name: true },
+        });
+        if (!matchedUser) {
+          console.warn(
+            "[match-message] matchedUser not found, skipping:",
+            receiverId
           );
-        })
-      );
+          continue;
+        }
 
-      // WebSocket でリアルタイム通知
-      const socket = ioClient(SOCKET_URL, { transports: ["websocket"] });
-      try {
-        await new Promise<void>((resolve, reject) => {
-          const timeout = setTimeout(() => {
-            reject(new Error("Socket.IO接続タイムアウト"));
-          }, 5000);
+        const guardThresholdMillis = Math.min(
+          reciprocalCreatedAt.getTime(),
+          mySendCreatedAt.getTime()
+        );
+        const guardThreshold = new Date(guardThresholdMillis - 2000); // 2秒の余裕
 
-          socket.on("connect", () => {
-            clearTimeout(timeout);
-            console.log(`✅ Socket.IOサーバーに接続成功: ${socket.id}`);
-            resolve();
-          });
-
-          socket.on("connect_error", (error) => {
-            clearTimeout(timeout);
-            console.error(`❌ Socket.IO接続エラー:`, error);
-            reject(error);
-          });
+        const existingMatch = await prisma.matchPair.findFirst({
+          where: {
+            message,
+            OR: [
+              { user1Id: senderId, user2Id: receiverId },
+              { user1Id: receiverId, user2Id: senderId },
+            ],
+            matchedAt: { gte: guardThreshold },
+          },
+          orderBy: { matchedAt: "desc" },
+          select: { id: true, matchedAt: true },
         });
 
-        const payload = {
-          matchId: newMatchPair.id,
-          chatId,
-          message,
-          matchedAt: newMatchPair.matchedAt.toISOString(),
-        };
+        let matchPairId: string;
+        let matchPairMatchedAt: Date;
+        let isNewlyCreated = false;
 
-        // 送信者向け（先に送った側）
-        socket.emit("matchEstablished", {
-          ...payload,
+        if (existingMatch) {
+          matchPairId = existingMatch.id;
+          matchPairMatchedAt = existingMatch.matchedAt;
+        } else {
+          const newMatchPair = await prisma.matchPair.create({
+            data: { user1Id: senderId, user2Id: receiverId, message },
+          });
+          matchPairId = newMatchPair.id;
+          matchPairMatchedAt = newMatchPair.matchedAt;
+          isNewlyCreated = true;
+        }
+
+        const chatId = await ensureChatBetween(senderId, receiverId);
+
+        if (isNewlyCreated) {
+          const subs = await prisma.pushSubscription.findMany({
+            where: {
+              OR: [
+                { userId: senderId, isActive: true },
+                { userId: receiverId, isActive: true },
+              ],
+            },
+          });
+          await Promise.all(
+            subs.map((s) => {
+              const other = s.userId === senderId ? matchedUser : senderUser;
+              const payload = JSON.stringify({
+                type: "match",
+                matchId: matchPairId,
+                title: "マッチング成立！",
+                body: `あなたは ${other.name} さんと「${message}」でマッチしました！`,
+                matchedUserId: other.id,
+                matchedUserName: other.name,
+                chatId,
+              });
+              return webpush.sendNotification(
+                s.subscription as unknown as WebPushSubscription,
+                payload
+              );
+            })
+          );
+
+          const socket = ioClient(SOCKET_URL, { transports: ["websocket"] });
+          try {
+            await new Promise<void>((resolve, reject) => {
+              const timeout = setTimeout(() => {
+                reject(new Error("Socket.IO接続タイムアウト"));
+              }, 5000);
+
+              socket.on("connect", () => {
+                clearTimeout(timeout);
+                console.log(`✅ Socket.IOサーバーに接続成功: ${socket.id}`);
+                resolve();
+              });
+
+              socket.on("connect_error", (error) => {
+                clearTimeout(timeout);
+                console.error(`❌ Socket.IO接続エラー:`, error);
+                reject(error);
+              });
+            });
+
+            const payload = {
+              matchId: matchPairId,
+              chatId,
+              message,
+              matchedAt: matchPairMatchedAt.toISOString(),
+            };
+
+            socket.emit("matchEstablished", {
+              ...payload,
+              matchedUserId: matchedUser.id,
+              matchedUserName: matchedUser.name,
+              targetUserId: senderId,
+            });
+
+            socket.emit("matchEstablished", {
+              ...payload,
+              matchedUserId: senderUser.id,
+              matchedUserName: senderUser.name,
+              targetUserId: receiverId,
+            });
+
+            console.log(`✅ マッチ通知送信完了: ${senderId} と ${receiverId}`);
+          } catch (e) {
+            console.error("⚠️ WebSocket通知送信失敗（継続）:", e);
+          } finally {
+            setTimeout(() => socket.disconnect(), 50);
+          }
+        }
+
+        matchResults.push({
           matchedUserId: matchedUser.id,
           matchedUserName: matchedUser.name,
-          targetUserId: senderId,
+          chatId,
         });
-
-        // 受信者向け（後に送った側）
-        socket.emit("matchEstablished", {
-          ...payload,
-          matchedUserId: senderUser.id,
-          matchedUserName: senderUser.name,
-          targetUserId: matchedUserId,
-        });
-
-        console.log(`✅ マッチ通知送信完了: ${senderId} と ${matchedUserId}`);
-      } catch (e) {
-        console.error("⚠️ WebSocket通知送信失敗（継続）:", e);
-        // 通知はベストエフォートなので続行
-      } finally {
-        setTimeout(() => socket.disconnect(), 50);
       }
 
-      return NextResponse.json({
-        message: "Match created!",
-        matchedUserId: matchedUser.id,
-        matchedUserName: matchedUser.name,
-        chatId,
-      });
+      if (matchResults.length > 0) {
+        const primary = matchResults[0];
+        return NextResponse.json({
+          message: "Match created!",
+          matchedUserId: primary.matchedUserId,
+          matchedUserName: primary.matchedUserName,
+          chatId: primary.chatId,
+          matchedUsers: matchResults,
+        });
+      }
     }
 
     // マッチ未成立

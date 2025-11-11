@@ -97,7 +97,7 @@ export default function Notifications() {
   };
 
   // 許容ウィンドウ（秒）
-  const SAME_WINDOW_SEC = 5;
+  const SAME_WINDOW_SEC = 60;
 
   const toSec = (iso: string) => Math.floor(new Date(iso).getTime() / 1000);
 
@@ -294,12 +294,24 @@ export default function Notifications() {
                         return (
                           <li key={g.key} className="list-none">
                             {/* ヘッダー行（トグルボタン） */}
-                            <button
+                            <div
+                              role="button"
+                              tabIndex={0}
                               onClick={() =>
                                 isMulti
                                   ? toggleGroup(g.key)
                                   : handleMessageClick(first)
                               }
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" || e.key === " ") {
+                                  e.preventDefault();
+                                  if (isMulti) {
+                                    toggleGroup(g.key);
+                                  } else {
+                                    handleMessageClick(first);
+                                  }
+                                }
+                              }}
                               className="
                                 w-full flex items-center justify-between px-4 py-3
                                 bg-white border-2 border-gray-200 shadow-sm hover:shadow-md
@@ -435,7 +447,7 @@ export default function Notifications() {
                                   </button>
                                 </div>
                               </div>
-                            </button>
+                            </div>
 
                             {/* 明細（展開時のみ） */}
                             {isMulti && isOpen && (
@@ -516,12 +528,24 @@ export default function Notifications() {
                         const first = g.items[0];
                         return (
                           <li key={g.key} className="list-none">
-                            <button
+                            <div
+                              role="button"
+                              tabIndex={0}
                               onClick={() =>
                                 isMulti
                                   ? toggleGroup(g.key)
                                   : handleMessageClick(first)
                               }
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter" || e.key === " ") {
+                                  e.preventDefault();
+                                  if (isMulti) {
+                                    toggleGroup(g.key);
+                                  } else {
+                                    handleMessageClick(first);
+                                  }
+                                }
+                              }}
                               className="
                                 w-full flex items-center justify-between px-4 py-3
                                 bg-white border-2 border-gray-200 shadow-sm hover:shadow-md
@@ -639,7 +663,7 @@ export default function Notifications() {
                                   {isOpen ? "▲" : "▼"}
                                 </div>
                               )}
-                            </button>
+                            </div>
 
                             {isMulti && isOpen && (
                               <ul className="mt-2 space-y-2 pl-3">
