@@ -186,7 +186,7 @@ self.addEventListener("push", (event) => {
   } catch {}
 
   const {
-    type, // "message" | "match" | "digest_user" | "digest_global" など
+    type, // "message" | "match" | "sent_message" | "digest_user" | "digest_global" など
     chatId,
     title = "通知",
     body = "",
@@ -194,6 +194,7 @@ self.addEventListener("push", (event) => {
     badgeDelta,
     // 任意: 同じダイジェストの重複抑止に使える識別子（あれば tag に反映）
     digestKey,
+    senderId, // sent_message 用
   } = payload;
 
   event.waitUntil(
@@ -213,7 +214,7 @@ self.addEventListener("push", (event) => {
 
       // 3) まずバッジ更新（アプリが起動していなくても増える）
       //    - メッセージ系だけを未読としてカウント（digest はカウントしない）
-      if (type === "message") {
+      if (type === "message" || type === "sent_message") {
         const inc = Number.isFinite(badgeDelta) ? badgeDelta | 0 : 1;
         await adjustBadge(+inc);
       }
@@ -221,15 +222,12 @@ self.addEventListener("push", (event) => {
       // 4) 抑制判定
       const isDigest = type === "digest_user" || type === "digest_global";
       // ダイジェストは常に表示（抑制しない）
+      // チャットメッセージとsent_messageは抑制しない（ユーザー要望）
       let suppress = false;
       if (!isDigest) {
-        // message は「前面相当なら抑制」（従来どおり）
-        if (type === "message") {
-          suppress = !!isActiveByHeartbeat;
-        }
-        // match は抑制を弱める：フォーカスかつ可視の“確実な前面”のみ抑制
+        // match は抑制を弱める：フォーカスかつ可視の"確実な前面"のみ抑制
         // これにより非前面直後（心拍の残留）でも OS 通知を表示できる
-        else if (type === "match") {
+        if (type === "match") {
           const visible = !!(persisted && persisted.visible);
           const focused = !!(persisted && persisted.focused);
           suppress =
@@ -238,6 +236,7 @@ self.addEventListener("push", (event) => {
             visible &&
             focused;
         }
+        // message と sent_message は抑制しない
         // その他タイプは既定（抑制なし）
       }
 
@@ -246,6 +245,8 @@ self.addEventListener("push", (event) => {
       // 5) 通知表示
       const tagBase = isDigest
         ? `digest:${digestKey || ""}:${type}` // digest はまとまるように
+        : type === "sent_message"
+        ? `sent_message:${senderId ?? ""}` // sent_message 用のタグ
         : `${type}:${chatId ?? ""}`; // 既存の tag を踏襲
       return self.registration.showNotification(title, {
         body,
@@ -269,6 +270,8 @@ self.addEventListener("notificationclick", (event) => {
       ? "/main"
       : type === "match"
       ? "/main"
+      : type === "sent_message"
+      ? "/main" // sent_message は /main に遷移
       : chatId
       ? `/chat/${chatId}`
       : matchId
