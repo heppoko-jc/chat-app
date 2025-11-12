@@ -33,17 +33,37 @@ export async function GET(req: NextRequest) {
     });
     const friendSentMessages = sentByFriends.map((s) => s.message);
 
+    // 自分が24時間以内に送信したメッセージの内容を取得（非表示を除外）
+    let mySentMessages: string[] = [];
+    if (userId) {
+      const sentByMe = await prisma.sentMessage.findMany({
+        where: {
+          senderId: userId,
+          createdAt: { gte: expiryDate },
+          isHidden: false, // 非表示を除外
+        },
+        select: {
+          message: true,
+        },
+        distinct: ["message"],
+      });
+      mySentMessages = sentByMe.map((s) => s.message);
+    }
+
+    // 表示対象のメッセージ内容を結合（ともだちが送信したメッセージ + 自分が送信したメッセージ）
+    const visibleMessages = [...friendSentMessages, ...mySentMessages];
+
+    // 表示対象のメッセージがない場合は空配列を返す
+    if (visibleMessages.length === 0) {
+      return NextResponse.json([]);
+    }
+
     const messages = await prisma.presetMessage.findMany({
       where: {
         count: { gt: 0 },
         lastSentAt: { gte: expiryDate }, // 24時間以内のメッセージのみ取得
-        // 自分が作成したメッセージ または ともだちが送信したメッセージ
-        OR: [
-          ...(userId ? [{ createdBy: userId }] : []),
-          ...(friendSentMessages.length > 0
-            ? [{ content: { in: friendSentMessages } }]
-            : []),
-        ],
+        // ともだちが送信したメッセージ または 自分が送信したメッセージ（非表示を除外済み）
+        content: { in: visibleMessages },
       },
       orderBy: { lastSentAt: "desc" },
       select: {
