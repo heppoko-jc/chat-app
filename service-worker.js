@@ -88,7 +88,8 @@ self.addEventListener("message", (event) => {
 self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
   // 前面状態のフォールバック送信口
-  if (event.request.method === "POST" && url.pathname === "/__sw/fg") {
+  // 開発環境ではService Workerが無効なので、この処理は実行されない
+  if (event.request.method === "POST" && url.pathname === "/api/sw/fg") {
     event.respondWith(
       (async () => {
         try {

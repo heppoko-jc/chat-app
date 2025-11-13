@@ -5,9 +5,10 @@ import { useCallback, useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
 
 /** 現在のパスから画面種別と chatId を推定 */
-function parseScreen(
-  path: string
-): { screen: "chat" | "chat-list" | "notifications" | "other"; chatId?: string } {
+function parseScreen(path: string): {
+  screen: "chat" | "chat-list" | "notifications" | "other";
+  chatId?: string;
+} {
   if (path === "/chat-list") return { screen: "chat-list" };
   if (path === "/notifications") return { screen: "notifications" };
   if (path === "/main") return { screen: "other" }; // メイン画面用に other 扱い（抑制は“前面なら常に”で見る想定）
@@ -33,14 +34,17 @@ async function postToSW(msg: unknown) {
   }
 }
 
-/** iOS 対策など：SW の fetch('/__sw/fg') で拾えるよう sendBeacon でも前面状態を送る */
+/** iOS 対策など：SW の fetch('/api/sw/fg') で拾えるよう sendBeacon でも前面状態を送る */
 function beaconToSW(payload: Record<string, unknown>) {
   try {
     if (!("sendBeacon" in navigator)) return;
-    const blob = new Blob([JSON.stringify(payload)], { type: "application/json" });
+    const blob = new Blob([JSON.stringify(payload)], {
+      type: "application/json",
+    });
     // SW 側で `self.addEventListener('fetch', ...)` などで受ける前提の仮想エンドポイント
     // SW が未対応でも問題なし（ネットワークへ投げて終わり）
-    navigator.sendBeacon("/__sw/fg", blob);
+    // 開発環境ではService Workerが無効なので、Next.jsのAPIルートに到達する
+    navigator.sendBeacon("/api/sw/fg", blob);
   } catch {
     // noop
   }
@@ -56,9 +60,13 @@ export default function SWVisibilityPinger() {
       type: "FOREGROUND_STATE",
       at: Date.now(),
       // iOS PWA は visible/focus が不正確なことがあるため、SW 側は path + TTL を主に使う
-      visible: typeof document !== "undefined" ? document.visibilityState === "visible" : false,
+      visible:
+        typeof document !== "undefined"
+          ? document.visibilityState === "visible"
+          : false,
       focused:
-        typeof document !== "undefined" && typeof document.hasFocus === "function"
+        typeof document !== "undefined" &&
+        typeof document.hasFocus === "function"
           ? document.hasFocus()
           : false,
       path: pathname,

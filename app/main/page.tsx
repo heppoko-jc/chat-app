@@ -58,6 +58,16 @@ function getBgColor(name: string) {
   return `hsl(${h}, 70%, 80%)`;
 }
 
+// ショートカット用の色を生成（個人よりも少し濃い）
+function getShortcutBgColor(shortcutId: string) {
+  let hash = 0;
+  for (let i = 0; i < shortcutId.length; i++)
+    hash = shortcutId.charCodeAt(i) + ((hash << 5) - hash);
+  const h = hash % 360;
+  // 個人よりも少し濃い色（明度を下げる）
+  return `hsl(${h}, 75%, 65%)`;
+}
+
 // 最後に送信された時刻を「何分前、何時間前、何日前」で表示する関数
 function formatLastSentAt(lastSentAt: string): string {
   const now = new Date();
@@ -201,6 +211,9 @@ export default function Main() {
     null
   );
   const [isLongPressTriggered, setIsLongPressTriggered] = useState(false);
+  const [selectedShortcutIds, setSelectedShortcutIds] = useState<Set<string>>(
+    new Set()
+  );
 
   // Phase 2.1: 安全なキャッシュ基盤の構築（一時的に無効化）
   // const useMessageCache = () => {
@@ -1047,17 +1060,44 @@ export default function Main() {
   // ショートカット選択時の処理（メンバーを自動選択）
   const toggleShortcut = (shortcut: Shortcut) => {
     const memberIds = shortcut.members.map((m) => m.memberId);
-    const allSelected = memberIds.every((id) =>
-      selectedRecipientIds.includes(id)
-    );
+    const isShortcutSelected = selectedShortcutIds.has(shortcut.id);
 
-    if (allSelected) {
-      // 全て選択されている場合は解除
-      setSelectedRecipientIds((prev) =>
-        prev.filter((id) => !memberIds.includes(id))
-      );
+    if (isShortcutSelected) {
+      // ショートカットを解除
+      setSelectedShortcutIds((prev) => {
+        const newSet = new Set(prev);
+        newSet.delete(shortcut.id);
+        return newSet;
+      });
+      // メンバーを解除（重複チェック）
+      setSelectedRecipientIds((prev) => {
+        // このショートカットのメンバーを解除
+        // ただし、他の選択されたショートカットに含まれているメンバーは残す
+        const otherSelectedShortcuts = shortcuts.filter(
+          (s) => s.id !== shortcut.id && selectedShortcutIds.has(s.id)
+        );
+        const otherMemberIds = new Set(
+          otherSelectedShortcuts.flatMap((s) =>
+            s.members.map((m) => m.memberId)
+          )
+        );
+
+        return prev.filter((id) => {
+          // このショートカットのメンバーで、かつ他のショートカットに含まれていない場合のみ削除
+          if (memberIds.includes(id)) {
+            return otherMemberIds.has(id);
+          }
+          return true;
+        });
+      });
     } else {
-      // 一部または全てが未選択の場合は選択
+      // ショートカットを選択
+      setSelectedShortcutIds((prev) => {
+        const newSet = new Set(prev);
+        newSet.add(shortcut.id);
+        return newSet;
+      });
+      // メンバーを選択（重複は自動的に除外される）
       setSelectedRecipientIds((prev) => {
         const newIds = [...prev];
         memberIds.forEach((id) => {
@@ -1415,6 +1455,7 @@ export default function Main() {
       // UI リセット（入力モードは維持）
       setSelectedMessage(null);
       setSelectedRecipientIds([]);
+      setSelectedShortcutIds(new Set());
       setStep("select-message");
       // setIsInputMode(false); // 入力モードを維持してキーボードを開いたままにする
       setInputMessage(""); // 入力フィールドはクリア
@@ -2214,12 +2255,27 @@ export default function Main() {
                 <>
                   {shortcuts.map((shortcut) => {
                     const memberIds = shortcut.members.map((m) => m.memberId);
-                    const allSelected = memberIds.every((id) =>
-                      selectedRecipientIds.includes(id)
+                    const isShortcutSelected = selectedShortcutIds.has(
+                      shortcut.id
                     );
-                    const someSelected = memberIds.some((id) =>
-                      selectedRecipientIds.includes(id)
+
+                    // 選択されたショートカットのメンバーIDのセットを作成
+                    const selectedShortcutMemberIds = new Set(
+                      shortcuts
+                        .filter((s) => selectedShortcutIds.has(s.id))
+                        .flatMap((s) => s.members.map((m) => m.memberId))
                     );
+
+                    // ショートカットが明示的に選択されているか、または一部のメンバーが個別に選択されているかを判定
+                    // ただし、そのメンバーが選択されたショートカットのメンバーである場合は除外
+                    const someSelected =
+                      !isShortcutSelected &&
+                      memberIds.some(
+                        (id) =>
+                          selectedRecipientIds.includes(id) &&
+                          !selectedShortcutMemberIds.has(id)
+                      );
+                    const allSelected = isShortcutSelected;
 
                     return (
                       <button
@@ -2266,43 +2322,85 @@ export default function Main() {
                           setSelectedShortcut(shortcut);
                           setShowShortcutEditModal(true);
                         }}
-                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl hover:bg-gray-50 cursor-pointer border-2 shadow-sm hover:shadow-md text-left ${
+                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl cursor-pointer border-l-4 text-left relative ${
                           allSelected
-                            ? "bg-gray-100 border-black shadow-md"
+                            ? "bg-gray-50 border-l-black shadow-md"
                             : someSelected
-                            ? "bg-gray-50 border-gray-400"
-                            : "bg-white border-gray-200"
+                            ? "bg-gray-50/70 border-l-gray-600 shadow-sm"
+                            : "bg-gray-50/50 border-l-gray-400 shadow-sm hover:shadow-md hover:bg-gray-50"
                         }`}
+                        style={{
+                          borderRight: allSelected
+                            ? "2px solid #000"
+                            : someSelected
+                            ? "2px solid #9ca3af"
+                            : "2px solid #e5e7eb",
+                          borderTop: allSelected
+                            ? "2px solid #000"
+                            : someSelected
+                            ? "2px solid #9ca3af"
+                            : "2px solid #e5e7eb",
+                          borderBottom: allSelected
+                            ? "2px solid #000"
+                            : someSelected
+                            ? "2px solid #9ca3af"
+                            : "2px solid #e5e7eb",
+                        }}
                       >
-                        <div className="w-10 h-10 rounded-full bg-gradient-to-r from-orange-400 to-orange-500 flex items-center justify-center text-white font-bold shadow text-xs">
+                        {/* アイコン */}
+                        <div
+                          className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold shadow text-xs"
+                          style={{
+                            backgroundColor: getShortcutBgColor(shortcut.id),
+                          }}
+                        >
                           📁
                         </div>
+
+                        {/* コンテンツ */}
                         <div className="flex-1 min-w-0">
-                          <p
-                            className={`text-lg truncate ${
-                              allSelected
-                                ? "font-bold text-black"
-                                : someSelected
-                                ? "font-medium text-gray-800"
-                                : "text-gray-700"
-                            }`}
-                          >
-                            {shortcut.name ||
-                              `${shortcut.members[0]?.memberName || ""}ほか${
-                                shortcut.memberCount - 1
-                              }人`}
-                          </p>
-                          <p className="text-sm text-gray-600 truncate">
-                            {shortcut.memberCount}人
+                          <div className="flex items-center gap-2">
+                            <p
+                              className={`text-lg truncate ${
+                                allSelected
+                                  ? "font-bold text-black"
+                                  : someSelected
+                                  ? "font-semibold text-gray-800"
+                                  : "font-medium text-gray-700"
+                              }`}
+                            >
+                              {shortcut.name ||
+                                `${shortcut.members[0]?.memberName || ""}ほか${
+                                  shortcut.memberCount - 1
+                                }人`}
+                            </p>
+                            <span
+                              className={`px-2 py-0.5 rounded-full text-xs font-semibold ${
+                                allSelected
+                                  ? "bg-gray-800 text-white"
+                                  : someSelected
+                                  ? "bg-gray-600 text-white"
+                                  : "bg-gray-300 text-gray-700"
+                              }`}
+                            >
+                              {shortcut.memberCount}人
+                            </span>
+                          </div>
+                          <p className="text-xs text-gray-500 mt-0.5 truncate">
+                            ショートカット
                           </p>
                         </div>
+
+                        {/* チェックマーク */}
                         {(allSelected || someSelected) && (
-                          <Image
-                            src="/icons/check.png"
-                            alt="Selected"
-                            width={20}
-                            height={20}
-                          />
+                          <div className="relative z-10">
+                            <Image
+                              src="/icons/check.png"
+                              alt="Selected"
+                              width={20}
+                              height={20}
+                            />
+                          </div>
                         )}
                       </button>
                     );

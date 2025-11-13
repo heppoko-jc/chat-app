@@ -1,5 +1,5 @@
-// app/api/__sw/fg/route.ts
-// SWVisibilityPinger の sendBeacon("/__sw/fg") を受け止めるダミーエンドポイント
+// app/api/sw/fg/route.ts
+// SWVisibilityPinger の sendBeacon("/api/sw/fg") を受け止めるダミーエンドポイント
 
 import { NextRequest, NextResponse } from "next/server";
 
