@@ -59,10 +59,11 @@ async function sendSentMessageNotification(
       },
     });
 
-    // 通知タイトルを決定
-    const title = isFollowing
+    // 通知タイトルと本文を決定
+    const title = "新規メッセージ";
+    const body = isFollowing
       ? "誰かからメッセージが届きました（たった今）"
-      : "フォローしてない誰かからメッセージが届きました（たった今）";
+      : "フォローしていない誰かからメッセージが届きました（たった今）";
 
     // 受信者のプッシュ購読を取得
     const subs = await prisma.pushSubscription.findMany({
@@ -80,7 +81,7 @@ async function sendSentMessageNotification(
     const payload = JSON.stringify({
       type: "sent_message",
       title,
-      body: "",
+      body,
       senderId, // 通知タグ用
     });
 
