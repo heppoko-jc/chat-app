@@ -179,49 +179,43 @@ export default function ShortcutCreateModal({
             <label className="block text-sm font-medium text-gray-700 mb-2">
               メンバーを選択（{selectedMemberIds.length}人選択中）
             </label>
-            <div className="space-y-2 max-h-[50vh] overflow-y-auto">
+            <div className="max-h-[50vh] overflow-y-auto">
               {friends.length === 0 ? (
                 <p className="text-sm text-gray-500 text-center py-4">
                   フォローしているユーザーがいません
                 </p>
               ) : (
-                friends.map((friend) => (
-                  <button
-                    key={friend.id}
-                    onClick={() => toggleMember(friend.id)}
-                    disabled={isCreating}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 ${
-                      selectedMemberIds.includes(friend.id)
-                        ? "bg-gray-100 border-black"
-                        : "bg-white border-gray-200 hover:border-gray-300"
-                    } ${isCreating ? "opacity-50 cursor-not-allowed" : ""}`}
-                  >
-                    <div
-                      className="w-10 h-10 rounded-full flex items-center justify-center text-white font-bold shadow"
-                      style={{ backgroundColor: getBgColor(friend.name) }}
+                <div className="grid grid-cols-4 gap-2">
+                  {friends.map((friend) => (
+                    <button
+                      key={friend.id}
+                      onClick={() => toggleMember(friend.id)}
+                      disabled={isCreating}
+                      className={`flex items-center justify-center px-3 py-2 rounded-lg border-2 transition-all relative ${
+                        selectedMemberIds.includes(friend.id)
+                          ? "bg-gray-100 border-black shadow-md"
+                          : "bg-white border-gray-200 hover:border-gray-400 hover:shadow-sm"
+                      } ${isCreating ? "opacity-50 cursor-not-allowed" : ""}`}
                     >
-                      {getInitials(friend.name)}
-                    </div>
-                    <div className="flex-1 text-left">
-                      <p className="text-base font-medium text-gray-900">
+                      <span
+                        className={`text-sm font-medium truncate ${
+                          selectedMemberIds.includes(friend.id)
+                            ? "text-black font-bold"
+                            : "text-gray-700"
+                        }`}
+                      >
                         {friend.name}
-                      </p>
-                      {friend.bio && (
-                        <p className="text-sm text-gray-600 truncate">
-                          {friend.bio}
-                        </p>
+                      </span>
+                      {selectedMemberIds.includes(friend.id) && (
+                        <div className="absolute top-0 right-0 w-4 h-4 bg-black rounded-full flex items-center justify-center -mt-1 -mr-1">
+                          <span className="text-white text-xs font-bold">
+                            ✓
+                          </span>
+                        </div>
                       )}
-                    </div>
-                    {selectedMemberIds.includes(friend.id) && (
-                      <Image
-                        src="/icons/check.png"
-                        alt="Selected"
-                        width={20}
-                        height={20}
-                      />
-                    )}
-                  </button>
-                ))
+                    </button>
+                  ))}
+                </div>
               )}
             </div>
           </div>
