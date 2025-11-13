@@ -35,15 +35,6 @@ async function ensureChatBetween(a: string, b: string): Promise<string> {
   return created.id;
 }
 
-// webpush のエラーから statusCode を安全に引き出すユーティリティ
-function getStatusCode(reason: unknown): number | undefined {
-  if (typeof reason === "object" && reason !== null) {
-    const val = (reason as Record<string, unknown>)["statusCode"];
-    if (typeof val === "number") return val;
-  }
-  return undefined;
-}
-
 export async function POST(req: NextRequest) {
   try {
     const { senderId, receiverIds, message, linkTitle, linkImage } =

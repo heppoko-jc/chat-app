@@ -364,7 +364,7 @@ export default function FriendsPage() {
           setLoading(false);
         });
     }
-  }, []);
+  }, [buildDisplayUsers]);
 
   useEffect(() => {
     if (!users.length) return;
