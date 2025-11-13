@@ -279,15 +279,16 @@ export async function POST(req: NextRequest) {
       const mySendCreatedAt = mySend.createdAt;
 
       // ✅ SentMessage受信時の通知送信（非表示メッセージ以外）
-      if (!isHidden) {
-        // 非同期で通知送信（メイン処理をブロックしない）
-        sendSentMessageNotification(receiverId, senderId).catch((error) => {
-          console.error(
-            `[match-message] 通知送信の非同期処理エラー: receiverId=${receiverId}`,
-            error
-          );
-        });
-      }
+      // リアルタイム通知を無効化（ダイジェスト通知に戻す場合）
+      // if (!isHidden) {
+      //   // 非同期で通知送信（メイン処理をブロックしない）
+      //   sendSentMessageNotification(receiverId, senderId).catch((error) => {
+      //     console.error(
+      //       `[match-message] 通知送信の非同期処理エラー: receiverId=${receiverId}`,
+      //       error
+      //     );
+      //   });
+      // }
 
       // ✅ 非表示メッセージはマッチ判定から除外
       if (isHidden) {
