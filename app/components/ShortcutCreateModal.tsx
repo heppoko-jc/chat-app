@@ -133,17 +133,24 @@ export default function ShortcutCreateModal({
         }}
       >
         {/* ヘッダー */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-200">
-          <h2 className="text-lg font-bold text-gray-900">
+        <div className="relative flex items-center justify-center p-4 border-b border-gray-200">
+          <h2 className="text-lg font-bold text-gray-900 text-center">
             ショートカットを作成
           </h2>
           <button
             onClick={handleClose}
-            className="text-gray-500 hover:text-gray-700 transition-colors text-2xl font-bold"
+            className="absolute right-4 text-gray-500 hover:text-gray-700 transition-colors text-2xl font-bold"
             disabled={isCreating}
           >
             ×
           </button>
+        </div>
+
+        {/* 説明文 */}
+        <div className="px-4 pt-3 pb-2">
+          <p className="text-sm text-gray-600 text-center">
+            ショートカットは自分だけのもので、作成しても友だちには通知されません。
+          </p>
         </div>
 
         {/* コンテンツ */}
@@ -183,7 +190,7 @@ export default function ShortcutCreateModal({
                     key={friend.id}
                     onClick={() => toggleMember(friend.id)}
                     disabled={isCreating}
-                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 transition-all ${
+                    className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl border-2 ${
                       selectedMemberIds.includes(friend.id)
                         ? "bg-gray-100 border-black"
                         : "bg-white border-gray-200 hover:border-gray-300"
