@@ -2232,7 +2232,7 @@ export default function Main() {
                           }
                           toggleShortcut(shortcut);
                         }}
-                        onTouchStart={(e) => {
+                        onTouchStart={() => {
                           handleShortcutTouchStart(shortcut);
                         }}
                         onTouchEnd={handleShortcutTouchEnd}

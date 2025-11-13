@@ -37,21 +37,20 @@ export async function DELETE(
     });
 
     // トランザクションで処理
-    await prisma.$transaction(
-      shortcuts.map((shortcut) => {
-        // 該当ユーザーがメンバーに含まれている場合
-        if (shortcut.members.length > 0) {
-          // メンバーから該当ユーザーを削除
-          return prisma.shortcutMember.deleteMany({
-            where: {
-              shortcutId: shortcut.id,
-              memberId: friendId,
-            },
-          });
-        }
-        return Promise.resolve(null);
-      })
-    );
+    const deleteOperations = shortcuts
+      .filter((shortcut) => shortcut.members.length > 0)
+      .map((shortcut) =>
+        prisma.shortcutMember.deleteMany({
+          where: {
+            shortcutId: shortcut.id,
+            memberId: friendId,
+          },
+        })
+      );
+
+    if (deleteOperations.length > 0) {
+      await prisma.$transaction(deleteOperations);
+    }
 
     // 3. メンバーが0人になったショートカットを削除
     const emptyShortcuts = await prisma.shortcut.findMany({
