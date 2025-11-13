@@ -16,6 +16,8 @@ interface SentMessage {
   createdAt: string;
   isMatched: boolean;
   isExpired?: boolean;
+  shortcutName?: string | null; // ショートカット名
+  shortcutId?: string | null; // ショートカットID
 }
 
 interface ApiResponse {
@@ -472,6 +474,13 @@ export default function Notifications() {
                                       <div className="flex-1 min-w-0">
                                         <p className="text-lg font-semibold truncate">
                                           To {m.receiver.name}
+                                          {m.shortcutId && (
+                                            <span className="text-sm font-normal text-gray-600 ml-1">
+                                              {m.shortcutName
+                                                ? `（${m.shortcutName}）`
+                                                : "（ショートカット）"}
+                                            </span>
+                                          )}
                                         </p>
                                         <div className="flex items-center gap-2 mt-1">
                                           {formatDate(m.createdAt) && (
@@ -687,6 +696,13 @@ export default function Notifications() {
                                       <div className="flex-1 min-w-0">
                                         <p className="text-lg font-semibold truncate">
                                           To {m.receiver.name}
+                                          {m.shortcutId && (
+                                            <span className="text-sm font-normal text-gray-600 ml-1">
+                                              {m.shortcutName
+                                                ? `（${m.shortcutName}）`
+                                                : "（ショートカット）"}
+                                            </span>
+                                          )}
                                         </p>
                                         <div className="flex items-center gap-2 mt-1">
                                           {formatDate(m.createdAt) && (

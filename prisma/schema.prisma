@@ -8,37 +8,38 @@ datasource db {
 }
 
 model User {
-  id                String             @id @default(uuid())
-  name              String
-  nameEn            String?
-  nameJa            String?
-  nameOther         String?
-  email             String             @unique
-  password          String
-  createdAt         DateTime           @default(now())
-  bio               String?
+  id                   String             @id @default(uuid())
+  name                 String
+  nameEn               String?
+  nameJa               String?
+  nameOther            String?
+  email                String             @unique
+  password             String
+  createdAt            DateTime           @default(now())
+  bio                  String?
   // パスワードリセット用
-  passwordResetToken String?
+  passwordResetToken   String?
   passwordResetExpires DateTime?
   // 同意情報
-  participantName    String?   // 実験参加者名
-  consentDate        DateTime? // 同意日時
-  consentParticipated Boolean? // 参加同意
-  consentInterview    Boolean? // インタビュー同意
-  consentDataUsage   Boolean? // データ使用同意
-  consentRecording   Boolean? // 録音同意
+  participantName      String? // 実験参加者名
+  consentDate          DateTime? // 同意日時
+  consentParticipated  Boolean? // 参加同意
+  consentInterview     Boolean? // インタビュー同意
+  consentDataUsage     Boolean? // データ使用同意
+  consentRecording     Boolean? // 録音同意
   // リレーション
-  chats1            Chat[]             @relation("ChatUser1")
-  chats2            Chat[]             @relation("ChatUser2")
-  matchedPairs1     MatchPair[]        @relation("MatchPairUser1")
-  matchedPairs2     MatchPair[]        @relation("MatchPairUser2")
-  messagesSent      Message[]          @relation("UserMessages")
-  pushSubscriptions PushSubscription[] @relation("UserSubscriptions")
-  receivedMessages  SentMessage[]      @relation("ReceivedMessages")
-  sentMessages      SentMessage[]      @relation("SentMessages")
-  friends           Friend[]           @relation("UserFriends")
-  friendOf          Friend[]           @relation("FriendOf")
-  friendRestriction FriendRestriction? @relation("UserFriendRestriction")
+  chats1               Chat[]             @relation("ChatUser1")
+  chats2               Chat[]             @relation("ChatUser2")
+  matchedPairs1        MatchPair[]        @relation("MatchPairUser1")
+  matchedPairs2        MatchPair[]        @relation("MatchPairUser2")
+  messagesSent         Message[]          @relation("UserMessages")
+  pushSubscriptions    PushSubscription[] @relation("UserSubscriptions")
+  receivedMessages     SentMessage[]      @relation("ReceivedMessages")
+  sentMessages         SentMessage[]      @relation("SentMessages")
+  friends              Friend[]           @relation("UserFriends")
+  friendOf             Friend[]           @relation("FriendOf")
+  friendRestriction    FriendRestriction? @relation("UserFriendRestriction")
+  shortcuts            Shortcut[]         @relation("UserShortcuts")
 
   @@index([nameEn])
   @@index([nameJa])
@@ -54,10 +55,13 @@ model SentMessage {
   linkImage  String?
   linkTitle  String?
   isHidden   Boolean  @default(false) // 非表示フラグ（キーワードフィルタまたは管理者による非表示）
+  shortcutId String?  // ショートカット経由で送信した場合のショートカットID
   receiver   User     @relation("ReceivedMessages", fields: [receiverId], references: [id])
   sender     User     @relation("SentMessages", fields: [senderId], references: [id])
+  shortcut   Shortcut? @relation("ShortcutSentMessages", fields: [shortcutId], references: [id])
   
   @@index([isHidden]) // 検索パフォーマンス向上
+  @@index([shortcutId])
 }
 
 model MatchPair {
@@ -103,28 +107,28 @@ model PushSubscription {
 }
 
 model PresetMessage {
-  id        String   @id @default(uuid())
-  content   String
-  createdBy String
-  createdAt DateTime @default(now())
-  count     Int      @default(0) // 送信回数
-  senderCount Int    @default(0) // 送信者数
-  linkImage String?
-  linkTitle String?
-  comment   String?  // ユーザーコメント
-  type      String   @default("text") // "text" | "url"
-  lastSentAt DateTime @default(now()) // 最後に送信された時刻
+  id          String   @id @default(uuid())
+  content     String
+  createdBy   String
+  createdAt   DateTime @default(now())
+  count       Int      @default(0) // 送信回数
+  senderCount Int      @default(0) // 送信者数
+  linkImage   String?
+  linkTitle   String?
+  comment     String? // ユーザーコメント
+  type        String   @default("text") // "text" | "url"
+  lastSentAt  DateTime @default(now()) // 最後に送信された時刻
 }
 
 model Friend {
   id        String   @id @default(uuid())
-  userId    String   // 認証する側のユーザー
-  friendId  String   // ともだちとして認証される側のユーザー
+  userId    String // 認証する側のユーザー
+  friendId  String // ともだちとして認証される側のユーザー
   createdAt DateTime @default(now())
-  
-  user      User     @relation("UserFriends", fields: [userId], references: [id])
-  friend    User     @relation("FriendOf", fields: [friendId], references: [id])
-  
+
+  user   User @relation("UserFriends", fields: [userId], references: [id])
+  friend User @relation("FriendOf", fields: [friendId], references: [id])
+
   @@unique([userId, friendId]) // 重複防止
   @@index([userId])
 }
@@ -135,8 +139,8 @@ model FriendRestriction {
   lastChange DateTime
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
-  
-  user       User     @relation("UserFriendRestriction", fields: [userId], references: [id])
+
+  user User @relation("UserFriendRestriction", fields: [userId], references: [id])
 }
 
 model UserSession {
@@ -145,4 +149,32 @@ model UserSession {
   startTime DateTime @default(now())
 
   @@index([userId, startTime])
+}
+
+model Shortcut {
+  id        String   @id @default(uuid())
+  userId    String // ショートカット所有者
+  name      String? // ユーザー入力の名前（nullの場合は自動生成）
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user    User             @relation("UserShortcuts", fields: [userId], references: [id], onDelete: Cascade)
+  members ShortcutMember[] // ショートカットメンバー
+  sentMessages SentMessage[] @relation("ShortcutSentMessages") // ショートカット経由で送信されたメッセージ
+
+  @@index([userId])
+}
+
+model ShortcutMember {
+  id         String   @id @default(uuid())
+  shortcutId String // ショートカットID
+  memberId   String // メンバーのユーザーID
+  createdAt  DateTime @default(now())
+  order      Int // 追加順序（追加順で並べるため）
+
+  shortcut Shortcut @relation(fields: [shortcutId], references: [id], onDelete: Cascade)
+
+  @@unique([shortcutId, memberId]) // 重複防止
+  @@index([shortcutId])
+  @@index([memberId])
 }

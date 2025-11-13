@@ -21,6 +21,7 @@ export async function GET(req: NextRequest) {
       },
       include: {
         receiver: { select: { id: true, name: true } },
+        shortcut: { select: { id: true, name: true } }, // ショートカット情報を取得
       },
       orderBy: { createdAt: "desc" },
     });
@@ -64,6 +65,9 @@ export async function GET(req: NextRequest) {
       isExpired:
         presetMessageMap.has(msg.message) &&
         presetMessageMap.get(msg.message)! < expiryDate,
+      // ショートカット情報を追加
+      shortcutName: msg.shortcut?.name || null,
+      shortcutId: msg.shortcutId || null,
     }));
 
     return NextResponse.json({

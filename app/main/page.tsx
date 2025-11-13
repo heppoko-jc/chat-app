@@ -10,11 +10,31 @@ import { useChatData, PresetMessage } from "../contexts/ChatDataContext";
 import MatchNotification from "../components/MatchNotification";
 import socket, { setSocketUserId } from "../socket";
 import type { ChatItem } from "../chat-list/page";
+import ShortcutCreateModal from "../components/ShortcutCreateModal";
+import ShortcutEditModal from "../components/ShortcutEditModal";
 
 interface User {
   id: string;
   name: string;
   bio: string;
+}
+
+interface ShortcutMember {
+  id: string;
+  memberId: string;
+  memberName: string;
+  memberBio: string | null;
+  order: number;
+}
+
+interface Shortcut {
+  id: string;
+  userId: string;
+  name: string | null;
+  createdAt: string;
+  updatedAt: string;
+  members: ShortcutMember[];
+  memberCount: number;
 }
 type ChatListApiItem = Omit<
   ChatItem,
@@ -170,6 +190,18 @@ export default function Main() {
     image?: string;
   } | null>(null);
 
+  // ショートカット関連の状態
+  const [shortcuts, setShortcuts] = useState<Shortcut[]>([]);
+  const [showShortcutCreateModal, setShowShortcutCreateModal] = useState(false);
+  const [showShortcutEditModal, setShowShortcutEditModal] = useState(false);
+  const [selectedShortcut, setSelectedShortcut] = useState<Shortcut | null>(
+    null
+  );
+  const [longPressTimer, setLongPressTimer] = useState<NodeJS.Timeout | null>(
+    null
+  );
+  const [isLongPressTriggered, setIsLongPressTriggered] = useState(false);
+
   // Phase 2.1: 安全なキャッシュ基盤の構築（一時的に無効化）
   // const useMessageCache = () => {
   //   const [cache, setCache] = useState<{
@@ -308,6 +340,32 @@ export default function Main() {
           console.log("Pull to Refresh: ともだちリストを更新", newFriends.size);
         } catch (error) {
           console.error("Pull to Refresh: ともだちリスト取得エラー", error);
+          // エラーが発生してもメインの更新処理は継続
+        }
+
+        // ショートカット一覧更新
+        try {
+          const shortcutsRes = await axios.get<Shortcut[]>("/api/shortcuts", {
+            headers: { userId: uid },
+          });
+
+          if (!shortcutsRes.data || !Array.isArray(shortcutsRes.data)) {
+            console.warn(
+              "Pull to Refresh: ショートカットリストのデータが無効です"
+            );
+            return;
+          }
+
+          setShortcuts(shortcutsRes.data);
+          console.log(
+            "Pull to Refresh: ショートカットリストを更新",
+            shortcutsRes.data.length
+          );
+        } catch (error) {
+          console.error(
+            "Pull to Refresh: ショートカットリスト取得エラー",
+            error
+          );
           // エラーが発生してもメインの更新処理は継続
         }
 
@@ -740,6 +798,16 @@ export default function Main() {
         })
         .catch((e) => console.error("ともだち一覧取得エラー:", e));
 
+      // ショートカット一覧取得
+      axios
+        .get<Shortcut[]>("/api/shortcuts", {
+          headers: { userId: uid },
+        })
+        .then((res) => {
+          setShortcuts(res.data);
+        })
+        .catch((e) => console.error("ショートカット一覧取得エラー:", e));
+
       // 新規参加者チェック
       checkNewUsers(uid);
     }
@@ -974,6 +1042,103 @@ export default function Main() {
     setSelectedRecipientIds((prev) =>
       prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
     );
+  };
+
+  // ショートカット選択時の処理（メンバーを自動選択）
+  const toggleShortcut = (shortcut: Shortcut) => {
+    const memberIds = shortcut.members.map((m) => m.memberId);
+    const allSelected = memberIds.every((id) =>
+      selectedRecipientIds.includes(id)
+    );
+
+    if (allSelected) {
+      // 全て選択されている場合は解除
+      setSelectedRecipientIds((prev) =>
+        prev.filter((id) => !memberIds.includes(id))
+      );
+    } else {
+      // 一部または全てが未選択の場合は選択
+      setSelectedRecipientIds((prev) => {
+        const newIds = [...prev];
+        memberIds.forEach((id) => {
+          if (!newIds.includes(id)) {
+            newIds.push(id);
+          }
+        });
+        return newIds;
+      });
+    }
+  };
+
+  // ショートカット作成成功時の処理
+  const handleShortcutCreateSuccess = async () => {
+    if (!currentUserId) return;
+    try {
+      const res = await axios.get<Shortcut[]>("/api/shortcuts", {
+        headers: { userId: currentUserId },
+      });
+      setShortcuts(res.data);
+    } catch (error) {
+      console.error("ショートカット一覧取得エラー:", error);
+    }
+  };
+
+  // ショートカット更新成功時の処理
+  const handleShortcutUpdateSuccess = async () => {
+    if (!currentUserId) return;
+    try {
+      const res = await axios.get<Shortcut[]>("/api/shortcuts", {
+        headers: { userId: currentUserId },
+      });
+      setShortcuts(res.data);
+    } catch (error) {
+      console.error("ショートカット一覧取得エラー:", error);
+    }
+  };
+
+  // ショートカット削除成功時の処理
+  const handleShortcutDeleteSuccess = async () => {
+    if (!currentUserId) return;
+    try {
+      const res = await axios.get<Shortcut[]>("/api/shortcuts", {
+        headers: { userId: currentUserId },
+      });
+      setShortcuts(res.data);
+    } catch (error) {
+      console.error("ショートカット一覧取得エラー:", error);
+    }
+  };
+
+  // 長押し開始
+  const handleShortcutTouchStart = (shortcut: Shortcut) => {
+    setIsLongPressTriggered(false);
+    const timer = setTimeout(() => {
+      setIsLongPressTriggered(true);
+      setSelectedShortcut(shortcut);
+      setShowShortcutEditModal(true);
+    }, 500); // 500ms長押し
+    setLongPressTimer(timer);
+  };
+
+  // 長押し終了
+  const handleShortcutTouchEnd = () => {
+    if (longPressTimer) {
+      clearTimeout(longPressTimer);
+      setLongPressTimer(null);
+    }
+    // 長押しが発動した場合は、クリックイベントを無効化するため少し待つ
+    setTimeout(() => {
+      setIsLongPressTriggered(false);
+    }, 100);
+  };
+
+  // 長押しキャンセル
+  const handleShortcutTouchCancel = () => {
+    if (longPressTimer) {
+      clearTimeout(longPressTimer);
+      setLongPressTimer(null);
+    }
+    setIsLongPressTriggered(false);
   };
 
   // 表示用：count>0 & 「最新送信順」
@@ -1261,12 +1426,23 @@ export default function Main() {
         // /api/match-message 内でPresetMessageの処理を行うため、
         // ここでは事前のPresetMessage作成やカウント増加は行わない
 
+        // 送信先ごとにショートカットIDをマッピング
+        const shortcutIdMap: Record<string, string | null> = {};
+        recipientsToSend.forEach((receiverId) => {
+          // この送信先がどのショートカットのメンバーかを確認
+          const shortcut = shortcuts.find((s) =>
+            s.members.some((m) => m.memberId === receiverId)
+          );
+          shortcutIdMap[receiverId] = shortcut?.id || null;
+        });
+
         const requestData = {
           senderId: currentUserId,
           receiverIds: recipientsToSend,
           message: messageToSend,
           linkTitle: finalLinkData?.title,
           linkImage: finalLinkData?.image,
+          shortcutIdMap: shortcutIdMap, // 送信先ごとのショートカットID
         };
 
         console.log("[main] 送信データ:", {
@@ -2022,7 +2198,118 @@ export default function Main() {
               </button>
             </div>
 
+            {/* ショートカット作成ボタン */}
+            <div className="mb-3">
+              <button
+                onClick={() => setShowShortcutCreateModal(true)}
+                className="w-full py-3 rounded-xl text-base font-bold border-2 border-dashed border-gray-300 bg-white text-gray-700 hover:bg-gray-50 transition-colors"
+              >
+                ＋ 自分だけのショートカットを作成
+              </button>
+            </div>
+
             <div className="flex flex-col gap-2">
+              {/* ショートカット一覧 */}
+              {shortcuts.length > 0 && (
+                <>
+                  {shortcuts.map((shortcut) => {
+                    const memberIds = shortcut.members.map((m) => m.memberId);
+                    const allSelected = memberIds.every((id) =>
+                      selectedRecipientIds.includes(id)
+                    );
+                    const someSelected = memberIds.some((id) =>
+                      selectedRecipientIds.includes(id)
+                    );
+
+                    return (
+                      <button
+                        key={shortcut.id}
+                        onClick={(e) => {
+                          // 長押しが発動した場合はクリックを無効化
+                          if (isLongPressTriggered) {
+                            e.preventDefault();
+                            return;
+                          }
+                          toggleShortcut(shortcut);
+                        }}
+                        onTouchStart={(e) => {
+                          handleShortcutTouchStart(shortcut);
+                        }}
+                        onTouchEnd={handleShortcutTouchEnd}
+                        onTouchCancel={handleShortcutTouchCancel}
+                        onMouseDown={(e) => {
+                          // マウスでも長押しを検出（右クリックは別処理）
+                          if (e.button === 0) {
+                            setIsLongPressTriggered(false);
+                            const timer = setTimeout(() => {
+                              setIsLongPressTriggered(true);
+                              setSelectedShortcut(shortcut);
+                              setShowShortcutEditModal(true);
+                            }, 500);
+                            setLongPressTimer(timer);
+                            const handleMouseUp = () => {
+                              if (timer) clearTimeout(timer);
+                              setLongPressTimer(null);
+                              setTimeout(() => {
+                                setIsLongPressTriggered(false);
+                              }, 100);
+                              document.removeEventListener(
+                                "mouseup",
+                                handleMouseUp
+                              );
+                            };
+                            document.addEventListener("mouseup", handleMouseUp);
+                          }
+                        }}
+                        onContextMenu={(e) => {
+                          e.preventDefault();
+                          setSelectedShortcut(shortcut);
+                          setShowShortcutEditModal(true);
+                        }}
+                        className={`w-full flex items-center gap-3 px-4 py-3 rounded-2xl hover:bg-gray-50 cursor-pointer border-2 shadow-sm hover:shadow-md text-left ${
+                          allSelected
+                            ? "bg-gray-100 border-black shadow-md"
+                            : someSelected
+                            ? "bg-gray-50 border-gray-400"
+                            : "bg-white border-gray-200"
+                        }`}
+                      >
+                        <div className="w-10 h-10 rounded-full bg-gradient-to-r from-orange-400 to-orange-500 flex items-center justify-center text-white font-bold shadow text-xs">
+                          📁
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p
+                            className={`text-lg truncate ${
+                              allSelected
+                                ? "font-bold text-black"
+                                : someSelected
+                                ? "font-medium text-gray-800"
+                                : "text-gray-700"
+                            }`}
+                          >
+                            {shortcut.name ||
+                              `${shortcut.members[0]?.memberName || ""}ほか${
+                                shortcut.memberCount - 1
+                              }人`}
+                          </p>
+                          <p className="text-sm text-gray-600 truncate">
+                            {shortcut.memberCount}人
+                          </p>
+                        </div>
+                        {(allSelected || someSelected) && (
+                          <Image
+                            src="/icons/check.png"
+                            alt="Selected"
+                            width={20}
+                            height={20}
+                          />
+                        )}
+                      </button>
+                    );
+                  })}
+                </>
+              )}
+
               {visibleFriends.length === 0 ? (
                 <div
                   onClick={() => router.push("/friends")}
@@ -2145,6 +2432,41 @@ export default function Main() {
         message={queueHead?.message ?? undefined}
         chatId={queueHead?.chatId}
       />
+
+      {/* ショートカット作成モーダル */}
+      {currentUserId && (
+        <ShortcutCreateModal
+          isOpen={showShortcutCreateModal}
+          onClose={() => setShowShortcutCreateModal(false)}
+          onSuccess={handleShortcutCreateSuccess}
+          userId={currentUserId}
+          friends={visibleFriends.map((u) => ({
+            id: u.id,
+            name: u.name,
+            bio: u.bio || null,
+          }))}
+        />
+      )}
+
+      {/* ショートカット編集モーダル */}
+      {currentUserId && (
+        <ShortcutEditModal
+          isOpen={showShortcutEditModal}
+          onClose={() => {
+            setShowShortcutEditModal(false);
+            setSelectedShortcut(null);
+          }}
+          onSuccess={handleShortcutUpdateSuccess}
+          onDelete={handleShortcutDeleteSuccess}
+          userId={currentUserId}
+          shortcut={selectedShortcut}
+          friends={visibleFriends.map((u) => ({
+            id: u.id,
+            name: u.name,
+            bio: u.bio || null,
+          }))}
+        />
+      )}
 
       <FixedTabBar />
     </>

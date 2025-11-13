@@ -37,8 +37,14 @@ async function ensureChatBetween(a: string, b: string): Promise<string> {
 
 export async function POST(req: NextRequest) {
   try {
-    const { senderId, receiverIds, message, linkTitle, linkImage } =
-      await req.json();
+    const {
+      senderId,
+      receiverIds,
+      message,
+      linkTitle,
+      linkImage,
+      shortcutIdMap,
+    } = await req.json();
 
     if (!senderId || !receiverIds?.length || !message) {
       return NextResponse.json({ error: "Invalid request" }, { status: 400 });
@@ -129,6 +135,9 @@ export async function POST(req: NextRequest) {
 
     // 1) 送信メッセージを保存しつつ、マッチを探す
     for (const receiverId of receiverIds) {
+      // この送信先のショートカットIDを取得
+      const shortcutId = shortcutIdMap?.[receiverId] || null;
+
       // 自分の送信をまず保存（createdAt を取得）
       const mySend = await prisma.sentMessage.create({
         data: {
@@ -138,6 +147,7 @@ export async function POST(req: NextRequest) {
           linkTitle: finalLinkTitle,
           linkImage: finalLinkImage,
           isHidden: isHidden,
+          shortcutId: shortcutId, // ショートカットIDを記録
         },
         select: { id: true, createdAt: true },
       });
