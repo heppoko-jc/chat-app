@@ -1,7 +1,7 @@
 // app/friends/page.tsx
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import axios from "axios";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
@@ -106,30 +106,33 @@ export default function FriendsPage() {
     });
   };
 
-  const buildDisplayUsers = (
-    usersList: User[],
-    friendsSet: Set<string>,
-    popularity: Record<string, number>
-  ) => {
-    const popularCandidates = usersList
-      .filter((user) => {
-        const count = popularity[user.id] ?? 0;
-        return count > 0 && !friendsSet.has(user.id);
-      })
-      .sort((a, b) => {
-        const diff = (popularity[b.id] ?? 0) - (popularity[a.id] ?? 0);
-        if (diff !== 0) return diff;
-        return (
-          new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-        );
-      });
+  const buildDisplayUsers = useCallback(
+    (
+      usersList: User[],
+      friendsSet: Set<string>,
+      popularity: Record<string, number>
+    ) => {
+      const popularCandidates = usersList
+        .filter((user) => {
+          const count = popularity[user.id] ?? 0;
+          return count > 0 && !friendsSet.has(user.id);
+        })
+        .sort((a, b) => {
+          const diff = (popularity[b.id] ?? 0) - (popularity[a.id] ?? 0);
+          if (diff !== 0) return diff;
+          return (
+            new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+          );
+        });
 
-    const popularIds = new Set(popularCandidates.map((user) => user.id));
-    const remainder = usersList.filter((user) => !popularIds.has(user.id));
-    const remainderSorted = createSortedUsersList(remainder, friendsSet);
+      const popularIds = new Set(popularCandidates.map((user) => user.id));
+      const remainder = usersList.filter((user) => !popularIds.has(user.id));
+      const remainderSorted = createSortedUsersList(remainder, friendsSet);
 
-    return [...popularCandidates, ...remainderSorted];
-  };
+      return [...popularCandidates, ...remainderSorted];
+    },
+    []
+  );
 
   // 変更の検出
   const hasChanges = () => {
@@ -380,7 +383,7 @@ export default function FriendsPage() {
 
       return [...baseOrder, ...newUsers];
     });
-  }, [users, friends, popularityMap]);
+  }, [users, friends, popularityMap, buildDisplayUsers]);
 
   // ともだちタグの切り替え（楽観的更新 + ボタン無効化）
   const toggleFriend = async (userId: string) => {
