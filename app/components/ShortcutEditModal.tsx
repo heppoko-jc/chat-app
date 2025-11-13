@@ -3,7 +3,6 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import Image from "next/image";
 import axios from "axios";
 
 interface User {
@@ -148,24 +147,6 @@ export default function ShortcutEditModal({
 
   if (!isOpen || !shortcut) return null;
 
-  // 背景色を生成する関数
-  const getBgColor = (name: string) => {
-    let hash = 0;
-    for (let i = 0; i < name.length; i++)
-      hash = name.charCodeAt(i) + ((hash << 5) - hash);
-    const h = hash % 360;
-    return `hsl(${h}, 70%, 80%)`;
-  };
-
-  // イニシャルを取得する関数
-  const getInitials = (name: string) => {
-    return name
-      .split(" ")
-      .map((w) => w[0])
-      .join("")
-      .toUpperCase();
-  };
-
   return (
     <>
       {/* 削除確認モーダル */}
@@ -263,7 +244,7 @@ export default function ShortcutEditModal({
                         key={friend.id}
                         onClick={() => toggleMember(friend.id)}
                         disabled={isUpdating || isDeleting}
-                        className={`flex items-center justify-center px-3 py-2 rounded-lg border-2 transition-all relative ${
+                        className={`flex items-center justify-center px-3 py-2 rounded-lg border-2 relative ${
                           selectedMemberIds.includes(friend.id)
                             ? "bg-gray-100 border-black shadow-md"
                             : "bg-white border-gray-200 hover:border-gray-400 hover:shadow-sm"
