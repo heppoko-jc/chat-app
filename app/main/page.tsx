@@ -2259,7 +2259,6 @@ export default function Main() {
               {shortcuts.length > 0 && (
                 <>
                   {shortcuts.map((shortcut) => {
-                    const memberIds = shortcut.members.map((m) => m.memberId);
                     const isShortcutSelected = selectedShortcutIds.has(
                       shortcut.id
                     );
