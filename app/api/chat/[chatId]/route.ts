@@ -4,6 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { io as ioClient } from "socket.io-client";
 import webpush, { PushSubscription as WebPushSubscription } from "web-push";
+import { shouldHideMessage } from "@/lib/content-filter";
 
 const SOCKET_URL =
   process.env.SOCKET_URL ||
@@ -105,6 +106,14 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         { error: "指定されたチャットが見つかりません" },
         { status: 404 }
+      );
+    }
+
+    // 非表示キーワードチェック
+    if (shouldHideMessage(content)) {
+      return NextResponse.json(
+        { error: "hidden_keyword_detected" },
+        { status: 400 }
       );
     }
 

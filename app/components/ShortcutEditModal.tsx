@@ -232,7 +232,7 @@ export default function ShortcutEditModal({
               <label className="block text-sm font-medium text-gray-700 mb-2">
                 メンバーを選択（{selectedMemberIds.length}人選択中）
               </label>
-              <div className="max-h-[50vh] overflow-y-auto">
+              <div className="max-h-[50vh] overflow-y-auto overflow-x-hidden">
                 {friends.length === 0 ? (
                   <p className="text-sm text-gray-500 text-center py-4">
                     フォローしているユーザーがいません

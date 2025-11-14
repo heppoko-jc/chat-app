@@ -718,20 +718,6 @@ export default function Chat() {
       localStorage.removeItem(`draft-message-${id}`);
     }
 
-    const temp: Message = {
-      id: `temp-${Date.now()}`,
-      sender: { id: senderId, name: "自分" },
-      content: contentToSend,
-      createdAt: new Date().toISOString(),
-      formattedDate: new Date().toLocaleTimeString("ja-JP", {
-        hour: "2-digit",
-        minute: "2-digit",
-      }),
-    };
-    setMessages((prev) => [...prev, temp]);
-    setChatData((prev) => ({ ...prev, [id]: [...(prev[id] || []), temp] }));
-    scrollToBottom();
-
     try {
       const res = await axios.post<Message>(`/api/chat/${id}`, {
         senderId,
@@ -746,6 +732,21 @@ export default function Chat() {
       }
 
       seenIdsRef.current.add(saved.id);
+
+      // 送信成功時のみ送信アニメーションを表示
+      const temp: Message = {
+        id: `temp-${Date.now()}`,
+        sender: { id: senderId, name: "自分" },
+        content: contentToSend,
+        createdAt: new Date().toISOString(),
+        formattedDate: new Date().toLocaleTimeString("ja-JP", {
+          hour: "2-digit",
+          minute: "2-digit",
+        }),
+      };
+      setMessages((prev) => [...prev, temp]);
+      setChatData((prev) => ({ ...prev, [id]: [...(prev[id] || []), temp] }));
+      scrollToBottom();
 
       setMessages((prev) => {
         const idx = prev.findIndex(
@@ -795,6 +796,20 @@ export default function Chat() {
       scrollToBottom();
     } catch (e) {
       console.error("🚨 送信エラー:", e);
+
+      // 非表示キーワードが検出された場合
+      if (
+        axios.isAxiosError(e) &&
+        e.response?.data?.error === "hidden_keyword_detected"
+      ) {
+        // メッセージを復元（送信されなかったため）
+        setNewMessage(contentToSend);
+        // 通知を表示
+        alert("非表示設定されている言葉が含まれるため、送信されませんでした。");
+      } else {
+        // その他のエラーの場合もメッセージを復元
+        setNewMessage(contentToSend);
+      }
     } finally {
       setIsSending(false);
       setTimeout(() => {
