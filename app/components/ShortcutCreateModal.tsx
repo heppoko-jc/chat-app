@@ -120,7 +120,7 @@ export default function ShortcutCreateModal({
           </h2>
           <button
             onClick={handleClose}
-            className="absolute right-4 text-gray-500 hover:text-gray-700 transition-colors text-2xl font-bold"
+            className="absolute right-4 text-gray-500 hover:text-gray-700 transition-colors text-2xl font-bold focus:outline-none focus:ring-0"
             disabled={isCreating}
           >
             ×
@@ -172,7 +172,7 @@ export default function ShortcutCreateModal({
                       key={friend.id}
                       onClick={() => toggleMember(friend.id)}
                       disabled={isCreating}
-                      className={`flex items-center justify-center px-3 py-2 rounded-lg border-2 relative ${
+                      className={`flex items-center justify-center px-3 py-2 rounded-lg border-2 relative focus:outline-none focus:ring-0 ${
                         selectedMemberIds.includes(friend.id)
                           ? "bg-gray-100 border-black shadow-md"
                           : "bg-white border-gray-200 hover:border-gray-400 hover:shadow-sm"
@@ -207,7 +207,7 @@ export default function ShortcutCreateModal({
           <button
             onClick={handleCreate}
             disabled={selectedMemberIds.length === 0 || isCreating}
-            className={`w-full py-3 px-4 rounded-xl font-bold transition-colors ${
+            className={`w-full py-3 px-4 rounded-xl font-bold transition-colors focus:outline-none focus:ring-0 ${
               selectedMemberIds.length === 0 || isCreating
                 ? "bg-gray-300 text-gray-500 cursor-not-allowed"
                 : "bg-black text-white hover:bg-gray-800"

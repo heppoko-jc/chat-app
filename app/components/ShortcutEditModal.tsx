@@ -164,14 +164,14 @@ export default function ShortcutEditModal({
               <button
                 onClick={() => setShowDeleteConfirm(false)}
                 disabled={isDeleting}
-                className="flex-1 py-3 px-4 bg-gray-100 text-gray-700 rounded-xl font-medium hover:bg-gray-200 transition-colors disabled:opacity-50"
+                className="flex-1 py-3 px-4 bg-gray-100 text-gray-700 rounded-xl font-medium hover:bg-gray-200 transition-colors disabled:opacity-50 focus:outline-none focus:ring-0"
               >
                 キャンセル
               </button>
               <button
                 onClick={handleDelete}
                 disabled={isDeleting}
-                className="flex-1 py-3 px-4 bg-red-500 text-white rounded-xl font-medium hover:bg-red-600 transition-colors disabled:opacity-50"
+                className="flex-1 py-3 px-4 bg-red-500 text-white rounded-xl font-medium hover:bg-red-600 transition-colors disabled:opacity-50 focus:outline-none focus:ring-0"
               >
                 {isDeleting ? "削除中..." : "削除"}
               </button>
@@ -199,7 +199,7 @@ export default function ShortcutEditModal({
             </h2>
             <button
               onClick={handleClose}
-              className="text-gray-500 hover:text-gray-700 transition-colors text-2xl font-bold"
+              className="text-gray-500 hover:text-gray-700 transition-colors text-2xl font-bold focus:outline-none focus:ring-0"
               disabled={isUpdating || isDeleting}
             >
               ×
@@ -244,7 +244,7 @@ export default function ShortcutEditModal({
                         key={friend.id}
                         onClick={() => toggleMember(friend.id)}
                         disabled={isUpdating || isDeleting}
-                        className={`flex items-center justify-center px-3 py-2 rounded-lg border-2 relative ${
+                        className={`flex items-center justify-center px-3 py-2 rounded-lg border-2 relative focus:outline-none focus:ring-0 ${
                           selectedMemberIds.includes(friend.id)
                             ? "bg-gray-100 border-black shadow-md"
                             : "bg-white border-gray-200 hover:border-gray-400 hover:shadow-sm"
@@ -285,7 +285,7 @@ export default function ShortcutEditModal({
               disabled={
                 selectedMemberIds.length === 0 || isUpdating || isDeleting
               }
-              className={`w-full py-3 px-4 rounded-xl font-bold transition-colors ${
+              className={`w-full py-3 px-4 rounded-xl font-bold transition-colors focus:outline-none focus:ring-0 ${
                 selectedMemberIds.length === 0 || isUpdating || isDeleting
                   ? "bg-gray-300 text-gray-500 cursor-not-allowed"
                   : "bg-black text-white hover:bg-gray-800"
@@ -296,7 +296,7 @@ export default function ShortcutEditModal({
             <button
               onClick={() => setShowDeleteConfirm(true)}
               disabled={isUpdating || isDeleting}
-              className="w-full py-3 px-4 rounded-xl font-bold bg-red-500 text-white hover:bg-red-600 transition-colors disabled:opacity-50"
+              className="w-full py-3 px-4 rounded-xl font-bold bg-red-500 text-white hover:bg-red-600 transition-colors disabled:opacity-50 focus:outline-none focus:ring-0"
             >
               削除
             </button>
