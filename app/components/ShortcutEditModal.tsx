@@ -152,7 +152,7 @@ export default function ShortcutEditModal({
       {/* 削除確認モーダル */}
       {showDeleteConfirm && (
         <div className="fixed inset-0 bg-black bg-opacity-50 z-[60] flex items-center justify-center">
-          <div className="bg-white rounded-2xl p-6 mx-4 max-w-sm w-full">
+          <div className="bg-white rounded-2xl p-6 mx-4 max-w-sm w-full select-none">
             <h3 className="text-lg font-bold text-gray-900 mb-2">
               ショートカットを削除しますか？
             </h3>
@@ -186,7 +186,7 @@ export default function ShortcutEditModal({
         onClick={handleClose}
       >
         <div
-          className="bg-white rounded-t-3xl w-full max-w-md max-h-[90vh] flex flex-col animate-slide-up"
+          className="bg-white rounded-t-3xl w-full max-w-md max-h-[90vh] flex flex-col animate-slide-up select-none"
           onClick={(e) => e.stopPropagation()}
           style={{
             animation: "slideUp 0.3s ease-out",
@@ -222,7 +222,7 @@ export default function ShortcutEditModal({
                     ? generateAutoName(selectedMemberIds)
                     : "名前を入力（未入力の場合は自動生成）"
                 }
-                className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500"
+                className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 select-text"
                 disabled={isUpdating || isDeleting}
               />
             </div>
@@ -244,7 +244,7 @@ export default function ShortcutEditModal({
                         key={friend.id}
                         onClick={() => toggleMember(friend.id)}
                         disabled={isUpdating || isDeleting}
-                        className={`flex items-center justify-center px-3 py-2 rounded-lg border-2 relative focus:outline-none focus:ring-0 ${
+                        className={`flex items-center justify-center px-3 py-2 rounded-lg border-2 relative focus:outline-none focus:ring-0 select-none ${
                           selectedMemberIds.includes(friend.id)
                             ? "bg-gray-100 border-black shadow-md"
                             : "bg-white border-gray-200 hover:border-gray-400 hover:shadow-sm"

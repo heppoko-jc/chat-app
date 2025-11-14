@@ -107,7 +107,7 @@ export default function ShortcutCreateModal({
       onClick={handleClose}
     >
       <div
-        className="bg-white rounded-t-3xl w-full max-w-md max-h-[90vh] flex flex-col animate-slide-up"
+        className="bg-white rounded-t-3xl w-full max-w-md max-h-[90vh] flex flex-col animate-slide-up select-none"
         onClick={(e) => e.stopPropagation()}
         style={{
           animation: "slideUp 0.3s ease-out",
@@ -150,7 +150,7 @@ export default function ShortcutCreateModal({
                   ? generateAutoName(selectedMemberIds)
                   : "名前を入力（未入力の場合は自動生成）"
               }
-              className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500"
+              className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 select-text"
               disabled={isCreating}
             />
           </div>
@@ -172,7 +172,7 @@ export default function ShortcutCreateModal({
                       key={friend.id}
                       onClick={() => toggleMember(friend.id)}
                       disabled={isCreating}
-                      className={`flex items-center justify-center px-3 py-2 rounded-lg border-2 relative focus:outline-none focus:ring-0 ${
+                      className={`flex items-center justify-center px-3 py-2 rounded-lg border-2 relative focus:outline-none focus:ring-0 select-none ${
                         selectedMemberIds.includes(friend.id)
                           ? "bg-gray-100 border-black shadow-md"
                           : "bg-white border-gray-200 hover:border-gray-400 hover:shadow-sm"
