@@ -162,6 +162,9 @@ const mergeQueue = (
 export default function Main() {
   const router = useRouter();
 
+  // 全員選択機能の表示/非表示（将来の利用のため非表示に設定）
+  const SHOW_SELECT_ALL = false;
+
   // ステート
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [users, setUsers] = useState<User[]>([]);
@@ -2225,19 +2228,21 @@ export default function Main() {
             }}
           >
             {/* 全員選択トグル */}
-            <div className="mb-3">
-              <button
-                onClick={toggleSelectAllVisible}
-                className={`w-full py-3 rounded-xl text-base font-bold border transition ${
-                  allVisibleSelected
-                    ? "bg-black border-black text-white"
-                    : "bg-white border-gray-300 text-black hover:bg-gray-100"
-                }`}
-                disabled={visibleFriends.length === 0}
-              >
-                {allVisibleSelected ? "全選択解除" : "全員を選択"}
-              </button>
-            </div>
+            {SHOW_SELECT_ALL && (
+              <div className="mb-3">
+                <button
+                  onClick={toggleSelectAllVisible}
+                  className={`w-full py-3 rounded-xl text-base font-bold border transition ${
+                    allVisibleSelected
+                      ? "bg-black border-black text-white"
+                      : "bg-white border-gray-300 text-black hover:bg-gray-100"
+                  }`}
+                  disabled={visibleFriends.length === 0}
+                >
+                  {allVisibleSelected ? "全選択解除" : "全員を選択"}
+                </button>
+              </div>
+            )}
 
             {/* ショートカット作成ボタン */}
             <div className="mb-3">
