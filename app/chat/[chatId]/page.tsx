@@ -13,6 +13,7 @@ import {
   fetchLinkMetadata,
   isLinkMessage,
 } from "../../lib/link-utils";
+import ErrorNotification from "../../components/ErrorNotification";
 
 type BadgeCapableNavigator = Navigator & {
   serviceWorker?: {
@@ -127,6 +128,15 @@ export default function Chat() {
     title: string;
     image?: string;
   } | null>(null);
+
+  // エラー通知の状態
+  const [errorNotification, setErrorNotification] = useState<{
+    isVisible: boolean;
+    message: string;
+  }>({
+    isVisible: false,
+    message: "",
+  });
 
   // ===== レイアウト参照 =====
   const mainRef = useRef<HTMLDivElement | null>(null);
@@ -711,12 +721,7 @@ export default function Chat() {
 
     setIsSending(true);
     const contentToSend = newMessage;
-    setNewMessage("");
-
-    // 送信後にドラフトをクリア
-    if (id) {
-      localStorage.removeItem(`draft-message-${id}`);
-    }
+    // メッセージはAPI呼び出し成功時のみクリアする
 
     try {
       const res = await axios.post<Message>(`/api/chat/${id}`, {
@@ -724,6 +729,14 @@ export default function Chat() {
         content: contentToSend,
       });
       const saved = res.data;
+
+      // 送信成功時のみメッセージをクリア
+      setNewMessage("");
+
+      // 送信後にドラフトをクリア
+      if (id) {
+        localStorage.removeItem(`draft-message-${id}`);
+      }
 
       if (seenIdsRef.current.has(saved.id)) {
         setIsSending(false);
@@ -802,13 +815,19 @@ export default function Chat() {
         axios.isAxiosError(e) &&
         e.response?.data?.error === "hidden_keyword_detected"
       ) {
-        // メッセージを復元（送信されなかったため）
-        setNewMessage(contentToSend);
-        // 通知を表示
-        alert("非表示設定されている言葉が含まれるため、送信されませんでした。");
+        // メッセージはクリアしない（送信されなかったため）
+        // アプリ内通知を表示
+        setErrorNotification({
+          isVisible: true,
+          message:
+            "非表示設定されている言葉が含まれるため、送信されませんでした。",
+        });
       } else {
-        // その他のエラーの場合もメッセージを復元
-        setNewMessage(contentToSend);
+        // その他のエラーの場合もメッセージはクリアしない
+        setErrorNotification({
+          isVisible: true,
+          message: "メッセージの送信に失敗しました。",
+        });
       }
     } finally {
       setIsSending(false);
@@ -1441,6 +1460,13 @@ export default function Chat() {
           </div>
         </div>
       )}
+
+      {/* エラー通知 */}
+      <ErrorNotification
+        isVisible={errorNotification.isVisible}
+        message={errorNotification.message}
+        onClose={() => setErrorNotification({ isVisible: false, message: "" })}
+      />
 
       {/* 吹き出しのトゲ（LINE風） */}
       <style jsx global>{`
