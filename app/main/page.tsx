@@ -2264,23 +2264,10 @@ export default function Main() {
                       shortcut.id
                     );
 
-                    // 選択されたショートカットのメンバーIDのセットを作成
-                    const selectedShortcutMemberIds = new Set(
-                      shortcuts
-                        .filter((s) => selectedShortcutIds.has(s.id))
-                        .flatMap((s) => s.members.map((m) => m.memberId))
-                    );
-
-                    // ショートカットが明示的に選択されているか、または一部のメンバーが個別に選択されているかを判定
-                    // ただし、そのメンバーが選択されたショートカットのメンバーである場合は除外
-                    const someSelected =
-                      !isShortcutSelected &&
-                      memberIds.some(
-                        (id) =>
-                          selectedRecipientIds.includes(id) &&
-                          !selectedShortcutMemberIds.has(id)
-                      );
+                    // ショートカットは明示的に選択された場合のみ選択状態にする
+                    // 個人を個別に選択した場合は、ショートカットは選択状態にならない
                     const allSelected = isShortcutSelected;
+                    const someSelected = false; // 個人選択時にはショートカットは選択状態にしない
 
                     return (
                       <button
