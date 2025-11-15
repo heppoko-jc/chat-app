@@ -82,6 +82,20 @@ export default function ShortcutEditModal({
     );
   };
 
+  // 全員選択/全選択解除
+  const toggleSelectAll = () => {
+    if (isUpdating || isDeleting) return;
+    const allSelected =
+      friends.length > 0 && selectedMemberIds.length === friends.length;
+    if (allSelected) {
+      // 全選択解除
+      setSelectedMemberIds([]);
+    } else {
+      // 全員を選択
+      setSelectedMemberIds(friends.map((f) => f.id));
+    }
+  };
+
   // ショートカット名を自動生成
   const generateAutoName = (selectedIds: string[]): string => {
     if (selectedIds.length === 0) return "";
@@ -229,9 +243,32 @@ export default function ShortcutEditModal({
 
             {/* メンバー選択 */}
             <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                メンバーを選択（{selectedMemberIds.length}人選択中）
-              </label>
+              <div className="flex items-center justify-between mb-2">
+                <label className="block text-sm font-medium text-gray-700">
+                  メンバーを選択（{selectedMemberIds.length}人選択中）
+                </label>
+                {friends.length > 0 && (
+                  <button
+                    onClick={toggleSelectAll}
+                    disabled={isUpdating || isDeleting}
+                    className={`text-sm font-medium px-3 py-1 rounded-lg border transition-colors focus:outline-none focus:ring-0 select-none ${
+                      friends.length > 0 &&
+                      selectedMemberIds.length === friends.length
+                        ? "bg-black text-white border-black"
+                        : "bg-white text-gray-700 border-gray-300 hover:bg-gray-50"
+                    } ${
+                      isUpdating || isDeleting
+                        ? "opacity-50 cursor-not-allowed"
+                        : ""
+                    }`}
+                  >
+                    {friends.length > 0 &&
+                    selectedMemberIds.length === friends.length
+                      ? "全選択解除"
+                      : "全員を選択"}
+                  </button>
+                )}
+              </div>
               <div className="max-h-[50vh] overflow-y-auto overflow-x-hidden">
                 {friends.length === 0 ? (
                   <p className="text-sm text-gray-500 text-center py-4">

@@ -51,18 +51,20 @@ export async function GET(req: NextRequest) {
     }
 
     // 表示対象のメッセージ内容を結合（ともだちが送信したメッセージ + 自分が送信したメッセージ）
-    const visibleMessages = [...friendSentMessages, ...mySentMessages];
+    const visibleMessages = [
+      ...new Set([...friendSentMessages, ...mySentMessages]),
+    ];
 
     // 表示対象のメッセージがない場合は空配列を返す
     if (visibleMessages.length === 0) {
       return NextResponse.json([]);
     }
 
-    const messages = await prisma.presetMessage.findMany({
+    // ✅ PresetMessageを取得（countフィルタを削除）
+    const presetMessages = await prisma.presetMessage.findMany({
       where: {
-        count: { gt: 0 },
+        // count: { gt: 0 }, ← このフィルタを削除
         lastSentAt: { gte: expiryDate }, // 24時間以内のメッセージのみ取得
-        // ともだちが送信したメッセージ または 自分が送信したメッセージ（非表示を除外済み）
         content: { in: visibleMessages },
       },
       orderBy: { lastSentAt: "desc" },
@@ -71,14 +73,57 @@ export async function GET(req: NextRequest) {
         content: true,
         createdBy: true,
         createdAt: true,
-        count: true,
-        senderCount: true,
+        count: true, // この値は後で上書きされる
+        senderCount: true, // この値は後で上書きされる
         linkTitle: true,
         linkImage: true,
         lastSentAt: true,
       },
     });
-    return NextResponse.json(messages);
+
+    // ✅ 各PresetMessageについて、実際のcountとsenderCountを計算
+    const messagesWithActualCounts = await Promise.all(
+      presetMessages.map(async (msg) => {
+        // 実際のSentMessageの数を動的に計算（非表示を除外、24時間以内）
+        const actualCount = await prisma.sentMessage.count({
+          where: {
+            message: msg.content,
+            isHidden: false,
+            createdAt: { gte: expiryDate },
+          },
+        });
+
+        // 実際のcountが0の場合は除外
+        if (actualCount === 0) {
+          return null;
+        }
+
+        // 実際のユニーク送信者数を動的に計算（非表示を除外、24時間以内）
+        const uniqueSenders = await prisma.sentMessage.findMany({
+          where: {
+            message: msg.content,
+            isHidden: false,
+            createdAt: { gte: expiryDate },
+          },
+          select: { senderId: true },
+          distinct: ["senderId"],
+        });
+        const actualSenderCount = uniqueSenders.length;
+
+        return {
+          ...msg,
+          count: actualCount,
+          senderCount: actualSenderCount,
+        };
+      })
+    );
+
+    // nullを除外して返す
+    const validMessages = messagesWithActualCounts.filter(
+      (msg): msg is NonNullable<typeof msg> => msg !== null
+    );
+
+    return NextResponse.json(validMessages);
   } catch (err) {
     console.error("GET /api/preset-message failed:", err);
     console.error("Error details:", {

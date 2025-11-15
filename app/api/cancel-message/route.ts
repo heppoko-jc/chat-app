@@ -35,55 +35,77 @@ export async function DELETE(req: NextRequest) {
       );
     }
 
-    // メッセージごとにPresetMessageのカウントを減算
-    const messageContentMap = new Map<string, number>();
-    for (const message of messages) {
-      const count = messageContentMap.get(message.message) || 0;
-      messageContentMap.set(message.message, count + 1);
-    }
+    // 削除対象のメッセージ内容を取得（重複排除）
+    const messageContents = [...new Set(messages.map((msg) => msg.message))];
 
-    // 各メッセージ内容についてPresetMessageを更新
-    for (const [messageContent, deleteCount] of messageContentMap.entries()) {
-      const presetMessage = await prisma.presetMessage.findFirst({
-        where: { content: messageContent },
-      });
-
-      if (presetMessage) {
-        // この送信者の同じメッセージの送信回数をチェック
-        const sameUserSentMessages = await prisma.sentMessage.findMany({
-          where: {
-            senderId: senderId,
-            message: messageContent,
-          },
-        });
-
-        // 削除対象を除いた残りの送信回数をチェック
-        const remainingSentMessages = sameUserSentMessages.filter(
-          (msg) => !ids.includes(msg.id)
-        );
-
-        // この送信者の送信記録が全てなくなる場合のみsenderCountを減算
-        const shouldDecreaseSenderCount = remainingSentMessages.length === 0;
-
-        await prisma.presetMessage.update({
-          where: { id: presetMessage.id },
-          data: {
-            count: Math.max(0, presetMessage.count - deleteCount),
-            // 送信記録が全てなくなる場合のみsenderCountを減算
-            senderCount: shouldDecreaseSenderCount
-              ? Math.max(0, presetMessage.senderCount - 1)
-              : presetMessage.senderCount,
-          },
-        });
-      }
-    }
-
-    // メッセージを削除
+    // メッセージを削除（先に削除してからPresetMessageを更新）
     await prisma.sentMessage.deleteMany({
       where: {
         id: { in: ids },
       },
     });
+
+    // 各メッセージ内容についてPresetMessageを更新
+    for (const messageContent of messageContents) {
+      const presetMessage = await prisma.presetMessage.findFirst({
+        where: { content: messageContent },
+      });
+
+      if (presetMessage) {
+        // ✅ 実際のSentMessageの数を動的に計算（非表示を除外）
+        const actualCount = await prisma.sentMessage.count({
+          where: {
+            message: messageContent,
+            isHidden: false,
+          },
+        });
+
+        // ✅ 実際のユニーク送信者数を動的に計算（非表示を除外）
+        const uniqueSenders = await prisma.sentMessage.findMany({
+          where: {
+            message: messageContent,
+            isHidden: false,
+          },
+          select: { senderId: true },
+          distinct: ["senderId"],
+        });
+        const actualSenderCount = uniqueSenders.length;
+
+        // ✅ 最新の送信時刻を取得（非表示を除外）
+        const latestSentMessage = await prisma.sentMessage.findFirst({
+          where: {
+            message: messageContent,
+            isHidden: false,
+          },
+          orderBy: { createdAt: "desc" },
+          select: { createdAt: true },
+        });
+
+        // countが0になった場合はPresetMessageを削除
+        if (actualCount === 0) {
+          await prisma.presetMessage.delete({
+            where: { id: presetMessage.id },
+          });
+          console.log(
+            `[cancel-message] PresetMessage削除: ${messageContent} (count=0)`
+          );
+        } else {
+          // PresetMessageを更新（countとsenderCountを実際の値に更新）
+          await prisma.presetMessage.update({
+            where: { id: presetMessage.id },
+            data: {
+              count: actualCount,
+              senderCount: actualSenderCount,
+              lastSentAt:
+                latestSentMessage?.createdAt || presetMessage.lastSentAt,
+            },
+          });
+          console.log(
+            `[cancel-message] PresetMessage更新: ${messageContent}, count=${actualCount}, senderCount=${actualSenderCount}`
+          );
+        }
+      }
+    }
 
     return NextResponse.json({ success: true });
   } catch (error) {

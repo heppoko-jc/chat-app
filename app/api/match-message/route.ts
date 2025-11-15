@@ -350,12 +350,19 @@ export async function POST(req: NextRequest) {
       where: { content: message },
     });
     if (existingPresetMessage) {
-      // 実際のユニーク送信者数を動的に計算（より確実な方法）
-      // ✅ 非表示メッセージは除外
+      // ✅ 実際のSentMessageの数を動的に計算（非表示を除外）
+      const actualCount = await prisma.sentMessage.count({
+        where: {
+          message: message,
+          isHidden: false,
+        },
+      });
+
+      // ✅ 実際のユニーク送信者数を動的に計算（非表示を除外）
       const uniqueSenders = await prisma.sentMessage.findMany({
         where: {
           message: message,
-          isHidden: false, // ← 追加
+          isHidden: false,
         },
         select: { senderId: true },
         distinct: ["senderId"],
@@ -365,14 +372,13 @@ export async function POST(req: NextRequest) {
       console.log(`[match-message] 送信者判定:`, {
         senderId,
         message,
+        actualCount,
         actualSenderCount,
-        currentSenderCount: existingPresetMessage.senderCount,
         uniqueSenders: uniqueSenders.map((s) => s.senderId),
       });
 
       const updateData = {
-        count: existingPresetMessage.count + 1,
-        // 実際のユニーク送信者数を使用
+        count: actualCount, // ✅ 手動増加ではなく実際の数を設定
         senderCount: actualSenderCount,
         lastSentAt: new Date(), // メッセージ送信時に必ず時刻をリセット
         // リンクメタデータが提供された場合は更新
@@ -386,10 +392,18 @@ export async function POST(req: NextRequest) {
       });
       console.log(`[match-message] PresetMessage更新完了`);
     } else {
+      // 新規作成時は実際の数を計算（通常は1になるはず）
+      const actualCount = await prisma.sentMessage.count({
+        where: {
+          message: message,
+          isHidden: false,
+        },
+      });
+
       const createData = {
         content: message,
         createdBy: senderId,
-        count: 1,
+        count: actualCount, // ✅ 実際の数を設定
         senderCount: 1, // 新規作成時は送信者数も1
         linkTitle: finalLinkTitle || null,
         linkImage: finalLinkImage || null,
