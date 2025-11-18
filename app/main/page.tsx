@@ -164,6 +164,7 @@ export default function Main() {
   const router = useRouter();
 
   // 全員選択機能の表示/非表示（将来の利用のため非表示に設定）
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const SHOW_SELECT_ALL = false;
 
   // ステート
@@ -1284,6 +1285,7 @@ export default function Main() {
     return visibleFriends.every((u) => selectedRecipientIds.includes(u.id));
   }, [visibleFriends, selectedRecipientIds]);
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   const toggleSelectAllVisible = useCallback(() => {
     if (allVisibleSelected) {
       setSelectedRecipientIds([]);
