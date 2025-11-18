@@ -226,6 +226,27 @@ export default function Main() {
     new Set()
   );
 
+  // 検索機能用のステート
+  const [searchQuery, setSearchQuery] = useState("");
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
+
+  // デバウンス処理（300ms）
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  // 画面遷移時に検索クエリをリセット
+  useEffect(() => {
+    if (step !== "select-recipients") {
+      setSearchQuery("");
+      setDebouncedSearchQuery("");
+    }
+  }, [step]);
+
   // Phase 2.1: 安全なキャッシュ基盤の構築（一時的に無効化）
   // const useMessageCache = () => {
   //   const [cache, setCache] = useState<{
@@ -1205,9 +1226,44 @@ export default function Main() {
     return [...messageOptions];
   }, [messageOptions]);
 
+  // カタカナをひらがなに変換する関数（検索用）
+  const katakanaToHiragana = useCallback((str: string): string => {
+    return str.replace(/[\u30A1-\u30F6]/g, (match) => {
+      return String.fromCharCode(match.charCodeAt(0) - 0x60);
+    });
+  }, []);
+
+  // 検索用の正規化関数（ひらがな/カタカナを統一、大文字小文字を統一）
+  const normalizeForSearch = useCallback((str: string): string => {
+    if (!str) return "";
+    // ひらがなに統一
+    let normalized = katakanaToHiragana(str);
+    // 小文字に統一
+    normalized = normalized.toLowerCase();
+    return normalized;
+  }, [katakanaToHiragana]);
+
+  // ともだちの検索フィルタリング関数
+  const getFilteredFriends = useCallback((friends: User[], query: string): User[] => {
+    if (!query.trim()) return friends;
+
+    const normalizedQuery = normalizeForSearch(query);
+
+    return friends.filter((user) => {
+      // 検索対象: 名前とbio
+      const searchableFields = [user.name, user.bio].filter(Boolean) as string[];
+
+      // 各フィールドで部分一致チェック
+      return searchableFields.some((field) => {
+        const normalizedField = normalizeForSearch(field);
+        return normalizedField.includes(normalizedQuery);
+      });
+    });
+  }, [normalizeForSearch]);
+
   // 表示中のともだち一覧（フィルタ＋ソートを共通化）
   const visibleFriends = useMemo(() => {
-    return users
+    const filtered = users
       .filter((u) => u.id !== currentUserId && friends.has(u.id))
       .slice()
       .sort((a, b) => {
@@ -1218,7 +1274,10 @@ export default function Main() {
         if (!la && lb) return 1;
         return a.name.localeCompare(b.name, "ja");
       });
-  }, [users, currentUserId, friends, lastSentMap]);
+
+    // 検索クエリでフィルタリング（個人名のみ）
+    return getFilteredFriends(filtered, debouncedSearchQuery);
+  }, [users, currentUserId, friends, lastSentMap, debouncedSearchQuery, getFilteredFriends]);
 
   const allVisibleSelected = useMemo(() => {
     if (visibleFriends.length === 0) return false;
@@ -2253,22 +2312,38 @@ export default function Main() {
               paddingTop: `${LIST_PT}px`,
             }}
           >
-            {/* 全員選択トグル */}
-            {SHOW_SELECT_ALL && (
-              <div className="mb-3">
+            {/* 検索バー（一番上に配置） */}
+            <div className="mb-3 relative">
+              <input
+                type="text"
+                placeholder="名前で検索..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full px-4 py-2 pr-10 border border-gray-300 rounded-full focus:ring-2 focus:ring-gray-400 focus:border-gray-400 outline-none text-base bg-white"
+              />
+              {searchQuery && (
                 <button
-                  onClick={toggleSelectAllVisible}
-                  className={`w-full py-3 rounded-xl text-base font-bold border transition ${
-                    allVisibleSelected
-                      ? "bg-black border-black text-white"
-                      : "bg-white border-gray-300 text-black hover:bg-gray-100"
-                  }`}
-                  disabled={visibleFriends.length === 0}
+                  onClick={() => setSearchQuery("")}
+                  className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  aria-label="検索をクリア"
                 >
-                  {allVisibleSelected ? "全選択解除" : "全員を選択"}
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    className="h-5 w-5"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M6 18L18 6M6 6l12 12"
+                    />
+                  </svg>
                 </button>
-              </div>
-            )}
+              )}
+            </div>
 
             {/* ショートカット作成ボタン */}
             <div className="mb-3">
@@ -2281,8 +2356,8 @@ export default function Main() {
             </div>
 
             <div className="flex flex-col gap-2">
-              {/* ショートカット一覧 */}
-              {shortcuts.length > 0 && (
+              {/* ショートカット一覧（検索中は非表示） */}
+              {!debouncedSearchQuery && shortcuts.length > 0 && (
                 <>
                   {shortcuts.map((shortcut) => {
                     const isShortcutSelected = selectedShortcutIds.has(
@@ -2425,7 +2500,14 @@ export default function Main() {
                 </>
               )}
 
-              {visibleFriends.length === 0 ? (
+              {/* 検索結果が0件の場合のメッセージ */}
+              {debouncedSearchQuery && visibleFriends.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-12">
+                  <p className="text-gray-500 text-base">
+                    該当するユーザーが見つかりませんでした
+                  </p>
+                </div>
+              ) : visibleFriends.length === 0 && !debouncedSearchQuery ? (
                 <div
                   onClick={() => router.push("/friends")}
                   className="flex flex-col items-center justify-center py-12 px-6 rounded-3xl border border-orange-200 bg-white cursor-pointer hover:bg-orange-50 transition-colors"
