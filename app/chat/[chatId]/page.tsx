@@ -14,7 +14,7 @@ import {
   isLinkMessage,
 } from "../../lib/link-utils";
 import ErrorNotification from "../../components/ErrorNotification";
-import type { ChatItem } from "../chat-list/page";
+import type { ChatItem } from "../../chat-list/page";
 
 type BadgeCapableNavigator = Navigator & {
   serviceWorker?: {
