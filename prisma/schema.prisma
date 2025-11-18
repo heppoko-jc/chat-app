@@ -17,6 +17,7 @@ model User {
   password             String
   createdAt            DateTime           @default(now())
   bio                  String?
+  language             String?            @default("ja") // "ja" | "en"
   // パスワードリセット用
   passwordResetToken   String?
   passwordResetExpires DateTime?
@@ -177,4 +178,17 @@ model ShortcutMember {
   @@unique([shortcutId, memberId]) // 重複防止
   @@index([shortcutId])
   @@index([memberId])
+}
+
+model TranslationCache {
+  id           String   @id @default(uuid())
+  sourceText   String   // 元のテキスト
+  sourceLang   String   // 元の言語 ("ja")
+  targetLang   String   // 翻訳先の言語 ("en")
+  translatedText String // 翻訳後のテキスト
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([sourceText, sourceLang, targetLang]) // 同じ翻訳の重複を防ぐ
+  @@index([sourceText, sourceLang, targetLang]) // 検索パフォーマンス向上
 }

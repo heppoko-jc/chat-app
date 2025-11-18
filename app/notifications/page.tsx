@@ -5,6 +5,8 @@ import { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import axios from "axios";
 import Image from "next/image";
+import { useLanguage } from "../contexts/LanguageContext";
+import TranslatedMessage from "../components/TranslatedMessage";
 
 // ──────────── 型定義 ────────────
 interface SentMessage {
@@ -63,6 +65,7 @@ function formatDate(iso: string) {
 
 export default function Notifications() {
   const router = useRouter();
+  const { t } = useLanguage();
 
   // ──────────── ステート管理 ────────────
   const [sentMessages, setSentMessages] = useState<SentMessage[]>([]);
@@ -254,9 +257,9 @@ export default function Notifications() {
           <h1 className="text-2xl font-bold mt-1">History</h1>
         </div>
         <h2 className="text-sm text-center">
-          ことばをシェアした履歴です。
+          {t("notifications.history")}
           <br />
-          右のボタンから取り消すこともできます（未マッチのみ）。
+          {t("notifications.cancelInfo")}
         </h2>
       </div>
 
@@ -266,7 +269,7 @@ export default function Notifications() {
         {isLoading ? (
           <div className="flex flex-col items-center justify-center py-12">
             <div className="w-8 h-8 border-4 border-gray-300 border-t-blue-500 rounded-full animate-spin mb-4" />
-            <p className="text-gray-500 font-medium">読み込み中…</p>
+            <p className="text-gray-500 font-medium">{t("notifications.loading")}</p>
           </div>
         ) : (
           <>
@@ -277,7 +280,7 @@ export default function Notifications() {
                   <span className="text-2xl">📝</span>
                 </div>
                 <p className="text-center text-gray-500">
-                  まだことばをシェアしたことがありません。
+                  {t("notifications.noHistory")}
                 </p>
               </div>
             ) : (
@@ -286,7 +289,7 @@ export default function Notifications() {
                 {unmatchedMessages.length > 0 && (
                   <section>
                     <h3 className="text-lg font-bold text-gray-800 mb-3">
-                      まだマッチしてないことば
+                      {t("notifications.unmatched")}
                     </h3>
                     <ul className="space-y-2">
                       {unmatchedGroups.map((g) => {
@@ -390,7 +393,12 @@ export default function Notifications() {
                                         ) : (
                                           <>
                                             <p className="text-base font-bold text-gray-800">
-                                              {g.linkTitle || g.message}
+                                              {g.linkTitle || (
+                                                <TranslatedMessage
+                                                  text={g.message}
+                                                  sourceLang="ja"
+                                                />
+                                              )}
                                             </p>
                                           </>
                                         )}
@@ -398,7 +406,10 @@ export default function Notifications() {
                                     </div>
                                   ) : (
                                     <p className="text-base whitespace-normal break-words mt-1">
-                                      {g.message}
+                                      <TranslatedMessage
+                                        text={g.message}
+                                        sourceLang="ja"
+                                      />
                                     </p>
                                   )}
 
@@ -415,7 +426,7 @@ export default function Notifications() {
                                     )}
                                     {isMulti && (
                                       <span className="text-xs px-2 py-1 rounded-full bg-gray-200 text-gray-700 font-semibold whitespace-nowrap">
-                                        同時に{g.items.length}人
+                                        {t("notifications.sentTogetherUnmatched", { n: g.items.length })}
                                       </span>
                                     )}
                                   </div>
@@ -528,7 +539,7 @@ export default function Notifications() {
                 {matchedMessages.length > 0 && (
                   <section>
                     <h3 className="text-lg font-bold text-gray-800 mb-3">
-                      マッチしたことば
+                      {t("notifications.matched")}
                     </h3>
                     <ul className="space-y-2">
                       {matchedGroups.map((g) => {
@@ -631,7 +642,12 @@ export default function Notifications() {
                                         ) : (
                                           <>
                                             <p className="text-base font-bold text-gray-800">
-                                              {g.linkTitle || g.message}
+                                              {g.linkTitle || (
+                                                <TranslatedMessage
+                                                  text={g.message}
+                                                  sourceLang="ja"
+                                                />
+                                              )}
                                             </p>
                                           </>
                                         )}
@@ -639,7 +655,10 @@ export default function Notifications() {
                                     </div>
                                   ) : (
                                     <p className="text-base whitespace-normal break-words mt-1">
-                                      {g.message}
+                                      <TranslatedMessage
+                                        text={g.message}
+                                        sourceLang="ja"
+                                      />
                                     </p>
                                   )}
 
@@ -656,12 +675,12 @@ export default function Notifications() {
                                     )}
                                     {isMulti && (
                                       <span className="text-xs px-2 py-1 rounded-full bg-green-100 text-green-700 font-semibold whitespace-nowrap">
-                                        同時に{g.items.length}人（マッチ済）
+                                        {t("notifications.sentTogether", { n: g.items.length })}
                                       </span>
                                     )}
                                     {!isMulti && (
                                       <span className="text-xs px-2 py-1 rounded-full bg-green-100 text-green-600 font-semibold">
-                                        マッチ済
+                                        {t("notifications.matchedStatus")}
                                       </span>
                                     )}
                                   </div>
@@ -716,7 +735,7 @@ export default function Notifications() {
                                             </span>
                                           )}
                                           <span className="text-xs px-2 py-1 rounded-full bg-green-100 text-green-600 font-semibold">
-                                            マッチ済
+                                            {t("notifications.matchedStatus")}
                                           </span>
                                         </div>
                                       </div>

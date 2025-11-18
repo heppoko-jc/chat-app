@@ -2,6 +2,7 @@
 import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 import webpush, { PushSubscription as WebPushSubscription } from "web-push";
+import { translate } from "@/lib/translations";
 
 const prisma = new PrismaClient();
 
@@ -137,6 +138,17 @@ export async function GET() {
     // 無効化対象 endpoint を集約する集合（重複排除）
     const endpointsToDeactivate = new Set<string>();
 
+    // ユーザーの言語設定を一括取得
+    const allUserIds = Array.from(subsByUser.keys());
+    const users = await prisma.user.findMany({
+      where: { id: { in: allUserIds } },
+      select: { id: true, language: true },
+    });
+    const userLanguages = new Map<string, "ja" | "en">();
+    users.forEach((u) => {
+      userLanguages.set(u.id, (u.language === "en" ? "en" : "ja") as "ja" | "en");
+    });
+
     // 3) 個人配信（過去24時間の新規受信・未マッチ件数）
     for (const [userId, subs] of subsByUser) {
       if (!subs?.length) continue;
@@ -144,10 +156,14 @@ export async function GET() {
       const unmatchedCount = await getNewUnmatchedReceivedCount24h(userId);
       if (unmatchedCount === 0) continue;
 
+      const userLanguage = userLanguages.get(userId) || "ja";
+
       const payload = JSON.stringify({
         type: "digest_user",
-        title: "新着メッセージ",
-        body: `今日あなたに新しいメッセージが${unmatchedCount}件届きました`,
+        title: translate(userLanguage, "notification.digestNewMessage"),
+        body: translate(userLanguage, "notification.digestUserNew", {
+          n: unmatchedCount,
+        }),
         dateKey,
       });
 
@@ -156,16 +172,49 @@ export async function GET() {
     }
 
     // 5) 全体配信（0 件なら送らない）
+    // 全体配信は各ユーザーの言語設定に応じて個別に送信
     if (globalCount > 0 && allActiveSubs.length > 0) {
-      const payloadGlobal = JSON.stringify({
-        type: "digest_global",
-        title: "きょうのことば",
-        body: `今日はこれまでに${globalCount}件の新しいことばが追加されました`,
-        dateKey,
+      // 全ユーザーの言語設定を取得
+      const allSubUserIds = Array.from(
+        new Set(allActiveSubs.map((s) => s.userId))
+      );
+      const allUsers = await prisma.user.findMany({
+        where: { id: { in: allSubUserIds } },
+        select: { id: true, language: true },
+      });
+      const allUserLanguages = new Map<string, "ja" | "en">();
+      allUsers.forEach((u) => {
+        allUserLanguages.set(
+          u.id,
+          (u.language === "en" ? "en" : "ja") as "ja" | "en"
+        );
       });
 
-      const deact = await sendToSubs(allActiveSubs, payloadGlobal);
-      deact.forEach((ep) => endpointsToDeactivate.add(ep));
+      // ユーザーごとに言語設定に応じた通知を送信
+      const subsByUserForGlobal = new Map<
+        string,
+        { endpoint: string; subscription: unknown }[]
+      >();
+      for (const s of allActiveSubs) {
+        const arr = subsByUserForGlobal.get(s.userId) ?? [];
+        arr.push({ endpoint: s.endpoint, subscription: s.subscription });
+        subsByUserForGlobal.set(s.userId, arr);
+      }
+
+      for (const [userId, subs] of subsByUserForGlobal) {
+        const userLanguage = allUserLanguages.get(userId) || "ja";
+        const payloadGlobal = JSON.stringify({
+          type: "digest_global",
+          title: translate(userLanguage, "notification.digestGlobalTitle"),
+          body: translate(userLanguage, "notification.digestGlobalBody", {
+            n: globalCount,
+          }),
+          dateKey,
+        });
+
+        const deact = await sendToSubs(subs, payloadGlobal);
+        deact.forEach((ep) => endpointsToDeactivate.add(ep));
+      }
     }
 
     // 6) 404/410 の購読をまとめて無効化

@@ -4,6 +4,7 @@
 
 import React, { useState, useEffect } from "react";
 import axios from "axios";
+import { useLanguage } from "../contexts/LanguageContext";
 
 interface User {
   id: string;
@@ -48,6 +49,7 @@ export default function ShortcutEditModal({
   shortcut,
   friends,
 }: ShortcutEditModalProps) {
+  const { t } = useLanguage();
   const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([]);
   const [shortcutName, setShortcutName] = useState("");
   const [isUpdating, setIsUpdating] = useState(false);
@@ -106,7 +108,7 @@ export default function ShortcutEditModal({
     }
     const firstName = selectedUsers[0].name;
     const restCount = selectedUsers.length - 1;
-    return `${firstName}ほか${restCount}人`;
+    return `${firstName}${t("shortcut.andOthers", { n: restCount })}`;
   };
 
   // ショートカットを更新
@@ -132,7 +134,7 @@ export default function ShortcutEditModal({
       handleClose();
     } catch (error) {
       console.error("ショートカット更新エラー:", error);
-      alert("ショートカットの更新に失敗しました");
+      alert(t("shortcut.updateError"));
     } finally {
       setIsUpdating(false);
     }
@@ -152,7 +154,7 @@ export default function ShortcutEditModal({
       handleClose();
     } catch (error) {
       console.error("ショートカット削除エラー:", error);
-      alert("ショートカットの削除に失敗しました");
+      alert(t("shortcut.deleteError"));
     } finally {
       setIsDeleting(false);
       setShowDeleteConfirm(false);
@@ -168,11 +170,11 @@ export default function ShortcutEditModal({
         <div className="fixed inset-0 bg-black bg-opacity-50 z-[60] flex items-center justify-center">
           <div className="bg-white rounded-2xl p-6 mx-4 max-w-sm w-full select-none">
             <h3 className="text-lg font-bold text-gray-900 mb-2">
-              ショートカットを削除しますか？
+              {t("shortcut.deleteConfirm")}
             </h3>
             <p className="text-sm text-gray-600 mb-6">
               「{shortcut.name || generateAutoName(selectedMemberIds)}
-              」を削除します。 この操作は取り消せません。
+              {t("shortcut.deleteConfirmMessage")}
             </p>
             <div className="flex gap-3">
               <button
@@ -180,14 +182,14 @@ export default function ShortcutEditModal({
                 disabled={isDeleting}
                 className="flex-1 py-3 px-4 bg-gray-100 text-gray-700 rounded-xl font-medium hover:bg-gray-200 transition-colors disabled:opacity-50 focus:outline-none focus:ring-0"
               >
-                キャンセル
+                {t("profile.cancel")}
               </button>
               <button
                 onClick={handleDelete}
                 disabled={isDeleting}
                 className="flex-1 py-3 px-4 bg-red-500 text-white rounded-xl font-medium hover:bg-red-600 transition-colors disabled:opacity-50 focus:outline-none focus:ring-0"
               >
-                {isDeleting ? "削除中..." : "削除"}
+                {isDeleting ? t("shortcut.deleting") : t("shortcut.delete")}
               </button>
             </div>
           </div>
@@ -209,7 +211,7 @@ export default function ShortcutEditModal({
           {/* ヘッダー */}
           <div className="flex items-center justify-between p-4 border-b border-gray-200">
             <h2 className="text-lg font-bold text-gray-900">
-              ショートカットを編集
+              {t("shortcut.edit")}
             </h2>
             <button
               onClick={handleClose}
@@ -225,7 +227,7 @@ export default function ShortcutEditModal({
             {/* ショートカット名入力 */}
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-2">
-                ショートカット名（任意）
+                {t("shortcut.nameOptional")}
               </label>
               <input
                 type="text"
@@ -234,7 +236,7 @@ export default function ShortcutEditModal({
                 placeholder={
                   selectedMemberIds.length > 0
                     ? generateAutoName(selectedMemberIds)
-                    : "名前を入力（未入力の場合は自動生成）"
+                    : t("shortcut.namePlaceholder")
                 }
                 className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 select-text"
                 disabled={isUpdating || isDeleting}
@@ -245,7 +247,7 @@ export default function ShortcutEditModal({
             <div className="mb-4">
               <div className="flex items-center justify-between mb-2">
                 <label className="block text-sm font-medium text-gray-700">
-                  メンバーを選択（{selectedMemberIds.length}人選択中）
+                  {t("shortcut.selectMembers", { n: selectedMemberIds.length })}
                 </label>
                 {friends.length > 0 && (
                   <button
@@ -264,15 +266,15 @@ export default function ShortcutEditModal({
                   >
                     {friends.length > 0 &&
                     selectedMemberIds.length === friends.length
-                      ? "全選択解除"
-                      : "全員を選択"}
+                      ? t("shortcut.deselectAll")
+                      : t("shortcut.selectAll")}
                   </button>
                 )}
               </div>
               <div className="max-h-[50vh] overflow-y-auto overflow-x-hidden">
                 {friends.length === 0 ? (
                   <p className="text-sm text-gray-500 text-center py-4">
-                    フォローしているユーザーがいません
+                    {t("friends.noFollowedUsers")}
                   </p>
                 ) : (
                   <div className="grid grid-cols-4 gap-2">
@@ -328,14 +330,14 @@ export default function ShortcutEditModal({
                   : "bg-black text-white hover:bg-gray-800"
               }`}
             >
-              {isUpdating ? "更新中..." : "更新"}
+              {isUpdating ? t("shortcut.updating") : t("shortcut.updateButton")}
             </button>
             <button
               onClick={() => setShowDeleteConfirm(true)}
               disabled={isUpdating || isDeleting}
               className="w-full py-3 px-4 rounded-xl font-bold bg-red-500 text-white hover:bg-red-600 transition-colors disabled:opacity-50 focus:outline-none focus:ring-0"
             >
-              削除
+              {t("shortcut.delete")}
             </button>
           </div>
         </div>

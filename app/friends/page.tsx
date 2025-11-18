@@ -6,6 +6,7 @@ import axios from "axios";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import FixedTabBar from "../components/FixedTabBar";
+import { useLanguage } from "../contexts/LanguageContext";
 
 interface User {
   id: string;
@@ -24,6 +25,7 @@ interface Friend {
 
 export default function FriendsPage() {
   const router = useRouter();
+  const { t } = useLanguage();
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [friends, setFriends] = useState<Set<string>>(new Set());
@@ -467,7 +469,7 @@ export default function FriendsPage() {
   if (loading) {
     return (
       <div className="min-h-screen bg-orange-50 flex items-center justify-center">
-        <div className="text-orange-500 text-lg">読み込み中...</div>
+        <div className="text-orange-500 text-lg">Loading...</div>
       </div>
     );
   }
@@ -489,27 +491,27 @@ export default function FriendsPage() {
               className="cursor-pointer"
             />
           </button>
-          <h1 className="text-xl font-bold text-orange-500">フォローする</h1>
+          <h1 className="text-xl font-bold text-orange-500">{t("friends.followTitle")}</h1>
           <div className="w-10" />
         </div>
         <p className="text-sm text-gray-600 text-center mt-2">
-          マッチしたい人を選びましょう。
+          {t("friends.selectToMatch")}
         </p>
         <p className="text-xs text-red-600 text-center mt-1 font-bold">
-          フォローしても相手には通知されません。
+          {t("friends.noNotification")}
         </p>
         {!isRestricted && (
           <p className="text-xs text-gray-500 text-center mt-1">
-            一度設定を変更すると1時間ロックされます。
+            {t("friends.lockInfo")}
           </p>
         )}
         {isRestricted ? (
           <p className="text-xs text-orange-500 text-center mt-1 font-bold">
-            フォロー: {friends.size}人
+            {t("friends.followCount", { n: friends.size })}
           </p>
         ) : (
           <p className="text-xs text-orange-500 text-center mt-1 font-bold">
-            フォロー: {friends.size}人
+            {t("friends.followCount", { n: friends.size })}
           </p>
         )}
 
@@ -517,7 +519,7 @@ export default function FriendsPage() {
         <div className="mt-3 relative">
           <input
             type="text"
-            placeholder="名前で検索..."
+            placeholder={t("friends.searchPlaceholder")}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full px-4 py-2 pr-10 border border-orange-200 rounded-full focus:ring-2 focus:ring-orange-300 focus:border-orange-300 outline-none text-base"
@@ -526,7 +528,7 @@ export default function FriendsPage() {
             <button
               onClick={() => setSearchQuery("")}
               className="absolute right-3 top-1/2 transform -translate-y-1/2 text-gray-400 hover:text-gray-600"
-              aria-label="検索をクリア"
+              aria-label={t("friends.clearSearch")}
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"
@@ -617,19 +619,19 @@ export default function FriendsPage() {
                             : "/icons/add.png"
                         }
                         alt={
-                          friends.has(user.id) ? "フォロー解除" : "フォロー追加"
+                          friends.has(user.id) ? t("friends.followRemove") : t("friends.followAdd")
                         }
                         width={20}
                         height={20}
                       />
                     )}
                     {processingUsers.has(user.id) ? (
-                      <span className="text-sm font-bold">処理中...</span>
+                      <span className="text-sm font-bold">{t("friends.processing")}</span>
                     ) : isRestricted &&
                       !(!friends.has(user.id) && isNewUser(user.id)) ? (
-                      <span className="text-sm font-bold">制限中</span>
+                      <span className="text-sm font-bold">{t("friends.restricted")}</span>
                     ) : friends.has(user.id) ? (
-                      <span className="text-sm font-bold">フォロー中</span>
+                      <span className="text-sm font-bold">{t("friends.following")}</span>
                     ) : null}
                   </button>
                 </div>
@@ -644,10 +646,10 @@ export default function FriendsPage() {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-2xl p-6 mx-4 max-w-sm w-full">
             <h3 className="text-lg font-bold text-orange-500 mb-2 text-center whitespace-nowrap leading-tight">
-              フォローはあなただけのものです。
+              {t("friends.followYourOwn")}
             </h3>
             <p className="text-base font-semibold text-gray-800 mb-5 text-center whitespace-nowrap leading-tight">
-              フォローしても相手には通知されません。
+              {t("friends.noNotification")}
             </p>
             <div className="space-y-2 flex flex-col items-center">
               <button
@@ -660,13 +662,13 @@ export default function FriendsPage() {
                 }}
                 className="w-full max-w-[260px] bg-orange-500 text-white px-4 py-2 rounded-xl text-sm font-semibold leading-snug text-center"
               >
-                理解したので次からはこの通知は表示しない
+                {t("friends.understand")}
               </button>
               <button
                 onClick={() => setShowInfoPopup(false)}
                 className="w-full max-w-[260px] bg-gray-200 text-gray-700 px-4 py-2 rounded-xl text-sm font-semibold text-center"
               >
-                閉じる
+                {t("friends.close")}
               </button>
             </div>
           </div>
@@ -680,13 +682,13 @@ export default function FriendsPage() {
             {warningType === "min_friends" && (
               <>
                 <h3 className="text-lg font-bold text-gray-800 mb-4 text-center">
-                  2人以上フォローしてください。
+                  {t("friends.followAtLeast2")}
                 </h3>
                 <button
                   onClick={handleWarningClose}
                   className="w-full bg-orange-500 text-white py-3 rounded-xl font-bold"
                 >
-                  閉じる
+                  {t("friends.close")}
                 </button>
               </>
             )}
@@ -709,7 +711,7 @@ export default function FriendsPage() {
                     onClick={handleWarningClose}
                     className="w-full bg-gray-200 text-gray-700 py-3 rounded-xl font-bold"
                   >
-                    フォロー状態を確認する
+                    {t("friends.checkFollowStatus")}
                   </button>
                 </div>
               </>
@@ -726,7 +728,7 @@ export default function FriendsPage() {
                   onClick={handleWarningClose}
                   className="w-full bg-orange-500 text-white py-3 rounded-xl font-bold"
                 >
-                  閉じる
+                  {t("friends.close")}
                 </button>
               </>
             )}
@@ -744,7 +746,7 @@ export default function FriendsPage() {
                   onClick={handleWarningClose}
                   className="w-full bg-orange-500 text-white py-3 rounded-xl font-bold"
                 >
-                  閉じる
+                  {t("friends.close")}
                 </button>
               </>
             )}

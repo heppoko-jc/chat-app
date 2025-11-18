@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import axios from "axios";
 import FixedTabBar from "../components/FixedTabBar";
 import { unsubscribePush } from "@/app/lib/push";
+import { useLanguage } from "../contexts/LanguageContext";
 
 function getInitials(name: string) {
   return name
@@ -35,6 +36,7 @@ interface User {
 
 export default function Profile() {
   const router = useRouter();
+  const { t } = useLanguage();
   const [user, setUser] = useState<User | null>(null);
   const [name, setName] = useState("");
   const [nameEn, setNameEn] = useState("");
@@ -80,7 +82,7 @@ export default function Profile() {
   const handleUpdateProfile = async () => {
     const token = localStorage.getItem("token");
     if (!token) {
-      alert("ログインしてください");
+      alert(t("profile.loginRequired"));
       return;
     }
     try {
@@ -100,28 +102,24 @@ export default function Profile() {
       setShowSavedPopup(true);
       setTimeout(() => setShowSavedPopup(false), 3000);
     } catch {
-      alert("プロフィールの更新に失敗しました");
+      alert(t("profile.updateFailed"));
     }
   };
 
   const handlePasswordChange = async () => {
     if (newPassword !== confirmPassword) {
-      setPasswordChangeMessage(
-        "新しいパスワードと確認パスワードが一致しません"
-      );
+      setPasswordChangeMessage(t("profile.passwordMismatch"));
       return;
     }
 
     if (newPassword.length < 6) {
-      setPasswordChangeMessage(
-        "新しいパスワードは6文字以上である必要があります"
-      );
+      setPasswordChangeMessage(t("profile.passwordTooShort"));
       return;
     }
 
     const token = localStorage.getItem("token");
     if (!token) {
-      alert("ログインしてください");
+      alert(t("profile.loginRequired"));
       return;
     }
 
@@ -132,7 +130,7 @@ export default function Profile() {
         { headers: { Authorization: `Bearer ${token}` } }
       );
 
-      setPasswordChangeMessage("パスワードが正常に変更されました");
+      setPasswordChangeMessage(t("profile.passwordChanged"));
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
@@ -144,7 +142,7 @@ export default function Profile() {
     } catch (error: unknown) {
       const message =
         (error as { response?: { data?: { error?: string } } }).response?.data
-          ?.error || "パスワードの変更に失敗しました";
+          ?.error || t("profile.passwordChangeFailed");
       setPasswordChangeMessage(message);
     }
   };
@@ -162,7 +160,7 @@ export default function Profile() {
     router.push("/login");
   };
 
-  if (!user) return <p className="p-5">Loading...</p>;
+  if (!user) return <p className="p-5">{t("profile.loading")}</p>;
 
   return (
     <div className="min-h-screen flex flex-col bg-gradient-to-br from-orange-50 via-white to-orange-100">
@@ -181,15 +179,15 @@ export default function Profile() {
         </div>
         {showSavedPopup && (
           <div className="fixed top-20 left-1/2 transform -translate-x-1/2 bg-green-500 text-white px-6 py-3 rounded-2xl shadow-lg z-50 font-bold text-base animate-fade-in">
-            変更を保存しました
+            {t("profile.saved")}
           </div>
         )}
         <div className="bg-white/90 rounded-2xl shadow-xl p-6 mb-6 flex flex-col gap-4">
           {isEditing ? (
             <>
               <div>
-                <label className="block mb-1 font-semibold text-gray-700">
-                  名前
+                  <label className="block mb-1 font-semibold text-gray-700">
+                  {t("profile.name")}
                 </label>
                 <input
                   type="text"
@@ -199,8 +197,8 @@ export default function Profile() {
                 />
               </div>
               <div>
-                <label className="block mb-1 font-semibold text-gray-700">
-                  自己紹介
+                  <label className="block mb-1 font-semibold text-gray-700">
+                  {t("profile.bio")}
                 </label>
                 <textarea
                   value={bio}
@@ -209,43 +207,43 @@ export default function Profile() {
                 />
               </div>
               <div className="border-t border-gray-200 pt-4 mt-4">
-                <p className="text-sm font-semibold text-gray-700 mb-3">
-                  検索用名前（検索しやすくするための追加の名前）
+                  <p className="text-sm font-semibold text-gray-700 mb-3">
+                  {t("profile.searchNames")}
                 </p>
                 <div className="space-y-3">
                   <div>
-                    <label className="block mb-1 font-semibold text-gray-700 text-sm">
-                      English Name（任意）
+                      <label className="block mb-1 font-semibold text-gray-700 text-sm">
+                      {t("profile.englishName")}
                     </label>
                     <input
                       type="text"
                       value={nameEn}
                       onChange={(e) => setNameEn(e.target.value)}
-                      placeholder="例: Taro Yamada"
+                      placeholder={t("profile.nameEnExample")}
                       className="border border-orange-200 p-2 w-full rounded-lg focus:ring-2 focus:ring-orange-200 outline-none text-base"
                     />
                   </div>
                   <div>
-                    <label className="block mb-1 font-semibold text-gray-700 text-sm">
-                      Japanese Name（任意）
+                      <label className="block mb-1 font-semibold text-gray-700 text-sm">
+                      {t("profile.japaneseName")}
                     </label>
                     <input
                       type="text"
                       value={nameJa}
                       onChange={(e) => setNameJa(e.target.value)}
-                      placeholder="例: やまだたろう"
+                      placeholder={t("profile.nameJaExample")}
                       className="border border-orange-200 p-2 w-full rounded-lg focus:ring-2 focus:ring-orange-200 outline-none text-base"
                     />
                   </div>
                   <div>
-                    <label className="block mb-1 font-semibold text-gray-700 text-sm">
-                      Other（任意）
+                      <label className="block mb-1 font-semibold text-gray-700 text-sm">
+                      {t("profile.otherName")}
                     </label>
                     <input
                       type="text"
                       value={nameOther}
                       onChange={(e) => setNameOther(e.target.value)}
-                      placeholder="例: ニックネーム、別名など"
+                      placeholder={t("profile.nameOtherExample")}
                       className="border border-orange-200 p-2 w-full rounded-lg focus:ring-2 focus:ring-orange-200 outline-none text-base"
                     />
                   </div>
@@ -257,26 +255,26 @@ export default function Profile() {
                   onClick={handleUpdateProfile}
                   className="bg-gradient-to-r from-orange-400 to-orange-500 text-white px-8 py-2 rounded-full shadow font-bold hover:from-orange-500 hover:to-orange-600 transition"
                 >
-                  保存
+                  {t("profile.save")}
                 </button>
                 <button
                   onClick={() => setIsEditing(false)}
                   className="bg-gray-300 text-gray-700 px-8 py-2 rounded-full shadow font-bold hover:bg-gray-400 transition"
                 >
-                  キャンセル
+                  {t("profile.cancel")}
                 </button>
               </div>
             </>
           ) : (
             <div className="flex flex-col items-center gap-3">
               <p className="text-gray-700 text-base text-center min-h-[2.5rem]">
-                {user.bio || "自己紹介未設定"}
+                {user.bio || t("profile.bioNotSet")}
               </p>
               <button
                 onClick={() => setIsEditing(true)}
                 className="bg-gradient-to-r from-orange-400 to-orange-500 text-white px-8 py-2 rounded-full shadow font-bold hover:from-orange-500 hover:to-orange-600 transition mt-2"
               >
-                編集
+                {t("profile.edit")}
               </button>
               <button
                 onClick={() => setShowPasswordChange(true)}
@@ -288,7 +286,7 @@ export default function Profile() {
                 onClick={() => setShowLogoutPopup(true)}
                 className="bg-red-500 text-white px-8 py-2 rounded-full shadow font-bold hover:bg-red-600 transition mt-1"
               >
-                ログアウト
+                {t("profile.logout")}
               </button>
             </div>
           )}
@@ -297,53 +295,53 @@ export default function Profile() {
           <div className="fixed inset-0 flex items-center justify-center bg-black/40 z-50">
             <div className="bg-white p-6 rounded-2xl shadow-2xl w-11/12 max-w-sm">
               <h3 className="text-lg font-bold mb-4 text-center">
-                パスワード変更
+                {t("profile.changePassword")}
               </h3>
 
               <div className="space-y-4">
                 <div>
                   <label className="block mb-1 font-semibold text-gray-700">
-                    現在のパスワード
+                    {t("profile.currentPassword")}
                   </label>
                   <input
                     type="password"
                     value={currentPassword}
                     onChange={(e) => setCurrentPassword(e.target.value)}
                     className="border border-orange-200 p-2 w-full rounded-lg focus:ring-2 focus:ring-orange-200 outline-none"
-                    placeholder="現在のパスワードを入力"
+                    placeholder={t("profile.currentPasswordPlaceholder")}
                   />
                 </div>
 
                 <div>
                   <label className="block mb-1 font-semibold text-gray-700">
-                    新しいパスワード
+                    {t("profile.newPassword")}
                   </label>
                   <input
                     type="password"
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
                     className="border border-orange-200 p-2 w-full rounded-lg focus:ring-2 focus:ring-orange-200 outline-none"
-                    placeholder="新しいパスワードを入力"
+                    placeholder={t("profile.newPasswordPlaceholder")}
                   />
                 </div>
 
                 <div>
                   <label className="block mb-1 font-semibold text-gray-700">
-                    新しいパスワード（確認）
+                    {t("profile.confirmPassword")}
                   </label>
                   <input
                     type="password"
                     value={confirmPassword}
                     onChange={(e) => setConfirmPassword(e.target.value)}
                     className="border border-orange-200 p-2 w-full rounded-lg focus:ring-2 focus:ring-orange-200 outline-none"
-                    placeholder="新しいパスワードを再入力"
+                    placeholder={t("profile.confirmPasswordPlaceholder")}
                   />
                 </div>
 
                 {passwordChangeMessage && (
                   <div
                     className={`text-center text-sm font-medium ${
-                      passwordChangeMessage.includes("正常に変更")
+                      passwordChangeMessage.includes(t("profile.passwordChanged"))
                         ? "text-green-600"
                         : "text-red-600"
                     }`}
@@ -358,7 +356,7 @@ export default function Profile() {
                   onClick={handlePasswordChange}
                   className="bg-blue-500 text-white px-8 py-2 rounded-full shadow font-bold hover:bg-blue-600 transition"
                 >
-                  変更
+                  {t("profile.change")}
                 </button>
                 <button
                   onClick={() => {
@@ -370,7 +368,7 @@ export default function Profile() {
                   }}
                   className="bg-gray-300 text-gray-700 px-8 py-2 rounded-full shadow font-bold hover:bg-gray-400 transition"
                 >
-                  キャンセル
+                  {t("profile.cancel")}
                 </button>
               </div>
             </div>
@@ -381,23 +379,23 @@ export default function Profile() {
           <div className="fixed inset-0 flex items-center justify-center bg-black/40 z-50">
             <div className="bg-white p-6 rounded-2xl shadow-2xl w-11/12 max-w-sm">
               <h3 className="text-lg font-bold mb-2 text-center">
-                ログアウト確認
+                {t("profile.logoutConfirm")}
               </h3>
               <p className="mb-4 text-center text-gray-700">
-                本当にログアウトしますか？
+                {t("profile.logoutConfirmMessage")}
               </p>
               <div className="flex justify-center gap-3 mt-2">
                 <button
                   onClick={handleLogout}
                   className="bg-red-500 text-white px-8 py-2 rounded-full shadow font-bold hover:bg-red-600 transition"
                 >
-                  ログアウト
+                  {t("profile.logout")}
                 </button>
                 <button
                   onClick={() => setShowLogoutPopup(false)}
                   className="bg-gray-300 text-gray-700 px-8 py-2 rounded-full shadow font-bold hover:bg-gray-400 transition"
                 >
-                  キャンセル
+                  {t("profile.cancel")}
                 </button>
               </div>
             </div>

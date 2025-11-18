@@ -4,6 +4,7 @@
 import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 import webpush, { PushSubscription as WebPushSubscription } from "web-push";
+import { translate } from "@/lib/translations";
 
 const prisma = new PrismaClient();
 
@@ -298,6 +299,16 @@ export async function GET() {
     let usersNotified = 0;
 
     // 4) 通知送信（各ユーザーに対して最新の購読のみに送信）
+    // ユーザーの言語設定を一括取得
+    const users = await prisma.user.findMany({
+      where: { id: { in: Array.from(allTargetUserIds) } },
+      select: { id: true, language: true },
+    });
+    const userLanguages = new Map<string, "ja" | "en">();
+    users.forEach((u) => {
+      userLanguages.set(u.id, (u.language === "en" ? "en" : "ja") as "ja" | "en");
+    });
+
     for (const [userId, subs] of subsByUser) {
       // 最新の購読のみを取得（既にソート済み）
       const latestSub = subs.length > 0 ? [subs[0]] : [];
@@ -306,17 +317,20 @@ export async function GET() {
 
       const unmatchedCount = userUnmatchedCounts.get(userId) || 0;
       const feedNewCount = userFeedNewCounts.get(userId) || 0;
+      const userLanguage = userLanguages.get(userId) || "ja";
 
       // 未マッチメッセージ通知
       if (unmatchedCount > 0) {
-        const notificationBody =
+        const notificationBody = translate(
+          userLanguage,
           unmatchedCount === 1
-            ? "あなたに誰かからメッセージが来ています（24時間以内）"
-            : "あなたに誰かから複数のメッセージが来ています（24時間以内）";
+            ? "notification.digestUnmatchedSingle"
+            : "notification.digestUnmatchedMultiple"
+        );
 
         const payload = JSON.stringify({
           type: "digest_unmatched",
-          title: "新着メッセージ",
+          title: translate(userLanguage, "notification.digestNewMessage"),
           body: notificationBody,
           url: "/notifications",
           icon: "/icons/icon-192x192.png",
@@ -344,8 +358,10 @@ export async function GET() {
       if (feedNewCount > 0) {
         const feedPayload = JSON.stringify({
           type: "digest_feed",
-          title: "新着メッセージ",
-          body: `今日はこれまでに${feedNewCount}件の新しいメッセージが追加されました`,
+          title: translate(userLanguage, "notification.digestNewMessage"),
+          body: translate(userLanguage, "notification.digestFeedNew", {
+            n: feedNewCount,
+          }),
           url: "/main",
           icon: "/icons/icon-192x192.png",
           badge: "/icons/icon-144x144.png",

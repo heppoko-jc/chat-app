@@ -46,11 +46,21 @@ export async function GET(req: NextRequest) {
       nameEn: string | null;
       nameJa: string | null;
       nameOther: string | null;
+      language: string | null;
     };
 
-    const { name, nameEn, nameJa, nameOther, email, bio } = typedUser;
+    const { name, nameEn, nameJa, nameOther, email, bio, language } = typedUser;
 
-    return NextResponse.json({ name, nameEn, nameJa, nameOther, email, bio });
+    return NextResponse.json({ 
+      user: { name, nameEn, nameJa, nameOther, email, bio, language },
+      name, 
+      nameEn, 
+      nameJa, 
+      nameOther, 
+      email, 
+      bio,
+      language 
+    });
   } catch (error) {
     // ここにはほとんど入らないはずですが、念のため
     console.error("Profile fetch unexpected error:", error);

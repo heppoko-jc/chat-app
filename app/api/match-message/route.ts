@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import webpush, { PushSubscription as WebPushSubscription } from "web-push";
 import { io as ioClient } from "socket.io-client";
 import { shouldHideMessage } from "@/lib/content-filter";
+import { translate } from "@/lib/translations";
 
 const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL!;
 
@@ -51,6 +52,13 @@ async function sendSentMessageNotification(
   maxRetries: number = 3
 ): Promise<void> {
   try {
+    // 受信者の言語設定を取得
+    const receiver = await prisma.user.findUnique({
+      where: { id: receiverId },
+      select: { language: true },
+    });
+    const receiverLanguage = (receiver?.language === "en" ? "en" : "ja") as "ja" | "en";
+
     // フォロー関係を判定
     const isFollowing = await prisma.friend.findFirst({
       where: {
@@ -59,11 +67,14 @@ async function sendSentMessageNotification(
       },
     });
 
-    // 通知タイトルと本文を決定
-    const title = "新規メッセージ";
-    const body = isFollowing
-      ? "誰かから匿名のメッセージが届きました（たった今）"
-      : "フォローしてない誰かから匿名のメッセージが届きました（たった今）";
+    // 通知タイトルと本文を決定（受信者の言語設定に基づく）
+    const title = translate(receiverLanguage, "notification.newMessage");
+    const body = translate(
+      receiverLanguage,
+      isFollowing
+        ? "notification.anonymousMessageFollowing"
+        : "notification.anonymousMessageNotFollowing"
+    );
 
     // 受信者のプッシュ購読を取得
     const subs = await prisma.pushSubscription.findMany({

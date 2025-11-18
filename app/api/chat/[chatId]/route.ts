@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { io as ioClient } from "socket.io-client";
 import webpush, { PushSubscription as WebPushSubscription } from "web-push";
 import { shouldHideMessage } from "@/lib/content-filter";
+import { translate } from "@/lib/translations";
 
 const SOCKET_URL =
   process.env.SOCKET_URL ||
@@ -165,6 +166,13 @@ export async function POST(req: NextRequest) {
     }
 
     // → Web Push 通知
+    // 受信者の言語設定を取得
+    const receiver = await prisma.user.findUnique({
+      where: { id: receiverId },
+      select: { language: true },
+    });
+    const receiverLanguage = (receiver?.language === "en" ? "en" : "ja") as "ja" | "en";
+
     const subs = await prisma.pushSubscription.findMany({
       where: { userId: receiverId, isActive: true },
     });
@@ -172,7 +180,9 @@ export async function POST(req: NextRequest) {
     const payload = JSON.stringify({
       type: "message",
       chatId,
-      title: `${newMessage.sender.name} さんから新着メッセージ`,
+      title: translate(receiverLanguage, "notification.newChatMessage", {
+        name: newMessage.sender.name,
+      }),
       body: newMessage.content,
     });
 

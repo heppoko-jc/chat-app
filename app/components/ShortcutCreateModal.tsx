@@ -4,6 +4,7 @@
 
 import React, { useState, useEffect } from "react";
 import axios from "axios";
+import { useLanguage } from "../contexts/LanguageContext";
 
 interface User {
   id: string;
@@ -26,6 +27,7 @@ export default function ShortcutCreateModal({
   userId,
   friends,
 }: ShortcutCreateModalProps) {
+  const { t } = useLanguage();
   const [selectedMemberIds, setSelectedMemberIds] = useState<string[]>([]);
   const [shortcutName, setShortcutName] = useState("");
   const [isCreating, setIsCreating] = useState(false);
@@ -81,7 +83,7 @@ export default function ShortcutCreateModal({
     }
     const firstName = selectedUsers[0].name;
     const restCount = selectedUsers.length - 1;
-    return `${firstName}ほか${restCount}人`;
+    return `${firstName}${t("shortcut.andOthers", { n: restCount })}`;
   };
 
   // ショートカットを作成
@@ -107,7 +109,7 @@ export default function ShortcutCreateModal({
       handleClose();
     } catch (error) {
       console.error("ショートカット作成エラー:", error);
-      alert("ショートカットの作成に失敗しました");
+      alert(t("shortcut.createError"));
     } finally {
       setIsCreating(false);
     }
@@ -130,7 +132,7 @@ export default function ShortcutCreateModal({
         {/* ヘッダー */}
         <div className="relative flex items-center justify-center p-4 border-b border-gray-200">
           <h2 className="text-lg font-bold text-gray-900 text-center">
-            ショートカットを作成
+            {t("shortcut.create")}
           </h2>
           <button
             onClick={handleClose}
@@ -144,7 +146,7 @@ export default function ShortcutCreateModal({
         {/* 説明文 */}
         <div className="px-4 pt-3 pb-2">
           <p className="text-sm text-gray-600 text-center">
-            ショートカットは自分だけのもので、作成しても友だちには通知されません。
+            {t("shortcut.createDescription")}
           </p>
         </div>
 
@@ -153,7 +155,7 @@ export default function ShortcutCreateModal({
           {/* ショートカット名入力 */}
           <div className="mb-4">
             <label className="block text-sm font-medium text-gray-700 mb-2">
-              ショートカット名（任意）
+              {t("shortcut.nameOptional")}
             </label>
             <input
               type="text"
@@ -162,7 +164,7 @@ export default function ShortcutCreateModal({
               placeholder={
                 selectedMemberIds.length > 0
                   ? generateAutoName(selectedMemberIds)
-                  : "名前を入力（未入力の場合は自動生成）"
+                  : t("shortcut.namePlaceholder")
               }
               className="w-full px-4 py-2 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-orange-500 select-text"
               disabled={isCreating}
@@ -173,7 +175,7 @@ export default function ShortcutCreateModal({
           <div className="mb-4">
             <div className="flex items-center justify-between mb-2">
               <label className="block text-sm font-medium text-gray-700">
-                メンバーを選択（{selectedMemberIds.length}人選択中）
+                {t("shortcut.selectMembers", { n: selectedMemberIds.length })}
               </label>
               {friends.length > 0 && (
                 <button
@@ -188,15 +190,15 @@ export default function ShortcutCreateModal({
                 >
                   {friends.length > 0 &&
                   selectedMemberIds.length === friends.length
-                    ? "全選択解除"
-                    : "全員を選択"}
+                    ? t("shortcut.deselectAll")
+                    : t("shortcut.selectAll")}
                 </button>
               )}
             </div>
             <div className="max-h-[50vh] overflow-y-auto overflow-x-hidden">
               {friends.length === 0 ? (
                 <p className="text-sm text-gray-500 text-center py-4">
-                  フォローしているユーザーがいません
+                    {t("friends.noFollowedUsers")}
                 </p>
               ) : (
                 <div className="grid grid-cols-4 gap-2">
@@ -246,7 +248,7 @@ export default function ShortcutCreateModal({
                 : "bg-black text-white hover:bg-gray-800"
             }`}
           >
-            {isCreating ? "作成中..." : "作成"}
+            {isCreating ? t("shortcut.creating") : t("shortcut.createButton")}
           </button>
         </div>
       </div>

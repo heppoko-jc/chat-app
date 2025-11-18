@@ -7,12 +7,14 @@ import Image from "next/image";
 import FixedTabBar from "../components/FixedTabBar";
 import { useRouter } from "next/navigation";
 import { useChatData, PresetMessage } from "../contexts/ChatDataContext";
+import { useLanguage } from "../contexts/LanguageContext";
 import MatchNotification from "../components/MatchNotification";
 import ErrorNotification from "../components/ErrorNotification";
 import socket, { setSocketUserId } from "../socket";
 import type { ChatItem } from "../chat-list/page";
 import ShortcutCreateModal from "../components/ShortcutCreateModal";
 import ShortcutEditModal from "../components/ShortcutEditModal";
+import TranslatedMessage from "../components/TranslatedMessage";
 
 interface User {
   id: string;
@@ -69,8 +71,8 @@ function getShortcutBgColor(shortcutId: string) {
   return `hsl(${h}, 75%, 65%)`;
 }
 
-// 最後に送信された時刻を「何分前、何時間前、何日前」で表示する関数
-function formatLastSentAt(lastSentAt: string): string {
+// 最後に送信された時刻を「何分前、何時間前、何日前」で表示する関数（翻訳対応）
+function formatLastSentAt(lastSentAt: string, t: (key: string, params?: Record<string, string | number>) => string): string {
   const now = new Date();
   const sentDate = new Date(lastSentAt);
   const diffMs = now.getTime() - sentDate.getTime();
@@ -79,22 +81,22 @@ function formatLastSentAt(lastSentAt: string): string {
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
 
   if (diffMinutes < 1) {
-    return "たった今";
+    return t("time.justNow");
   } else if (diffMinutes < 60) {
-    return `${diffMinutes}分前`;
+    return t("time.minutesAgo", { n: diffMinutes });
   } else if (diffHours < 24) {
-    return `${diffHours}時間前`;
+    return t("time.hoursAgo", { n: diffHours });
   } else if (diffDays < 7) {
-    return `${diffDays}日前`;
+    return t("time.daysAgo", { n: diffDays });
   } else if (diffDays < 30) {
     const weeks = Math.floor(diffDays / 7);
-    return `${weeks}週間前`;
+    return t("time.weeksAgo", { n: weeks });
   } else if (diffDays < 365) {
     const months = Math.floor(diffDays / 30);
-    return `${months}ヶ月前`;
+    return t("time.monthsAgo", { n: months });
   } else {
     const years = Math.floor(diffDays / 365);
-    return `${years}年前`;
+    return t("time.yearsAgo", { n: years });
   }
 }
 
@@ -162,6 +164,7 @@ const mergeQueue = (
 
 export default function Main() {
   const router = useRouter();
+  const { t, toggleLanguage } = useLanguage();
 
   // 全員選択機能の表示/非表示（将来の利用のため非表示に設定）
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -1613,14 +1616,13 @@ export default function Main() {
           // 送信アニメーションを表示せず、エラー通知を表示
           setErrorNotification({
             isVisible: true,
-            message:
-              "非表示設定されている言葉が含まれるため、送信されませんでした。",
+            message: t("main.hiddenKeywordError"),
           });
         } else {
           // その他のエラーの場合
           setErrorNotification({
             isVisible: true,
-            message: "メッセージの送信に失敗しました。",
+            message: t("main.sendError"),
           });
         }
       } finally {
@@ -1704,7 +1706,8 @@ export default function Main() {
             </button>
           </div>
           <h1
-            className="text-xl font-extrabold text-black tracking-tight whitespace-nowrap"
+            onClick={toggleLanguage}
+            className="text-xl font-extrabold text-black tracking-tight whitespace-nowrap cursor-pointer hover:opacity-70 transition-opacity"
             style={{ fontFamily: "'Poppins', sans-serif" }}
           >
             Happy Ice Cream
@@ -1732,23 +1735,21 @@ export default function Main() {
 
         {friends.size === 0 ? (
           <p className="text-[15px] text-gray-700 text-center leading-snug mt-1 font-medium">
-            24時間以内にマッチできるかな？
+            {t("main.matchWithin24h")}
             <br />
-            ことばと相手を選んで送ってみましょう。
+            {t("main.selectWordsAndPerson")}
             <br />
-            まずは
-            <span className="text-black font-bold">フォロー</span>
-            を登録してください
+            {t("main.firstFollow")}
+            <span className="text-black font-bold">{t("main.follow")}</span>
+            {t("main.followToRegister")}
           </p>
         ) : (
           <p className="text-[15px] text-gray-700 text-center leading-snug mt-1 font-medium">
-            24時間以内にマッチできるかな？
+            {t("main.matchWithin24h")}
             <br />
-            ことばと相手を選んで送ってみましょう。
+            {t("main.selectWordsAndPerson")}
             <br />
-            登録した
-            <span className="text-black font-bold">{friends.size}</span>
-            人が誰かに送ったメッセージです👇
+            {t("main.registeredFriends", { n: friends.size })}
           </p>
         )}
       </div>
@@ -1834,7 +1835,7 @@ export default function Main() {
                 type="text"
                 value={inputMessage}
                 onChange={(e) => setInputMessage(e.target.value)}
-                placeholder="メッセージを入力"
+                placeholder={t("main.inputMessage")}
                 className="flex-1 px-3 py-2 rounded-xl border border-gray-300 text-base bg-white focus:outline-none"
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && inputMessage.trim()) {
@@ -2008,7 +2009,7 @@ export default function Main() {
                 onClick={() => handleLinkAction("select")}
                 className="w-full bg-orange-200 hover:bg-orange-300 text-orange-800 font-bold py-3 px-4 rounded-xl transition"
               >
-                このリンクをマッチメッセージとして選ぶ
+                {t("main.selectThisLink")}
               </button>
               <button
                 onClick={() => setShowLinkActionMenu(false)}
@@ -2128,7 +2129,7 @@ export default function Main() {
                           {linkData.title}
                         </p>
                         <p className="text-xs text-orange-600 mt-1">
-                          このリンクをマッチメッセージとして選ぶ
+                          {t("main.selectThisLink")}
                         </p>
                       </div>
                     </button>
@@ -2202,12 +2203,15 @@ export default function Main() {
                           // リンク+テキストの場合
                           <>
                             <p className="text-base font-medium text-gray-800 truncate">
-                              {msg.content
-                                .replace(
-                                  /^(https?:\/\/[a-zA-Z0-9\-._~:\/?#[\]@!$&'()*+,;=%]+)/,
-                                  ""
-                                )
-                                .trim()}
+                              <TranslatedMessage
+                                text={msg.content
+                                  .replace(
+                                    /^(https?:\/\/[a-zA-Z0-9\-._~:\/?#[\]@!$&'()*+,;=%]+)/,
+                                    ""
+                                  )
+                                  .trim()}
+                                sourceLang="ja"
+                              />
                             </p>
                             <p className="text-[10px] text-gray-500 mt-1 leading-tight">
                               {msg.linkTitle}
@@ -2217,18 +2221,23 @@ export default function Main() {
                           // 通常のリンクまたはテキストの場合
                           <>
                             <p className="text-sm font-bold text-gray-800">
-                              {msg.linkTitle || msg.content}
+                              {msg.linkTitle || (
+                                <TranslatedMessage
+                                  text={msg.content}
+                                  sourceLang="ja"
+                                />
+                              )}
                             </p>
                           </>
                         )}
                         <div className="flex gap-1 mt-1">
                           {msg.senderCount > 2 && (
                             <p className="text-xs text-black font-medium">
-                              {msg.senderCount}人が送信しました
+                              {t("main.peopleSent", { n: msg.senderCount })}
                             </p>
                           )}
                           <p className="text-xs text-gray-400">
-                            {formatLastSentAt(msg.lastSentAt)}
+                            {formatLastSentAt(msg.lastSentAt, t)}
                           </p>
                         </div>
                       </div>
@@ -2283,21 +2292,21 @@ export default function Main() {
                         selectedMessage === msg.content ? "#f3f4f6" : "#ffffff",
                     }}
                   >
-                    <span
+                    <TranslatedMessage
+                      text={msg.content}
+                      sourceLang="ja"
                       className={`whitespace-pre-wrap break-words ${
                         selectedMessage === msg.content ? "font-black" : ""
                       }`}
-                    >
-                      {msg.content}
-                    </span>
+                    />
                     <div className="flex gap-1 items-center mt-2">
                       {msg.senderCount > 2 && (
                         <span className="text-xs text-black font-medium">
-                          {msg.senderCount}人が送信しました
+                          {t("main.peopleSent", { n: msg.senderCount })}
                         </span>
                       )}
                       <span className="text-xs text-gray-400">
-                        {formatLastSentAt(msg.lastSentAt)}
+                        {formatLastSentAt(msg.lastSentAt, t)}
                       </span>
                     </div>
                   </button>
@@ -2318,7 +2327,7 @@ export default function Main() {
             <div className="mb-3 relative">
               <input
                 type="text"
-                placeholder="名前で検索..."
+                placeholder={t("main.searchByName")}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full px-4 py-2 pr-10 border border-gray-300 rounded-full focus:ring-2 focus:ring-gray-400 focus:border-gray-400 outline-none text-base bg-white"
@@ -2353,7 +2362,7 @@ export default function Main() {
                 onClick={() => setShowShortcutCreateModal(true)}
                 className="w-full py-3 rounded-xl text-base font-bold border-2 border-dashed border-gray-300 bg-white text-gray-700 hover:bg-gray-50 transition-colors"
               >
-                ＋ 自分だけのショートカットを作成
+                ＋ {t("main.createShortcut")}
               </button>
             </div>
 
@@ -2481,7 +2490,7 @@ export default function Main() {
                             </span>
                           </div>
                           <p className="text-xs text-gray-500 mt-0.5 truncate">
-                            ショートカット
+                            {t("main.shortcut")}
                           </p>
                         </div>
 
@@ -2522,7 +2531,7 @@ export default function Main() {
                     className="mb-4"
                   />
                   <p className="text-lg font-bold text-black text-center">
-                    フォローしましょう↑！
+                    {t("main.followUp")}
                   </p>
                 </div>
               ) : (
@@ -2593,7 +2602,7 @@ export default function Main() {
                 : "bg-transparent text-gray-600 hover:text-gray-900"
             }`}
           >
-            マッチメッセージ
+            {t("main.matchMessage")}
           </button>
           <button
             onClick={() => setStep("select-recipients")}
@@ -2603,7 +2612,7 @@ export default function Main() {
                 : "bg-transparent text-gray-600 hover:text-gray-900"
             }`}
           >
-            送信先リスト
+            {t("main.recipientList")}
           </button>
         </div>
       </div>
@@ -2612,12 +2621,13 @@ export default function Main() {
       {isSent && sentMessageInfo && (
         <div className="fixed top-[50px] left-0 right-0 z-30 overflow-hidden px-2 neon-gradient">
           <div className="w-max whitespace-nowrap animate-slide-in font-bold text-white text-lg px-4 py-2">
-            「{sentMessageInfo.message}」が
-            {sentMessageInfo.recipients
-              .map((id) => users.find((u) => u.id === id)?.name)
-              .filter(Boolean)
-              .join(", ")}
-            に送信されました！
+            {t("main.messageSentTo", {
+              message: sentMessageInfo.message,
+              recipients: sentMessageInfo.recipients
+                .map((id) => users.find((u) => u.id === id)?.name)
+                .filter(Boolean)
+                .join(", "),
+            })}
           </div>
         </div>
       )}

@@ -8,12 +8,14 @@ import axios from "axios";
 import socket from "../../socket";
 import Image from "next/image";
 import { useChatData } from "../../contexts/ChatDataContext";
+import { useLanguage } from "../../contexts/LanguageContext";
 import {
   extractUrlAndText,
   fetchLinkMetadata,
   isLinkMessage,
 } from "../../lib/link-utils";
 import ErrorNotification from "../../components/ErrorNotification";
+import TranslatedMessage from "../../components/TranslatedMessage";
 import type { ChatItem } from "../../chat-list/page";
 
 type BadgeCapableNavigator = Navigator & {
@@ -93,6 +95,7 @@ type MatchPayload = {
 export default function Chat() {
   const router = useRouter();
   const params = useParams();
+  const { t } = useLanguage();
   const id = Array.isArray(params?.chatId)
     ? params.chatId[0]
     : (params?.chatId as string);
@@ -1009,7 +1012,7 @@ export default function Chat() {
               onClick={() => isLinkMessage(m.message) && handleMatchTap(m)}
             >
               <span className="text-orange-600 font-bold">
-                マッチしたことば:
+                {t("chat.matchedWords")}
               </span>
               {linkPreview ? (
                 // リンクプレビュー表示
@@ -1044,7 +1047,10 @@ export default function Chat() {
                       const urlAndText = extractUrlAndText(m.message);
                       return urlAndText && urlAndText.text ? (
                         <p className="text-xs text-orange-600 truncate mt-0.5">
-                          {urlAndText.text}
+                          <TranslatedMessage
+                            text={urlAndText.text}
+                            sourceLang="ja"
+                          />
                         </p>
                       ) : null;
                     })()}
@@ -1055,12 +1061,14 @@ export default function Chat() {
                 <div className="mt-1 flex items-center gap-2">
                   <div className="w-4 h-4 border-2 border-orange-300 border-t-orange-500 rounded-full animate-spin flex-shrink-0"></div>
                   <span className="text-xs text-orange-600">
-                    リンク情報を取得中...
+                    {t("chat.fetchingLinkInfo")}
                   </span>
                 </div>
               ) : (
                 // 通常のメッセージ表示
-                <div className="mt-1">「{m.message}」</div>
+                <div className="mt-1">
+                  「<TranslatedMessage text={m.message} sourceLang="ja" />」
+                </div>
               )}
             </div>
           </div>
@@ -1097,7 +1105,7 @@ export default function Chat() {
               onClick={() => isLinkMessage(m.message) && handleMatchTap(m)}
             >
               <span className="text-orange-600 font-bold">
-                マッチしたことば:
+                {t("chat.matchedWords")}
               </span>
               {linkPreview ? (
                 // リンクプレビュー表示
@@ -1132,7 +1140,10 @@ export default function Chat() {
                       const urlAndText = extractUrlAndText(m.message);
                       return urlAndText && urlAndText.text ? (
                         <p className="text-xs text-orange-600 truncate mt-0.5">
-                          {urlAndText.text}
+                          <TranslatedMessage
+                            text={urlAndText.text}
+                            sourceLang="ja"
+                          />
                         </p>
                       ) : null;
                     })()}
@@ -1143,12 +1154,14 @@ export default function Chat() {
                 <div className="mt-1 flex items-center gap-2">
                   <div className="w-4 h-4 border-2 border-orange-300 border-t-orange-500 rounded-full animate-spin flex-shrink-0"></div>
                   <span className="text-xs text-orange-600">
-                    リンク情報を取得中...
+                    {t("chat.fetchingLinkInfo")}
                   </span>
                 </div>
               ) : (
                 // 通常のメッセージ表示
-                <div className="mt-1">「{m.message}」</div>
+                <div className="mt-1">
+                  「<TranslatedMessage text={m.message} sourceLang="ja" />」
+                </div>
               )}
             </div>
           </div>
@@ -1371,7 +1384,10 @@ export default function Chat() {
                       const urlAndText = extractUrlAndText(matchMessage);
                       return urlAndText && urlAndText.text ? (
                         <p className="text-xs text-gray-500 truncate">
-                          {urlAndText.text}
+                          <TranslatedMessage
+                            text={urlAndText.text}
+                            sourceLang="ja"
+                          />
                         </p>
                       ) : null;
                     })()}
@@ -1393,7 +1409,7 @@ export default function Chat() {
                 <div className="flex items-center gap-2">
                   <div className="w-4 h-4 border-2 border-gray-300 border-t-orange-500 rounded-full animate-spin flex-shrink-0"></div>
                   <span className="text-xs text-gray-500">
-                    リンク情報を取得中...
+                    {t("chat.fetchingLinkInfo")}
                   </span>
                   {matchMessageMatchedAt && (
                     <span className="text-xs text-gray-400 flex-shrink-0">
@@ -1410,7 +1426,7 @@ export default function Chat() {
               ) : (
                 // 通常のメッセージ表示
                 <span className="text-xs text-gray-500">
-                  「{matchMessage}」
+                  「<TranslatedMessage text={matchMessage} sourceLang="ja" />」
                   {matchMessageMatchedAt
                     ? ` / ${new Date(matchMessageMatchedAt).toLocaleTimeString(
                         "ja-JP",

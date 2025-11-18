@@ -8,6 +8,7 @@ import axios from "axios";
 import Image from "next/image";
 import FixedTabBar from "../components/FixedTabBar";
 import socket, { setSocketUserId } from "../socket";
+import { useLanguage } from "../contexts/LanguageContext";
 import {
   extractUrlAndText,
   fetchLinkMetadata,
@@ -91,7 +92,7 @@ function getBgColor(name: string) {
   const h = hash % 360;
   return `hsl(${h}, 70%, 80%)`;
 }
-function formatChatDate(dateString: string | null): string {
+function formatChatDate(dateString: string | null, t: (key: string, params?: Record<string, string | number>) => string): string {
   if (!dateString) return "";
   const now = new Date();
   const date = new Date(dateString);
@@ -102,13 +103,13 @@ function formatChatDate(dateString: string | null): string {
   }
   const yesterday = new Date(now);
   yesterday.setDate(now.getDate() - 1);
-  if (yesterday.toDateString() === date.toDateString()) return "昨日";
+  if (yesterday.toDateString() === date.toDateString()) return t("chatList.yesterday");
   for (let i = 2; i <= 5; i++) {
     const prev = new Date(now);
     prev.setDate(now.getDate() - i);
     if (prev.toDateString() === date.toDateString()) {
-      const week = ["日", "月", "火", "水", "木", "金", "土"];
-      return week[date.getDay()];
+      const dayIndex = date.getDay();
+      return t(`chatList.weekDay${dayIndex}`);
     }
   }
   return `${date.getMonth() + 1}/${date.getDate()}`;
@@ -126,6 +127,7 @@ function sortTimestampOf(chat: ChatItem): number {
 // ===== 本体 =====
 export default function ChatList() {
   const router = useRouter();
+  const { t } = useLanguage();
   const [chats, setChats] = useState<ChatItem[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [unreadCounts, setUnreadCounts] = useState<{
@@ -193,7 +195,7 @@ export default function ChatList() {
           ...c,
           latestMessageAt: latestRaw,
           latestMessageAtRaw: latestRaw,
-          latestMessageAtDisplay: formatChatDate(latestRaw),
+          latestMessageAtDisplay: formatChatDate(latestRaw, t),
         };
       });
 
@@ -570,7 +572,7 @@ export default function ChatList() {
         {!isOpenedMatchStateLoaded || (isLoading && chats.length === 0) ? (
           <div className="flex flex-col items-center justify-center py-12">
             <div className="w-8 h-8 border-4 border-gray-300 border-t-blue-500 rounded-full animate-spin mb-4"></div>
-            <p className="text-gray-500 font-medium">読み込み中…</p>
+            <p className="text-gray-500 font-medium">{t("chatList.loading")}</p>
           </div>
         ) : chats.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-12">
@@ -578,10 +580,10 @@ export default function ChatList() {
               <span className="text-2xl">💬</span>
             </div>
             <p className="text-gray-500 font-medium">
-              まだチャットがありません
+              {t("chatList.noChats")}
             </p>
             <p className="text-gray-400 text-sm mt-1">
-              メイン画面でメッセージを送信してみてください
+              {t("chatList.sendMessageHint")}
             </p>
           </div>
         ) : (
@@ -627,7 +629,7 @@ export default function ChatList() {
                       <div className="flex flex-col items-end min-w-[60px]">
                         <span className="text-xs text-gray-400 font-medium whitespace-nowrap">
                           {chat.latestMessageAtDisplay ||
-                            formatChatDate(chat.latestMessageAt)}
+                            formatChatDate(chat.latestMessageAt, t)}
                         </span>
                         {unreadCounts[chat.chatId] > 0 && !isLatestFromMe && (
                           <span className="mt-1 flex items-center justify-center w-7 h-7 rounded-full bg-gradient-to-r from-green-400 to-green-500 text-white text-xs font-bold shadow-md">
@@ -704,7 +706,7 @@ export default function ChatList() {
                                   : "text-gray-500"
                               }`}
                             >
-                              リンク情報を取得中...
+                              {t("chat.fetchingLinkInfo")}
                             </span>
                           </div>
                         ) : (
@@ -721,7 +723,7 @@ export default function ChatList() {
                         )
                       ) : (
                         <p className="text-sm text-gray-400">
-                          まだマッチしていません
+                          {t("chatList.notMatched")}
                         </p>
                       )}
                     </div>
