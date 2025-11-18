@@ -292,6 +292,35 @@ export default function Chat() {
     fetchLatestMessages();
   }, [id, setChatData]);
 
+  // ===== チャット画面を開いた時に最新のchatListを再取得（マッチ情報を反映） =====
+  useEffect(() => {
+    if (!id || id.startsWith("dummy-")) return;
+
+    const fetchLatestChatList = async () => {
+      try {
+        const userId =
+          typeof window !== "undefined" ? localStorage.getItem("userId") : null;
+        if (!userId) return;
+
+        console.log(`🔄 チャット ${id} のchatListを再取得中...`);
+        const response = await axios.get("/api/chat-list", {
+          headers: { userId },
+        });
+
+        if (response.data) {
+          console.log(
+            `✅ チャット ${id} のchatListを取得完了: ${response.data.length}件`
+          );
+          setChatList(response.data);
+        }
+      } catch (error) {
+        console.error(`❌ チャット ${id} のchatList取得エラー:`, error);
+      }
+    };
+
+    fetchLatestChatList();
+  }, [id, setChatList]);
+
   // 一覧からヘッダー/マッチ履歴を初期化
   const chatInList = chatList?.find((c) => c.chatId === id);
   useEffect(() => {
