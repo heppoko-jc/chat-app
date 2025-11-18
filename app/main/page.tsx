@@ -1880,7 +1880,7 @@ export default function Main() {
 
         <button
           onClick={canSend ? handleSend : handleMessageIconClick}
-          className="flex-none p-0 focus:outline-none"
+          className="flex-none p-0 transition-transform duration-200 ease-out active:scale-125 focus:outline-none"
           disabled={isSending}
           style={{ minWidth: 28, minHeight: 28 }}
         >
