@@ -80,6 +80,19 @@ export default function Login() {
     }
   }, []);
 
+  // URLのクエリパラメータからidentifierを取得してメールアドレスフィールドに設定
+  useEffect(() => {
+    if (typeof window !== "undefined" && !email) {
+      const urlParams = new URLSearchParams(window.location.search);
+      const identifierParam = urlParams.get("identifier");
+      if (identifierParam) {
+        // URLデコードしてメールアドレスフィールドに設定
+        const decodedIdentifier = decodeURIComponent(identifierParam);
+        setEmail(decodedIdentifier);
+      }
+    }
+  }, [email]);
+
   const handleLogin = async () => {
     console.log("🔵 ログイン開始", { email: email.substring(0, 3) + "***" });
 

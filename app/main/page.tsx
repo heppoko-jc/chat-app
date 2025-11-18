@@ -8,6 +8,7 @@ import FixedTabBar from "../components/FixedTabBar";
 import { useRouter } from "next/navigation";
 import { useChatData, PresetMessage } from "../contexts/ChatDataContext";
 import MatchNotification from "../components/MatchNotification";
+import ErrorNotification from "../components/ErrorNotification";
 import socket, { setSocketUserId } from "../socket";
 import type { ChatItem } from "../chat-list/page";
 import ShortcutCreateModal from "../components/ShortcutCreateModal";
@@ -188,6 +189,13 @@ export default function Main() {
   const [isInputMode, setIsInputMode] = useState(false);
   const [inputMessage, setInputMessage] = useState("");
   const { presetMessages, setPresetMessages, setChatList } = useChatData();
+  const [errorNotification, setErrorNotification] = useState<{
+    isVisible: boolean;
+    message: string;
+  }>({
+    isVisible: false,
+    message: "",
+  });
   const [isSending, setIsSending] = useState(false);
   const [linkPreview, setLinkPreview] = useState<{
     url: string;
@@ -1447,24 +1455,7 @@ export default function Main() {
       }
 
       setIsSending(true);
-      setSentMessageInfo({
-        message: messageToSend,
-        recipients: [...selectedRecipientIds],
-      });
-      setIsSent(true);
-
       const recipientsToSend = [...selectedRecipientIds];
-
-      // UI リセット（入力モードは維持）
-      setSelectedMessage(null);
-      setSelectedRecipientIds([]);
-      setSelectedShortcutIds(new Set());
-      setStep("select-message");
-      // setIsInputMode(false); // 入力モードを維持してキーボードを開いたままにする
-      setInputMessage(""); // 入力フィールドはクリア
-      setSelectedMessageLinkData(null);
-      setLinkPreview(null);
-      setLinkComment("");
 
       try {
         // /api/match-message 内でPresetMessageの処理を行うため、
@@ -1501,6 +1492,24 @@ export default function Main() {
           requestData
         );
 
+        // 送信成功時のみ送信アニメーションを表示
+        setSentMessageInfo({
+          message: messageToSend,
+          recipients: [...selectedRecipientIds],
+        });
+        setIsSent(true);
+
+        // UI リセット（入力モードは維持）
+        setSelectedMessage(null);
+        setSelectedRecipientIds([]);
+        setSelectedShortcutIds(new Set());
+        setStep("select-message");
+        // setIsInputMode(false); // 入力モードを維持してキーボードを開いたままにする
+        setInputMessage(""); // 入力フィールドはクリア
+        setSelectedMessageLinkData(null);
+        setLinkPreview(null);
+        setLinkComment("");
+
         // 成立 → 自分側も即キューに積む（後送/先送どちらでも）
         if (matchResponse.data.message === "Match created!") {
           const matchedUserId = recipientsToSend.find(
@@ -1534,9 +1543,25 @@ export default function Main() {
         }, 4000);
       } catch (error) {
         console.error("送信エラー:", error);
-        alert("メッセージの送信に失敗しました");
-        setIsSent(false);
-        setSentMessageInfo(null);
+
+        // 非表示キーワードが検出された場合
+        if (
+          axios.isAxiosError(error) &&
+          error.response?.data?.error === "hidden_keyword_detected"
+        ) {
+          // 送信アニメーションを表示せず、エラー通知を表示
+          setErrorNotification({
+            isVisible: true,
+            message:
+              "非表示設定されている言葉が含まれるため、送信されませんでした。",
+          });
+        } else {
+          // その他のエラーの場合
+          setErrorNotification({
+            isVisible: true,
+            message: "メッセージの送信に失敗しました。",
+          });
+        }
       } finally {
         setIsSending(false);
       }
@@ -2520,6 +2545,13 @@ export default function Main() {
         matchedUser={queueHead?.matchedUser ?? undefined}
         message={queueHead?.message ?? undefined}
         chatId={queueHead?.chatId}
+      />
+
+      {/* エラー通知 */}
+      <ErrorNotification
+        isVisible={errorNotification.isVisible}
+        message={errorNotification.message}
+        onClose={() => setErrorNotification({ isVisible: false, message: "" })}
       />
 
       {/* ショートカット作成モーダル */}

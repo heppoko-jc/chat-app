@@ -580,12 +580,12 @@ export async function POST(req: NextRequest) {
     }
 
     // マッチ未成立
-    // ✅ 非表示メッセージの場合はマッチ成立させない
+    // ✅ 非表示メッセージの場合はエラーを返す
     if (isHidden) {
-      return NextResponse.json({
-        message: "Message sent (hidden)",
-        hidden: true,
-      });
+      return NextResponse.json(
+        { error: "hidden_keyword_detected" },
+        { status: 400 }
+      );
     }
 
     return NextResponse.json({ message: "Message sent, waiting for a match!" });

@@ -108,7 +108,7 @@ io.on("connection", (socket) => {
   });
 });
 
-// ✅ WebSocket サーバーを `3001` ポートで起動
-httpServer.listen(3001, () => {
-  console.log("🚀 WebSocket サーバー起動 (ポート: 3001)");
+// ✅ WebSocket サーバーを `3001` ポートで起動（すべてのインターフェースでリッスン）
+httpServer.listen(3001, "0.0.0.0", () => {
+  console.log("🚀 WebSocket サーバー起動 (ポート: 3001, ホスト: 0.0.0.0)");
 });
