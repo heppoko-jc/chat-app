@@ -5,9 +5,9 @@
   "type": "module",
   "private": true,
   "scripts": {
-    "dev": "next dev -H 0.0.0.0",
+    "dev": "next dev",
     "build": "next build",
-    "start": "next start -H 0.0.0.0",
+    "start": "next start",
     "lint": "next lint",
     "socket": "node --loader ts-node/esm server.ts",
     "start-socket": "node --loader ts-node/esm server.ts",
