@@ -14,6 +14,7 @@ import {
   isLinkMessage,
 } from "../../lib/link-utils";
 import ErrorNotification from "../../components/ErrorNotification";
+import type { ChatItem } from "../chat-list/page";
 
 type BadgeCapableNavigator = Navigator & {
   serviceWorker?: {
@@ -144,6 +145,9 @@ export default function Chat() {
 
   // 受信重複ガード
   const seenIdsRef = useRef<Set<string>>(new Set());
+  
+  // chatList再取得のフォールバック処理用フラグ（無限ループ防止）
+  const hasRetriedChatListRef = useRef<boolean>(false);
 
   // ===== 未送信メッセージの保存・復元 =====
   useEffect(() => {
@@ -253,6 +257,11 @@ export default function Chat() {
     if (id?.startsWith("dummy-")) router.replace("/chat-list");
   }, [id, router]);
 
+  // チャットIDが変更された時にフラグをリセット
+  useEffect(() => {
+    hasRetriedChatListRef.current = false;
+  }, [id]);
+
   // ===== チャット画面を開いた時に最新メッセージを再取得 =====
   useEffect(() => {
     if (!id || id.startsWith("dummy-")) return;
@@ -303,7 +312,7 @@ export default function Chat() {
         if (!userId) return;
 
         console.log(`🔄 チャット ${id} のchatListを再取得中...`);
-        const response = await axios.get("/api/chat-list", {
+        const response = await axios.get<ChatItem[]>("/api/chat-list", {
           headers: { userId },
         });
 
@@ -311,7 +320,17 @@ export default function Chat() {
           console.log(
             `✅ チャット ${id} のchatListを取得完了: ${response.data.length}件`
           );
+          
+          // chatListを更新（これによりchatInListが自動的に更新され、既存のuseEffectが発火）
           setChatList(response.data);
+          
+          // 該当チャットが見つかったか確認
+          const foundChat = response.data.find((c) => c.chatId === id);
+          if (!foundChat) {
+            console.log(
+              `⚠️ チャット ${id} がchatListに見つかりませんでした。初回マッチの可能性があります。`
+            );
+          }
         }
       } catch (error) {
         console.error(`❌ チャット ${id} のchatList取得エラー:`, error);
@@ -327,8 +346,49 @@ export default function Chat() {
     console.log("🔍 chatInList changed:", chatInList);
     if (!chatInList) {
       console.log("🔍 No chatInList found, skipping initialization");
+      
+      // 初回マッチ時のフォールバック処理：chatListを再取得
+      // ただし、既に再取得を試みた場合はスキップ（無限ループ防止）
+      if (!hasRetriedChatListRef.current && chatList !== null) {
+        hasRetriedChatListRef.current = true;
+        console.log("🔄 chatInListが見つからないため、chatListを再取得します...");
+        
+        const retryFetchChatList = async () => {
+          try {
+            const userId =
+              typeof window !== "undefined"
+                ? localStorage.getItem("userId")
+                : null;
+            if (!userId) return;
+
+            // 少し待ってから再取得（サーバー側のデータ更新を待つ）
+            await new Promise((resolve) => setTimeout(resolve, 1000));
+            
+            const response = await axios.get<ChatItem[]>("/api/chat-list", {
+              headers: { userId },
+            });
+
+            if (response.data) {
+              console.log(
+                `✅ フォールバック: chatListを再取得完了: ${response.data.length}件`
+              );
+              setChatList(response.data);
+              // フラグをリセット（次回のチャットID変更時に再試行可能にする）
+              hasRetriedChatListRef.current = false;
+            }
+          } catch (error) {
+            console.error("❌ フォールバック: chatList再取得エラー:", error);
+            hasRetriedChatListRef.current = false;
+          }
+        };
+
+        retryFetchChatList();
+      }
       return;
     }
+
+    // chatInListが見つかった場合、フラグをリセット
+    hasRetriedChatListRef.current = false;
 
     const matchHistoryFromList = chatInList.matchHistory || [];
     console.log("🔍 matchHistory from chatList:", matchHistoryFromList);
@@ -345,7 +405,7 @@ export default function Chat() {
 
     console.log("🔍 Setting sorted matchHistory:", sortedHistory);
     setMatchHistory(sortedHistory);
-  }, [chatInList]);
+  }, [chatInList, chatList, setChatList]);
 
   // ===== ルーム参加 & 受信購読（newMessage） =====
   useEffect(() => {
