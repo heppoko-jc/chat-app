@@ -25,7 +25,7 @@ interface Friend {
 
 export default function FriendsPage() {
   const router = useRouter();
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [users, setUsers] = useState<User[]>([]);
   const [friends, setFriends] = useState<Set<string>>(new Set());
@@ -494,23 +494,23 @@ export default function FriendsPage() {
           <h1 className="text-xl font-bold text-orange-500">{t("friends.followTitle")}</h1>
           <div className="w-10" />
         </div>
-        <p className="text-sm text-gray-600 text-center mt-2">
+        <p className={`text-sm text-gray-600 ${language === "en" ? "text-left" : "text-center"} mt-2`}>
           {t("friends.selectToMatch")}
         </p>
-        <p className="text-xs text-red-600 text-center mt-1 font-bold">
+        <p className={`text-xs text-red-600 ${language === "en" ? "text-left" : "text-center"} mt-1 font-bold`}>
           {t("friends.noNotification")}
         </p>
         {!isRestricted && (
-          <p className="text-xs text-gray-500 text-center mt-1">
+          <p className={`text-xs text-gray-500 ${language === "en" ? "text-left" : "text-center"} mt-1`}>
             {t("friends.lockInfo")}
           </p>
         )}
         {isRestricted ? (
-          <p className="text-xs text-orange-500 text-center mt-1 font-bold">
+          <p className={`text-xs text-orange-500 ${language === "en" ? "text-left" : "text-center"} mt-1 font-bold`}>
             {t("friends.followCount", { n: friends.size })}
           </p>
         ) : (
-          <p className="text-xs text-orange-500 text-center mt-1 font-bold">
+          <p className={`text-xs text-orange-500 ${language === "en" ? "text-left" : "text-center"} mt-1 font-bold`}>
             {t("friends.followCount", { n: friends.size })}
           </p>
         )}

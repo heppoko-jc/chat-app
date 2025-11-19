@@ -65,7 +65,7 @@ function formatDate(iso: string) {
 
 export default function Notifications() {
   const router = useRouter();
-  const { t } = useLanguage();
+  const { t, language } = useLanguage();
 
   // ──────────── ステート管理 ────────────
   const [sentMessages, setSentMessages] = useState<SentMessage[]>([]);
@@ -256,7 +256,7 @@ export default function Notifications() {
           </button>
           <h1 className="text-2xl font-bold mt-1">History</h1>
         </div>
-        <h2 className="text-sm text-center">
+        <h2 className={`text-sm ${language === "en" ? "text-left" : "text-center"}`}>
           {t("notifications.history")}
           <br />
           {t("notifications.cancelInfo")}

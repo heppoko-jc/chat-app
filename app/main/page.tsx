@@ -164,7 +164,7 @@ const mergeQueue = (
 
 export default function Main() {
   const router = useRouter();
-  const { t, toggleLanguage } = useLanguage();
+  const { t, toggleLanguage, language } = useLanguage();
 
   // 全員選択機能の表示/非表示（将来の利用のため非表示に設定）
   // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -1734,7 +1734,7 @@ export default function Main() {
         </div>
 
         {friends.size === 0 ? (
-          <p className="text-[15px] text-gray-700 text-center leading-snug mt-1 font-medium">
+          <p className={`text-[15px] text-gray-700 ${language === "en" ? "text-left" : "text-center"} leading-snug mt-1 font-medium`}>
             {t("main.matchWithin24h")}
             <br />
             {t("main.selectWordsAndPerson")}
@@ -1744,7 +1744,7 @@ export default function Main() {
             {t("main.followToRegister")}
           </p>
         ) : (
-          <p className="text-[15px] text-gray-700 text-center leading-snug mt-1 font-medium">
+          <p className={`text-[15px] text-gray-700 ${language === "en" ? "text-left" : "text-center"} leading-snug mt-1 font-medium`}>
             {t("main.matchWithin24h")}
             <br />
             {t("main.selectWordsAndPerson")}
