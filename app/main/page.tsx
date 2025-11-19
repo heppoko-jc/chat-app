@@ -15,6 +15,7 @@ import type { ChatItem } from "../chat-list/page";
 import ShortcutCreateModal from "../components/ShortcutCreateModal";
 import ShortcutEditModal from "../components/ShortcutEditModal";
 import TranslatedMessage from "../components/TranslatedMessage";
+import EnglishModePopup from "../components/EnglishModePopup";
 
 interface User {
   id: string;
@@ -2684,6 +2685,7 @@ export default function Main() {
         />
       )}
 
+      <EnglishModePopup />
       <FixedTabBar />
     </>
   );
