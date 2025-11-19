@@ -795,14 +795,28 @@ export default function Chat() {
   };
 
   // 入力欄ブラー時（キーボードが閉じた後のスクロール調整）
+  // ただし、送信中はキーボードを閉じないようにする
   const handleBlur = () => {
+    // 送信中はキーボードを閉じない（フォーカスを戻す）
+    if (isSending) {
+      requestAnimationFrame(() => {
+        inputRef.current?.focus();
+      });
+      return;
+    }
     setTimeout(() => {
       scrollToBottom();
     }, 300);
   };
 
   // ===== 送信 =====
-  const handleSend = async () => {
+  const handleSend = async (e?: React.MouseEvent<HTMLButtonElement>) => {
+    // イベントの伝播を防ぐ
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+
     if (!id || id.startsWith("dummy-") || !newMessage.trim() || isSending)
       return;
     const senderId = localStorage.getItem("userId");
@@ -810,6 +824,9 @@ export default function Chat() {
       alert("ログインしてください");
       return;
     }
+
+    // 送信前にフォーカスを保持（キーボードが閉じないように）
+    const shouldKeepFocus = document.activeElement === inputRef.current;
 
     setIsSending(true);
     const contentToSend = newMessage;
@@ -832,7 +849,14 @@ export default function Chat() {
 
       if (seenIdsRef.current.has(saved.id)) {
         setIsSending(false);
-        setTimeout(() => inputRef.current?.focus(), 0); // キーボードは閉じない
+        // キーボードを確実に開いたままにする
+        if (shouldKeepFocus) {
+          requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+              inputRef.current?.focus();
+            });
+          });
+        }
         return;
       }
 
@@ -923,11 +947,14 @@ export default function Chat() {
       }
     } finally {
       setIsSending(false);
-      setTimeout(() => {
-        inputRef.current?.focus(); // キーボード閉じさせない
-        autoResizeTextarea();
-        scrollToBottom();
-      }, 0);
+      // キーボードを確実に開いたままにする（二重のrequestAnimationFrameで確実に実行）
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          inputRef.current?.focus();
+          autoResizeTextarea();
+          scrollToBottom();
+        });
+      });
     }
   };
 
@@ -1482,6 +1509,7 @@ export default function Chat() {
           }}
         />
         <button
+          type="button"
           onClick={handleSend}
           className="p-3 rounded-2xl bg-green-400 hover:bg-green-500 active:bg-green-600 transition-colors shadow-lg active:scale-95 flex-shrink-0"
           disabled={isSending || !newMessage.trim()}
