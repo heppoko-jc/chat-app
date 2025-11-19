@@ -796,14 +796,26 @@ export default function Chat() {
 
   // 入力欄ブラー時（キーボードが閉じた後のスクロール調整）
   // ただし、送信中はキーボードを閉じないようにする
-  const handleBlur = () => {
+  const handleBlur = (e: React.FocusEvent<HTMLTextAreaElement>) => {
     // 送信中はキーボードを閉じない（フォーカスを戻す）
     if (isSending) {
-      requestAnimationFrame(() => {
+      // 即座にフォーカスを戻す（モバイルブラウザの挙動を考慮）
+      setTimeout(() => {
         inputRef.current?.focus();
-      });
+      }, 0);
       return;
     }
+    
+    // フォーカスが関連する要素（footer内）に移った場合はスキップ
+    const relatedTarget = e.relatedTarget as HTMLElement;
+    if (relatedTarget && relatedTarget.closest('footer')) {
+      // footer内の要素にフォーカスが移った場合は、キーボードを閉じない
+      setTimeout(() => {
+        inputRef.current?.focus();
+      }, 0);
+      return;
+    }
+    
     setTimeout(() => {
       scrollToBottom();
     }, 300);
@@ -828,7 +840,14 @@ export default function Chat() {
     // 送信前にフォーカスを保持（キーボードが閉じないように）
     const shouldKeepFocus = document.activeElement === inputRef.current;
 
+    // ★ 即座にフラグを設定（handleBlurより先に実行されるように）
     setIsSending(true);
+    
+    // テキスタリアのフォーカスを維持（ボタンクリックでフォーカスが外れないように）
+    requestAnimationFrame(() => {
+      inputRef.current?.focus();
+    });
+
     const contentToSend = newMessage;
     // メッセージはAPI呼び出し成功時のみクリアする
 
@@ -838,6 +857,11 @@ export default function Chat() {
         content: contentToSend,
       });
       const saved = res.data;
+
+      // ★ メッセージをクリアする前にフォーカスを確実に維持
+      if (shouldKeepFocus && inputRef.current) {
+        inputRef.current.focus();
+      }
 
       // 送信成功時のみメッセージをクリア
       setNewMessage("");
@@ -854,6 +878,10 @@ export default function Chat() {
           requestAnimationFrame(() => {
             requestAnimationFrame(() => {
               inputRef.current?.focus();
+              // 空文字列でもフォーカスを維持
+              if (inputRef.current && !inputRef.current.value) {
+                inputRef.current.focus();
+              }
             });
           });
         }
@@ -1510,6 +1538,17 @@ export default function Chat() {
         />
         <button
           type="button"
+          onMouseDown={(e) => {
+            // フォーカスがテキスタリアから外れるのを防ぐ
+            e.preventDefault();
+            // テキスタリアにフォーカスを戻す
+            inputRef.current?.focus();
+          }}
+          onPointerDown={(e) => {
+            // モバイルでも同様に対応
+            e.preventDefault();
+            inputRef.current?.focus();
+          }}
           onClick={handleSend}
           className="p-3 rounded-2xl bg-green-400 hover:bg-green-500 active:bg-green-600 transition-colors shadow-lg active:scale-95 flex-shrink-0"
           disabled={isSending || !newMessage.trim()}
