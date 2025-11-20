@@ -8,6 +8,7 @@ import {
   fetchLinkMetadata,
   isLinkMessage,
 } from "../lib/link-utils";
+import { useLanguage } from "../contexts/LanguageContext";
 
 interface MatchNotificationProps {
   isVisible: boolean;
@@ -29,6 +30,7 @@ export default function MatchNotification({
   message,
   chatId, // 追加
 }: MatchNotificationProps) {
+  const { t, language } = useLanguage();
   const [isAnimating, setIsAnimating] = useState(false);
   const [linkPreview, setLinkPreview] = useState<{
     url: string;
@@ -123,9 +125,9 @@ export default function MatchNotification({
             />
           </div>
           <h2 className="text-xl font-bold text-gray-800 mb-1">
-            マッチング成立！
+            {t("matchNotification.title")}
           </h2>
-          <p className="text-sm text-gray-600">同じことばをシェアしました</p>
+          <p className="text-sm text-gray-600">{t("matchNotification.subtitle")}</p>
         </div>
 
         {/* マッチ情報 */}
@@ -143,13 +145,13 @@ export default function MatchNotification({
             </div>
             <div>
               <p className="font-semibold text-gray-800">
-                {matchedUser?.name ?? "Guest"} さん
+                {matchedUser?.name ?? "Guest"}{language === "ja" ? t("matchNotification.nameSuffix") : ""}
               </p>
-              <p className="text-sm text-gray-600">とマッチしました</p>
+              <p className="text-sm text-gray-600">{t("matchNotification.matchedWith")}</p>
             </div>
           </div>
           <div className="bg-white rounded-xl p-3">
-            <p className="text-sm text-gray-600 mb-1">シェアしたことば</p>
+            <p className="text-sm text-gray-600 mb-1">{t("matchNotification.sharedWords")}</p>
             {linkPreview ? (
               // リンクプレビュー表示
               <div className="flex items-center gap-3">
@@ -196,7 +198,7 @@ export default function MatchNotification({
                   <div className="w-4 h-4 border-2 border-gray-300 border-t-orange-500 rounded-full animate-spin"></div>
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm text-gray-500">リンク情報を取得中...</p>
+                  <p className="text-sm text-gray-500">{t("chat.fetchingLinkInfo")}</p>
                 </div>
               </div>
             ) : (
@@ -214,14 +216,14 @@ export default function MatchNotification({
             onClick={(e) => handleClose(e)}
             className="flex-1 bg-gray-200 text-gray-700 py-3 rounded-2xl font-semibold transition-transform duration-200 ease-out active:scale-95"
           >
-            閉じる
+            {t("matchNotification.close")}
           </button>
           {chatId && onGoToChat && (
             <button
               onClick={(e) => handleGoToChat(e)}
               className="flex-1 bg-gradient-to-r from-orange-400 to-orange-500 text-white py-3 rounded-2xl font-semibold transition-transform duration-200 ease-out active:scale-95"
             >
-              チャットへ
+              {t("matchNotification.goToChat")}
             </button>
           )}
         </div>

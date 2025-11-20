@@ -162,6 +162,15 @@ const translations: Record<Language, Record<string, string>> = {
     "notification.digestUserNew": "今日あなたに新しいメッセージが{n}件届きました",
     "notification.digestGlobalTitle": "きょうのことば",
     "notification.digestGlobalBody": "今日はこれまでに{n}件の新しいことばが追加されました",
+    
+    // マッチ通知
+    "matchNotification.title": "マッチング成立！",
+    "matchNotification.subtitle": "同じことばをシェアしました",
+    "matchNotification.nameSuffix": "さん",
+    "matchNotification.matchedWith": "とマッチしました",
+    "matchNotification.sharedWords": "シェアしたことば",
+    "matchNotification.close": "閉じる",
+    "matchNotification.goToChat": "チャットへ",
   },
   en: {
     // 時間表示
@@ -311,6 +320,15 @@ const translations: Record<Language, Record<string, string>> = {
     "notification.digestUserNew": "You received {n} new messages today",
     "notification.digestGlobalTitle": "Today's Words",
     "notification.digestGlobalBody": "{n} new words have been added today",
+    
+    // マッチ通知
+    "matchNotification.title": "Match established!",
+    "matchNotification.subtitle": "You shared the same words",
+    "matchNotification.nameSuffix": "",
+    "matchNotification.matchedWith": "matched with you",
+    "matchNotification.sharedWords": "Shared words",
+    "matchNotification.close": "Close",
+    "matchNotification.goToChat": "Go to Chat",
   },
 };
 

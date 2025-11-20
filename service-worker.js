@@ -249,8 +249,15 @@ self.addEventListener("push", (event) => {
         : type === "sent_message"
         ? `sent_message:${senderId ?? ""}` // sent_message 用のタグ
         : `${type}:${chatId ?? ""}`; // 既存の tag を踏襲
+      
+      // リアルタイム通知（message, sent_message, match）には文言を追加
+      const isRealtimeNotification = type === "message" || type === "sent_message" || type === "match";
+      const notificationBody = isRealtimeNotification
+        ? `${body}\n\nリアルタイム通知\n（この通知はフェイクではありません）`
+        : body;
+      
       return self.registration.showNotification(title, {
-        body,
+        body: notificationBody,
         tag: tagBase,
         data: payload,
         // badge: '/icons/badge.png', // 必要なら用意

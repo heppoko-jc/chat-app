@@ -47,7 +47,7 @@ export default function EnglishModePopup() {
             onClick={handleDontShowAgain}
             className="w-full bg-gray-200 text-gray-700 py-3 rounded-2xl font-semibold transition-transform duration-200 ease-out active:scale-95"
           >
-            Don't show this again
+            Don&apos;t show this again
           </button>
           <button
             onClick={handleClose}
