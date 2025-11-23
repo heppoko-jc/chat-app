@@ -8,6 +8,7 @@ import axios from "axios";
 import FixedTabBar from "../components/FixedTabBar";
 import { unsubscribePush } from "@/app/lib/push";
 import { useLanguage } from "../contexts/LanguageContext";
+import NotificationSettings from "../components/NotificationSettings";
 
 function getInitials(name: string) {
   return name
@@ -401,6 +402,11 @@ export default function Profile() {
             </div>
           </div>
         )}
+
+        {/* 通知設定セクション */}
+        <div className="mt-6">
+          <NotificationSettings />
+        </div>
       </div>
       <FixedTabBar />
     </div>

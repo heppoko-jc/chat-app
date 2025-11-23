@@ -10,7 +10,9 @@ export default function PushRegistrar() {
     if (typeof window === "undefined") return;
     if (!("serviceWorker" in navigator)) return;
 
-    (async () => {
+    const MAX_RETRIES = 3;
+
+    const attemptSubscribe = async (attempt: number = 0) => {
       try {
         const isProd = process.env.NODE_ENV === "production";
 
@@ -28,14 +30,71 @@ export default function PushRegistrar() {
 
         // 本番: next-pwa が登録した SW を待ってから push 購読
         const token = localStorage.getItem("token");
-        if (!token) return; // 未ログインなら購読しない
+        if (!token) {
+          console.info("[PushRegistrar] No token; skip subscribe");
+          return; // 未ログインなら購読しない
+        }
 
-        await navigator.serviceWorker.ready;
-        await subscribePush();
+        // Service Worker の準備を待つ（タイムアウト付き）
+        await Promise.race([
+          navigator.serviceWorker.ready,
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error("SW timeout")), 10000)
+          ),
+        ]);
+
+        const result = await subscribePush();
+
+        if (!result.success && attempt < MAX_RETRIES) {
+          // リトライ可能なエラーの場合
+          const retryableReasons = [
+            "api_error",
+            "exception",
+            "no_vapid_key",
+            "server_side",
+          ];
+
+          if (retryableReasons.includes(result.reason || "")) {
+            const delay = Math.min(1000 * Math.pow(2, attempt), 5000);
+            console.log(
+              `[PushRegistrar] Retrying in ${delay}ms (attempt ${
+                attempt + 1
+              }/${MAX_RETRIES}) - reason: ${result.reason}`
+            );
+            setTimeout(() => attemptSubscribe(attempt + 1), delay);
+            return;
+          }
+        }
+
+        if (result.success) {
+          console.log("[PushRegistrar] Successfully subscribed");
+        } else {
+          console.warn(
+            `[PushRegistrar] Subscription failed: ${result.reason}`,
+            result.error
+          );
+        }
       } catch (e) {
         console.error("[PushRegistrar] failed:", e);
+
+        // タイムアウトなどでリトライ可能な場合
+        if (
+          attempt < MAX_RETRIES &&
+          e instanceof Error &&
+          e.message === "SW timeout"
+        ) {
+          const delay = Math.min(1000 * Math.pow(2, attempt), 5000);
+          console.log(
+            `[PushRegistrar] Retrying after timeout in ${delay}ms (attempt ${
+              attempt + 1
+            }/${MAX_RETRIES})`
+          );
+          setTimeout(() => attemptSubscribe(attempt + 1), delay);
+        }
       }
-    })();
+    };
+
+    attemptSubscribe();
   }, []);
 
   return null;

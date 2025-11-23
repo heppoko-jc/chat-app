@@ -133,7 +133,14 @@ export default function Login() {
       console.log("✅ ローカルストレージに保存完了");
 
       try {
-        await subscribePush();
+        const pushResult = await subscribePush();
+        if (!pushResult.success) {
+          console.warn(
+            "⚠️ プッシュ通知の登録に失敗しましたが、ログインは続行します:",
+            pushResult.reason,
+            pushResult.error
+          );
+        }
       } catch (pushError) {
         console.warn(
           "⚠️ プッシュ通知の登録に失敗しましたが、ログインは続行します:",
