@@ -4,7 +4,6 @@
 
 import { useState, useEffect } from "react";
 import { subscribePush } from "@/app/lib/push";
-import { useLanguage } from "../contexts/LanguageContext";
 
 type SubscriptionStatus =
   | "idle"
@@ -20,7 +19,6 @@ interface SubscriptionState {
 }
 
 export default function NotificationSettings() {
-  const { t } = useLanguage();
   const [status, setStatus] = useState<SubscriptionState>({
     type: "idle",
     message: "",
@@ -162,7 +160,8 @@ export default function NotificationSettings() {
   const isPWA =
     typeof window !== "undefined" &&
     (window.matchMedia("(display-mode: standalone)").matches ||
-      (window.navigator as any).standalone === true);
+      ((window.navigator as Navigator & { standalone?: boolean })
+        .standalone === true));
 
   return (
     <div className="p-4 space-y-4 bg-white rounded-lg border border-gray-200">

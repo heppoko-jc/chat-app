@@ -1642,6 +1642,7 @@ export default function Main() {
     linkPreview,
     users,
     shortcuts,
+    t,
   ]);
 
   const canSend =
