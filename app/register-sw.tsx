@@ -14,6 +14,14 @@ export default function RegisterSW() {
     navigator.serviceWorker
       .register(url, { scope: '/' })
       .then((reg) => {
+        // 既存のService Workerがある場合、更新を強制
+        if (reg.installing || reg.waiting || reg.active) {
+          // 新しいService Workerが待機中の場合、すぐに有効化
+          if (reg.waiting) {
+            reg.waiting.postMessage({ type: 'SKIP_WAITING' })
+          }
+        }
+        
         // すぐ更新確認（Safari対策）
         reg.update().catch(() => {})
         const onVis = () => {

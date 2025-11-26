@@ -5,7 +5,19 @@ importScripts(
 
 self.addEventListener("install", () => self.skipWaiting());
 self.addEventListener("activate", (event) => {
-  event.waitUntil(clients.claim());
+  event.waitUntil(
+    Promise.all([
+      clients.claim(),
+      // 古いキャッシュをクリアして強制的に更新
+      caches.keys().then((cacheNames) => {
+        return Promise.all(
+          cacheNames.map((cacheName) => {
+            return caches.delete(cacheName);
+          })
+        );
+      }),
+    ])
+  );
 });
 
 // Workbox InjectManifest：ビルド時に __WB_MANIFEST が差し込まれる
