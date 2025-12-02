@@ -91,13 +91,13 @@ export async function POST(req: NextRequest) {
     // デバッグ: 最初の購読データの形式を確認
     if (subscriptions.length > 0) {
       const firstSub = subscriptions[0];
-      const subData = firstSub.subscription as any;
+      const subData = firstSub.subscription as Record<string, unknown>;
       console.log("🔍 First subscription sample:", {
         endpoint: firstSub.endpoint.substring(0, 50) + "...",
-        hasKeys: !!subData?.keys,
-        keysStructure: subData?.keys ? {
-          hasP256dh: !!subData.keys.p256dh,
-          hasAuth: !!subData.keys.auth,
+        hasKeys: !!(subData?.keys && typeof subData.keys === "object"),
+        keysStructure: subData?.keys && typeof subData.keys === "object" ? {
+          hasP256dh: !!(subData.keys as Record<string, unknown>)?.p256dh,
+          hasAuth: !!(subData.keys as Record<string, unknown>)?.auth,
         } : null,
         subscriptionKeys: Object.keys(subData || {}),
       });
@@ -106,13 +106,13 @@ export async function POST(req: NextRequest) {
     // デバッグ: すべての購読データの形式を確認
     console.log("🔍 All subscriptions sample:");
     subscriptions.forEach((sub, index) => {
-      const subData = sub.subscription as any;
+      const subData = sub.subscription as Record<string, unknown>;
       console.log(`Subscription ${index + 1}:`, {
         endpoint: sub.endpoint.substring(0, 50) + "...",
-        hasKeys: !!subData?.keys,
-        keysStructure: subData?.keys ? {
-          hasP256dh: !!subData.keys.p256dh,
-          hasAuth: !!subData.keys.auth,
+        hasKeys: !!(subData?.keys && typeof subData.keys === "object"),
+        keysStructure: subData?.keys && typeof subData.keys === "object" ? {
+          hasP256dh: !!(subData.keys as Record<string, unknown>)?.p256dh,
+          hasAuth: !!(subData.keys as Record<string, unknown>)?.auth,
         } : null,
         subscriptionKeys: Object.keys(subData || {}),
       });
@@ -173,8 +173,14 @@ export async function POST(req: NextRequest) {
     results.forEach((result, index) => {
       if (result.status === "rejected") {
         const error = result.reason;
-        const errorBody = error?.body;
-        const statusCode = error?.statusCode;
+        const errorBody = 
+          error && typeof error === "object" && "body" in error
+            ? (error as { body?: unknown }).body
+            : undefined;
+        const statusCode = 
+          error && typeof error === "object" && "statusCode" in error
+            ? (error as { statusCode?: number }).statusCode
+            : undefined;
         
         // Apple Web Push の VapidPkHashMismatch (400)
         const isAppleVapidMismatch = 

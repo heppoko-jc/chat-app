@@ -103,7 +103,10 @@ async function sendToSubs(
     if (r.status === "rejected") {
       const error = r.reason;
       const code = getStatusCode(error);
-      const errorBody = (error as any)?.body;
+      const errorBody = 
+        error && typeof error === "object" && "body" in error
+          ? (error as { body?: unknown }).body
+          : undefined;
       
       // Apple Web Push の VapidPkHashMismatch (400)
       const isAppleVapidMismatch = 
