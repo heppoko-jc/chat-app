@@ -53,6 +53,13 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // デバッグ: 現在のVAPID公開鍵を確認
+    console.log("🔑 Current VAPID public key:", {
+      key: vapidPublicKey.substring(0, 20) + "...",
+      length: vapidPublicKey.length,
+      nextPublicKey: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY?.substring(0, 20) + "...",
+    });
+
     const { title, body, url = "/", type = "update" } = await req.json();
 
     if (!title || !body) {
@@ -81,6 +88,36 @@ export async function POST(req: NextRequest) {
       });
     }
 
+    // デバッグ: 最初の購読データの形式を確認
+    if (subscriptions.length > 0) {
+      const firstSub = subscriptions[0];
+      const subData = firstSub.subscription as any;
+      console.log("🔍 First subscription sample:", {
+        endpoint: firstSub.endpoint.substring(0, 50) + "...",
+        hasKeys: !!subData?.keys,
+        keysStructure: subData?.keys ? {
+          hasP256dh: !!subData.keys.p256dh,
+          hasAuth: !!subData.keys.auth,
+        } : null,
+        subscriptionKeys: Object.keys(subData || {}),
+      });
+    }
+
+    // デバッグ: すべての購読データの形式を確認
+    console.log("🔍 All subscriptions sample:");
+    subscriptions.forEach((sub, index) => {
+      const subData = sub.subscription as any;
+      console.log(`Subscription ${index + 1}:`, {
+        endpoint: sub.endpoint.substring(0, 50) + "...",
+        hasKeys: !!subData?.keys,
+        keysStructure: subData?.keys ? {
+          hasP256dh: !!subData.keys.p256dh,
+          hasAuth: !!subData.keys.auth,
+        } : null,
+        subscriptionKeys: Object.keys(subData || {}),
+      });
+    });
+
     // 通知ペイロードを作成
     const payload = JSON.stringify({
       type,
@@ -108,8 +145,15 @@ export async function POST(req: NextRequest) {
             .catch((error) => {
               // エラーを詳細にログ出力
               console.error(
-                `Failed to send notification to ${sub.endpoint}:`,
-                error
+                `❌ Failed to send notification to ${sub.endpoint}:`,
+                {
+                  statusCode: error?.statusCode,
+                  statusMessage: error?.statusMessage,
+                  message: error?.message,
+                  body: error?.body,
+                  endpoint: sub.endpoint.substring(0, 50) + "...",
+                  errorType: error?.constructor?.name,
+                }
               );
               throw error;
             })
@@ -125,23 +169,56 @@ export async function POST(req: NextRequest) {
 
     // 失敗した購読を無効化
     const failedEndpoints: string[] = [];
+    let vapidMismatchCount = 0;
     results.forEach((result, index) => {
       if (result.status === "rejected") {
         const error = result.reason;
-        console.error(
-          `Notification failed for endpoint ${subscriptions[index].endpoint}:`,
-          error?.statusCode || error?.message || error
-        );
-        // 404, 410のほか、401（認証エラー）も無効化対象
+        const errorBody = error?.body;
+        const statusCode = error?.statusCode;
+        
+        // Apple Web Push の VapidPkHashMismatch (400)
+        const isAppleVapidMismatch = 
+          statusCode === 400 && 
+          typeof errorBody === "string" && 
+          errorBody.includes("VapidPkHashMismatch");
+        
+        // Google FCM の VAPID認証エラー (403)
+        const isFcmVapidMismatch = 
+          statusCode === 403 && 
+          typeof errorBody === "string" && 
+          errorBody.includes("VAPID credentials");
+        
+        const isVapidMismatch = isAppleVapidMismatch || isFcmVapidMismatch;
+        
+        if (isVapidMismatch) {
+          vapidMismatchCount++;
+          console.warn(
+            `⚠️ VAPID key mismatch detected for endpoint ${subscriptions[index].endpoint.substring(0, 50)}... (${statusCode})`
+          );
+        } else {
+          console.error(
+            `Notification failed for endpoint ${subscriptions[index].endpoint}:`,
+            statusCode || error?.message || error
+          );
+        }
+        
+        // 404, 410, 401（認証エラー）、400（Apple VapidPkHashMismatch）、403（FCM VAPID認証エラー）を無効化対象
         if (
-          error?.statusCode === 404 ||
-          error?.statusCode === 410 ||
-          error?.statusCode === 401
+          statusCode === 404 ||
+          statusCode === 410 ||
+          statusCode === 401 ||
+          isVapidMismatch
         ) {
           failedEndpoints.push(subscriptions[index].endpoint);
         }
       }
     });
+
+    if (vapidMismatchCount > 0) {
+      console.warn(
+        `⚠️ ${vapidMismatchCount} subscriptions have VAPID key mismatch. They will be deactivated. Users need to re-subscribe with the current VAPID key.`
+      );
+    }
 
     // 無効な購読をDBから無効化
     if (failedEndpoints.length > 0) {

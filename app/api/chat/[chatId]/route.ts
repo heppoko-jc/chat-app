@@ -4,7 +4,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { io as ioClient } from "socket.io-client";
 import webpush, { PushSubscription as WebPushSubscription } from "web-push";
-import { shouldHideMessage } from "@/lib/content-filter";
 import { translate } from "@/lib/translations";
 
 const SOCKET_URL =
@@ -110,13 +109,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 非表示キーワードチェック
-    if (shouldHideMessage(content)) {
-      return NextResponse.json(
-        { error: "hidden_keyword_detected" },
-        { status: 400 }
-      );
-    }
+    // 非表示キーワードチェック（通常チャットでは無効化）
+    // マッチメッセージでは継続して使用（app/api/match-message/route.ts）
 
     // メッセージ保存
     const newMessage = await prisma.message.create({
@@ -186,7 +180,7 @@ export async function POST(req: NextRequest) {
       body: newMessage.content,
     });
 
-    // 失敗購読の自動無効化（404/410）— any を使わずに判定
+    // 失敗購読の自動無効化（404/410/400/403）— any を使わずに判定
     const results = await Promise.allSettled(
       subs.map((s) =>
         webpush.sendNotification(
@@ -199,8 +193,24 @@ export async function POST(req: NextRequest) {
     const toDeactivate: string[] = [];
     results.forEach((r, idx) => {
       if (r.status === "rejected") {
-        const status = getStatusCode(r.reason);
-        if (status === 404 || status === 410) {
+        const error = r.reason;
+        const status = getStatusCode(error);
+        const errorBody = (error as any)?.body;
+        
+        // Apple Web Push の VapidPkHashMismatch (400)
+        const isAppleVapidMismatch = 
+          status === 400 && 
+          typeof errorBody === "string" && 
+          errorBody.includes("VapidPkHashMismatch");
+        
+        // Google FCM の VAPID認証エラー (403)
+        const isFcmVapidMismatch = 
+          status === 403 && 
+          typeof errorBody === "string" && 
+          errorBody.includes("VAPID credentials");
+        
+        // 404, 410, 400（VapidPkHashMismatch）、403（FCM VAPID認証エラー）を無効化対象
+        if (status === 404 || status === 410 || isAppleVapidMismatch || isFcmVapidMismatch) {
           toDeactivate.push(subs[idx].endpoint);
         }
       }

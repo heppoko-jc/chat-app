@@ -101,8 +101,24 @@ async function sendToSubs(
   const toDeactivate: string[] = [];
   results.forEach((r, idx) => {
     if (r.status === "rejected") {
-      const code = getStatusCode(r.reason);
-      if (code === 404 || code === 410) {
+      const error = r.reason;
+      const code = getStatusCode(error);
+      const errorBody = (error as any)?.body;
+      
+      // Apple Web Push の VapidPkHashMismatch (400)
+      const isAppleVapidMismatch = 
+        code === 400 && 
+        typeof errorBody === "string" && 
+        errorBody.includes("VapidPkHashMismatch");
+      
+      // Google FCM の VAPID認証エラー (403)
+      const isFcmVapidMismatch = 
+        code === 403 && 
+        typeof errorBody === "string" && 
+        errorBody.includes("VAPID credentials");
+      
+      // 404, 410, 400（VapidPkHashMismatch）、403（FCM VAPID認証エラー）を無効化対象
+      if (code === 404 || code === 410 || isAppleVapidMismatch || isFcmVapidMismatch) {
         toDeactivate.push(subs[idx].endpoint);
       }
     }
