@@ -5,7 +5,7 @@ import { useState, useEffect } from "react";
 import { useLanguage } from "../contexts/LanguageContext";
 
 export default function TestVerificationPopup() {
-  const { t, language } = useLanguage();
+  const { t } = useLanguage();
   const [isVisible, setIsVisible] = useState(false);
 
   useEffect(() => {

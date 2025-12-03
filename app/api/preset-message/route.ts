@@ -119,7 +119,7 @@ export async function GET(req: NextRequest) {
     );
 
     // ✅ バッチ処理で自分宛のメッセージを一度に取得（パフォーマンス最適化）
-    let sentToMeMap = new Map<string, { senderId: string; senderName: string }[]>();
+    const sentToMeMap = new Map<string, { senderId: string; senderName: string }[]>();
     
     if (userId) {
       // nullを除外した有効なメッセージのみを対象にする

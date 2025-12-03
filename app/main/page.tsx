@@ -1690,10 +1690,10 @@ export default function Main() {
     <>
       {/* ヘッダー（高さ拡張） */}
       <div
-        className="fixed top-0 left-0 w-full bg-white z-20 px-6 pt-4 pb-4 flex flex-col items-center rounded-b-3xl"
+        className="fixed top-0 left-0 w-full bg-white z-20 px-6 pt-2 pb-4 flex flex-col items-center rounded-b-3xl"
         style={{ minHeight: HEADER_H, height: HEADER_H }}
       >
-        <div className="flex w-full justify-between items-center mb-2">
+        <div className="flex w-full justify-between items-center mb-1">
           <div className="w-20 flex items-center">
             <button
               onClick={handleHistoryNavigation}
@@ -1747,7 +1747,7 @@ export default function Main() {
             {t("main.followToRegister")}
           </p>
         ) : (
-          <p className={`text-[15px] text-gray-700 ${language === "en" ? "text-left" : "text-center"} leading-snug mt-1 font-medium`}>
+          <p className={`text-[15px] text-gray-700 ${language === "en" ? "text-left" : "text-center"} leading-snug -mt-1 font-medium`}>
             {t("main.matchWithin24h")}
             <br />
             <span className="text-orange-600">{t("main.weekTestMessage")}</span>
