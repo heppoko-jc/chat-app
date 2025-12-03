@@ -40,6 +40,8 @@ const translations: Record<Language, Record<string, string>> = {
     "main.sendError": "メッセージの送信に失敗しました。",
     "main.hiddenKeywordError": "非表示設定されている言葉が含まれるため、送信されませんでした。",
     "main.registeredFriends": "フォローした{n}人が誰かに送ったメッセージです👇",
+    "main.weekTestMessage": "送った相手にだけ「__があなたに送りました」と表示されます。送信した相手以外には表示されないので安心してください。",
+    "main.sentToYou": "があなたに送りました",
     "main.inputMessage": "メッセージを入力",
     "main.searchByName": "名前で検索...",
     "main.createShortcut": "自分だけのショートカットを作成",
@@ -171,6 +173,12 @@ const translations: Record<Language, Record<string, string>> = {
     "matchNotification.sharedWords": "シェアしたことば",
     "matchNotification.close": "閉じる",
     "matchNotification.goToChat": "チャットへ",
+    
+    // テスト検証ポップアップ
+    "testVerification.title": "比較検証実験中",
+    "testVerification.description": "研究のために一週間実験を行います。\n\nメッセージを投稿したとき、送った相手にだけ「__があなたに送りました」と赤文字で表示される仕様になりました。\n\n送信した相手以外には表示されないので安心してください。\n\nぜひ使ってみて、感想を聞かせてください！",
+    "testVerification.readLater": "後でもう一度読む",
+    "testVerification.agree": "同意する",
   },
   en: {
     // 時間表示
@@ -198,6 +206,8 @@ const translations: Record<Language, Record<string, string>> = {
     "main.sendError": "Failed to send message.",
     "main.hiddenKeywordError": "Message contains hidden keywords and cannot be sent.",
     "main.registeredFriends": "Messages sent by {n} people you follow 👇",
+    "main.weekTestMessage": "\"__ sent this to you\" will only be displayed to the recipient. It will not be displayed to anyone other than the recipient, so please rest assured.",
+    "main.sentToYou": " sent to you",
     "main.inputMessage": "Enter message",
     "main.searchByName": "Search by name...",
     "main.createShortcut": "Create your own shortcut",
@@ -329,6 +339,12 @@ const translations: Record<Language, Record<string, string>> = {
     "matchNotification.sharedWords": "Shared words",
     "matchNotification.close": "Close",
     "matchNotification.goToChat": "Go to Chat",
+    
+    // テスト検証ポップアップ
+    "testVerification.title": "Comparative Verification Experiment",
+    "testVerification.description": "We are conducting a one-week experiment for research purposes.\n\nWhen you post a message, only the recipient will see \"__ sent this to you\" in red text.\n\nIt will not be displayed to anyone other than the recipient, so please rest assured.\n\nPlease try it out and share your feedback!",
+    "testVerification.readLater": "Read later",
+    "testVerification.agree": "Agree",
   },
 };
 

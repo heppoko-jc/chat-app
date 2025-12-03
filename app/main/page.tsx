@@ -16,6 +16,7 @@ import ShortcutCreateModal from "../components/ShortcutCreateModal";
 import ShortcutEditModal from "../components/ShortcutEditModal";
 import TranslatedMessage from "../components/TranslatedMessage";
 import EnglishModePopup from "../components/EnglishModePopup";
+import TestVerificationPopup from "../components/TestVerificationPopup";
 
 interface User {
   id: string;
@@ -1749,9 +1750,7 @@ export default function Main() {
           <p className={`text-[15px] text-gray-700 ${language === "en" ? "text-left" : "text-center"} leading-snug mt-1 font-medium`}>
             {t("main.matchWithin24h")}
             <br />
-            {t("main.selectWordsAndPerson")}
-            <br />
-            {t("main.registeredFriends", { n: friends.size })}
+            <span className="text-orange-600">{t("main.weekTestMessage")}</span>
           </p>
         )}
       </div>
@@ -2232,6 +2231,22 @@ export default function Main() {
                             </p>
                           </>
                         )}
+                        
+                        {/* ✅ 自分宛に送られたメッセージの場合、全送信者を表示 */}
+                        {msg.sentToMe && msg.sentToMe.length > 0 && (
+                          <p className="text-xs text-orange-600 font-medium mt-1 flex flex-wrap gap-x-1">
+                            <span>
+                              {msg.sentToMe.map((sender, idx) => (
+                                <span key={sender.senderId}>
+                                  {sender.senderName}
+                                  {idx < msg.sentToMe!.length - 1 && <span>、</span>}
+                                </span>
+                              ))}
+                            </span>
+                            <span>{t("main.sentToYou")}</span>
+                          </p>
+                        )}
+                        
                         <div className="flex gap-1 mt-1">
                           {msg.senderCount > 2 && (
                             <p className="text-xs text-black font-medium">
@@ -2301,6 +2316,22 @@ export default function Main() {
                         selectedMessage === msg.content ? "font-black" : ""
                       }`}
                     />
+                    
+                    {/* ✅ 自分宛に送られたメッセージの場合、全送信者を表示 */}
+                    {msg.sentToMe && msg.sentToMe.length > 0 && (
+                      <p className="text-xs text-orange-600 font-medium mt-1 flex flex-wrap gap-x-1">
+                        <span>
+                          {msg.sentToMe.map((sender, idx) => (
+                            <span key={sender.senderId}>
+                              {sender.senderName}
+                              {idx < msg.sentToMe!.length - 1 && <span>、</span>}
+                            </span>
+                          ))}
+                        </span>
+                        <span>{t("main.sentToYou")}</span>
+                      </p>
+                    )}
+                    
                     <div className="flex gap-1 items-center mt-2">
                       {msg.senderCount > 2 && (
                         <span className="text-xs text-black font-medium">
@@ -2687,6 +2718,7 @@ export default function Main() {
       )}
 
       <EnglishModePopup />
+      <TestVerificationPopup />
       <FixedTabBar />
     </>
   );

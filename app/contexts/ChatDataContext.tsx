@@ -29,6 +29,7 @@ export type PresetMessage = {
   comment?: string | null;
   type?: string;
   lastSentAt: string; // 最後に送信された時刻
+  sentToMe?: { senderId: string; senderName: string }[]; // 自分宛に届いた送信者一覧
 };
 
 // Contextの型定義
@@ -106,7 +107,9 @@ export function ChatDataProvider({ children }: { children: ReactNode }) {
     const preloadData = async () => {
       try {
         // マッチメッセージも取得
-        const presetRes = await fetch("/api/preset-message");
+        const presetRes = await fetch("/api/preset-message", {
+          headers: { userId },
+        });
         if (presetRes.ok) {
           const presetData: PresetMessage[] = await presetRes.json();
           setPresetMessages(presetData);

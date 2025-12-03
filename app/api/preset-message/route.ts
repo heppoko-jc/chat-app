@@ -118,8 +118,60 @@ export async function GET(req: NextRequest) {
       })
     );
 
+    // ✅ バッチ処理で自分宛のメッセージを一度に取得（パフォーマンス最適化）
+    let sentToMeMap = new Map<string, { senderId: string; senderName: string }[]>();
+    
+    if (userId) {
+      // nullを除外した有効なメッセージのみを対象にする
+      const validMessages = messagesWithActualCounts.filter(
+        (msg): msg is NonNullable<typeof msg> => msg !== null
+      );
+      
+      if (validMessages.length > 0) {
+        const messageContents = validMessages.map(m => m.content);
+        
+        // 自分宛に送られたメッセージを全て取得
+        const allSentToMe = await prisma.sentMessage.findMany({
+          where: {
+            receiverId: userId,
+            message: { in: messageContents },
+            isHidden: false,
+            createdAt: { gte: expiryDate },
+          },
+          include: {
+            sender: { select: { id: true, name: true } },
+          },
+          orderBy: { createdAt: "desc" },
+        });
+
+        // メッセージごとにグループ化して、全送信者を配列で保持
+        allSentToMe.forEach(msg => {
+          if (!sentToMeMap.has(msg.message)) {
+            sentToMeMap.set(msg.message, []);
+          }
+          const senders = sentToMeMap.get(msg.message)!;
+          // 重複チェック（同じ人が複数回送信した場合は1回だけ表示）
+          if (!senders.some(s => s.senderId === msg.sender.id)) {
+            senders.push({
+              senderId: msg.sender.id,
+              senderName: msg.sender.name,
+            });
+          }
+        });
+      }
+    }
+
+    // ✅ 各メッセージに送信者情報を追加
+    const messagesWithSentToMe = messagesWithActualCounts.map(msg => {
+      if (msg === null) return null;
+      return {
+        ...msg,
+        sentToMe: sentToMeMap.get(msg.content) || undefined,
+      };
+    });
+
     // nullを除外して返す
-    const validMessages = messagesWithActualCounts.filter(
+    const validMessages = messagesWithSentToMe.filter(
       (msg): msg is NonNullable<typeof msg> => msg !== null
     );
 
