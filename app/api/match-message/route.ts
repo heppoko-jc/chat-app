@@ -59,6 +59,13 @@ async function sendSentMessageNotification(
     });
     const receiverLanguage = (receiver?.language === "en" ? "en" : "ja") as "ja" | "en";
 
+    // 送信者の名前を取得
+    const sender = await prisma.user.findUnique({
+      where: { id: senderId },
+      select: { name: true },
+    });
+    const senderName = sender?.name || "誰か";
+
     // フォロー関係を判定
     const isFollowing = await prisma.friend.findFirst({
       where: {
@@ -73,7 +80,8 @@ async function sendSentMessageNotification(
       receiverLanguage,
       isFollowing
         ? "notification.anonymousMessageFollowing"
-        : "notification.anonymousMessageNotFollowing"
+        : "notification.anonymousMessageNotFollowing",
+      { name: senderName } // 送信者名をパラメータとして渡す
     );
 
     // 受信者のプッシュ購読を取得

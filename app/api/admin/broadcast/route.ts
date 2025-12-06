@@ -1,26 +1,83 @@
 // app/api/admin/broadcast/route.ts
 
 import { NextRequest, NextResponse } from "next/server";
-import webpush from "web-push";
+import webpush, { PushSubscription as WebPushSubscription } from "web-push";
 import { prisma } from "@/lib/prisma";
 
-// VAPIDキーの検証
+// VAPIDキー（必須）
 const vapidPublicKey = process.env.VAPID_PUBLIC_KEY;
 const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY;
 
 if (!vapidPublicKey || !vapidPrivateKey) {
   console.error("❌ VAPID keys are not set in environment variables");
 } else {
-  webpush.setVapidDetails(
-    "mailto:you@domain.com",
-    vapidPublicKey,
-    vapidPrivateKey
-  );
+  webpush.setVapidDetails("mailto:you@domain.com", vapidPublicKey, vapidPrivateKey);
+}
+
+// web-push のエラーから statusCode を安全に取り出すヘルパー（no-explicit-any回避）
+function getStatusCode(reason: unknown): number | undefined {
+  if (typeof reason === "object" && reason !== null && "statusCode" in reason) {
+    const val = (reason as { statusCode?: unknown }).statusCode;
+    if (typeof val === "number") return val;
+  }
+  return undefined;
+}
+
+// 複数購読へ push を送り、404/410 を拾って「無効化すべき endpoint」を返す
+async function sendToSubsBatch(
+  subs: { endpoint: string; subscription: unknown }[],
+  payload: string
+): Promise<string[]> {
+  const toDeactivate: string[] = [];
+  const BATCH_SIZE = 50;
+
+  for (let i = 0; i < subs.length; i += BATCH_SIZE) {
+    const batch = subs.slice(i, i + BATCH_SIZE);
+
+    const results = await Promise.allSettled(
+      batch.map((s) =>
+        webpush.sendNotification(s.subscription as WebPushSubscription, payload)
+      )
+    );
+
+    results.forEach((r, idx) => {
+      if (r.status === "rejected") {
+        const error = r.reason;
+        const code = getStatusCode(error);
+        const body =
+          typeof error === "object" &&
+          error !== null &&
+          "body" in error &&
+          typeof (error as { body?: unknown }).body === "string"
+            ? ((error as { body?: string }).body as string)
+            : "";
+
+        // Apple Web Push の VAPID 公開鍵不一致 (400)
+        const isVapidMismatch =
+          code === 400 && body.includes("VapidPkHashMismatch");
+
+        // 404 / 410 / 400(VAPID不一致) を無効化対象にする
+        if (code === 404 || code === 410 || isVapidMismatch) {
+          toDeactivate.push(batch[idx].endpoint);
+        } else {
+          // それ以外のエラーはログだけ出して購読は残す（他のAPIと同じ方針）
+          console.error("[broadcast] push error:", code, error);
+        }
+      }
+    });
+
+    // バッチ間で少し待機（レート制限対策）
+    if (i + BATCH_SIZE < subs.length) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  }
+
+  return toDeactivate;
 }
 
 export async function POST(req: NextRequest) {
   try {
-    // 簡単なAPIキー認証（環境変数で設定）
+    // --- 認証（管理用APIキー）---
     const authHeader = req.headers.get("Authorization");
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
       return NextResponse.json(
@@ -41,25 +98,19 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // VAPIDキーのチェック
+    // --- VAPID キー確認 ---
     if (!vapidPublicKey || !vapidPrivateKey) {
       console.error("❌ VAPID keys are not configured");
       return NextResponse.json(
         {
           error:
-            "VAPID keys are not configured. Please set VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY environment variables.",
+            "VAPID keys are not configured. Please set VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY.",
         },
         { status: 500 }
       );
     }
 
-    // デバッグ: 現在のVAPID公開鍵を確認
-    console.log("🔑 Current VAPID public key:", {
-      key: vapidPublicKey.substring(0, 20) + "...",
-      length: vapidPublicKey.length,
-      nextPublicKey: process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY?.substring(0, 20) + "...",
-    });
-
+    // --- リクエストボディ ---
     const { title, body, url = "/", type = "update" } = await req.json();
 
     if (!title || !body) {
@@ -69,7 +120,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // アクティブなプッシュ購読を取得
+    // --- アクティブな購読を取得 ---
     const subscriptions = await prisma.pushSubscription.findMany({
       where: { isActive: true },
       select: { endpoint: true, subscription: true },
@@ -88,37 +139,7 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // デバッグ: 最初の購読データの形式を確認
-    if (subscriptions.length > 0) {
-      const firstSub = subscriptions[0];
-      const subData = firstSub.subscription as Record<string, unknown>;
-      console.log("🔍 First subscription sample:", {
-        endpoint: firstSub.endpoint.substring(0, 50) + "...",
-        hasKeys: !!(subData?.keys && typeof subData.keys === "object"),
-        keysStructure: subData?.keys && typeof subData.keys === "object" ? {
-          hasP256dh: !!(subData.keys as Record<string, unknown>)?.p256dh,
-          hasAuth: !!(subData.keys as Record<string, unknown>)?.auth,
-        } : null,
-        subscriptionKeys: Object.keys(subData || {}),
-      });
-    }
-
-    // デバッグ: すべての購読データの形式を確認
-    console.log("🔍 All subscriptions sample:");
-    subscriptions.forEach((sub, index) => {
-      const subData = sub.subscription as Record<string, unknown>;
-      console.log(`Subscription ${index + 1}:`, {
-        endpoint: sub.endpoint.substring(0, 50) + "...",
-        hasKeys: !!(subData?.keys && typeof subData.keys === "object"),
-        keysStructure: subData?.keys && typeof subData.keys === "object" ? {
-          hasP256dh: !!(subData.keys as Record<string, unknown>)?.p256dh,
-          hasAuth: !!(subData.keys as Record<string, unknown>)?.auth,
-        } : null,
-        subscriptionKeys: Object.keys(subData || {}),
-      });
-    });
-
-    // 通知ペイロードを作成
+    // --- ペイロード作成 ---
     const payload = JSON.stringify({
       type,
       title,
@@ -129,113 +150,18 @@ export async function POST(req: NextRequest) {
       timestamp: Date.now(),
     });
 
-    // バッチ処理で安全に送信（一度に50件ずつ）
-    const BATCH_SIZE = 50;
-    const results = [];
+    // --- 一括送信 ---
+    const endpointsToDeactivate = await sendToSubsBatch(subscriptions, payload);
 
-    for (let i = 0; i < subscriptions.length; i += BATCH_SIZE) {
-      const batch = subscriptions.slice(i, i + BATCH_SIZE);
-      const batchResults = await Promise.allSettled(
-        batch.map((sub) =>
-          webpush
-            .sendNotification(
-              sub.subscription as unknown as webpush.PushSubscription,
-              payload
-            )
-            .catch((error) => {
-              // エラーを詳細にログ出力
-              console.error(
-                `❌ Failed to send notification to ${sub.endpoint}:`,
-                {
-                  statusCode: error?.statusCode,
-                  statusMessage: error?.statusMessage,
-                  message: error?.message,
-                  body: error?.body,
-                  endpoint: sub.endpoint.substring(0, 50) + "...",
-                  errorType: error?.constructor?.name,
-                }
-              );
-              throw error;
-            })
-        )
-      );
-      results.push(...batchResults);
-
-      // バッチ間で少し待機（レート制限回避）
-      if (i + BATCH_SIZE < subscriptions.length) {
-        await new Promise((resolve) => setTimeout(resolve, 100));
-      }
-    }
-
-    // 失敗した購読を無効化
-    const failedEndpoints: string[] = [];
-    let vapidMismatchCount = 0;
-    results.forEach((result, index) => {
-      if (result.status === "rejected") {
-        const error = result.reason;
-        const errorBody = 
-          error && typeof error === "object" && "body" in error
-            ? (error as { body?: unknown }).body
-            : undefined;
-        const statusCode = 
-          error && typeof error === "object" && "statusCode" in error
-            ? (error as { statusCode?: number }).statusCode
-            : undefined;
-        
-        // Apple Web Push の VapidPkHashMismatch (400)
-        const isAppleVapidMismatch = 
-          statusCode === 400 && 
-          typeof errorBody === "string" && 
-          errorBody.includes("VapidPkHashMismatch");
-        
-        // Google FCM の VAPID認証エラー (403)
-        const isFcmVapidMismatch = 
-          statusCode === 403 && 
-          typeof errorBody === "string" && 
-          errorBody.includes("VAPID credentials");
-        
-        const isVapidMismatch = isAppleVapidMismatch || isFcmVapidMismatch;
-        
-        if (isVapidMismatch) {
-          vapidMismatchCount++;
-          console.warn(
-            `⚠️ VAPID key mismatch detected for endpoint ${subscriptions[index].endpoint.substring(0, 50)}... (${statusCode})`
-          );
-        } else {
-          console.error(
-            `Notification failed for endpoint ${subscriptions[index].endpoint}:`,
-            statusCode || error?.message || error
-          );
-        }
-        
-        // 404, 410, 401（認証エラー）、400（Apple VapidPkHashMismatch）、403（FCM VAPID認証エラー）を無効化対象
-        if (
-          statusCode === 404 ||
-          statusCode === 410 ||
-          statusCode === 401 ||
-          isVapidMismatch
-        ) {
-          failedEndpoints.push(subscriptions[index].endpoint);
-        }
-      }
-    });
-
-    if (vapidMismatchCount > 0) {
-      console.warn(
-        `⚠️ ${vapidMismatchCount} subscriptions have VAPID key mismatch. They will be deactivated. Users need to re-subscribe with the current VAPID key.`
-      );
-    }
-
-    // 無効な購読をDBから無効化
-    if (failedEndpoints.length > 0) {
+    if (endpointsToDeactivate.length > 0) {
       await prisma.pushSubscription.updateMany({
-        where: { endpoint: { in: failedEndpoints } },
+        where: { endpoint: { in: endpointsToDeactivate } },
         data: { isActive: false },
       });
     }
 
-    const successCount = results.filter((r) => r.status === "fulfilled").length;
-    const failureCount = results.filter((r) => r.status === "rejected").length;
+    const failureCount = endpointsToDeactivate.length;
+    const successCount = subscriptions.length - failureCount;
 
     return NextResponse.json({
       success: true,
@@ -244,26 +170,14 @@ export async function POST(req: NextRequest) {
         total: subscriptions.length,
         success: successCount,
         failed: failureCount,
-        deactivated: failedEndpoints.length,
+        deactivated: endpointsToDeactivate.length,
       },
     });
   } catch (error) {
     console.error("🚨 Broadcast push error:", error);
-    // エラーメッセージを詳細に返す
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    const errorStack = error instanceof Error ? error.stack : undefined;
-
-    // 開発環境ではスタックトレースも含める
-    if (process.env.NODE_ENV === "development") {
-      console.error("Error stack:", errorStack);
-    }
-
+    const message = error instanceof Error ? error.message : String(error);
     return NextResponse.json(
-      {
-        error: "Failed to send broadcast",
-        details: errorMessage,
-        ...(process.env.NODE_ENV === "development" && { stack: errorStack }),
-      },
+      { error: "Failed to send broadcast", details: message },
       { status: 500 }
     );
   }
