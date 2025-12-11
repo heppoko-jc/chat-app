@@ -1,4 +1,7 @@
-// scripts/daily-message-count.js
+// scripts/daily-avg-message-receivers.js
+
+import { config } from "dotenv";
+config();
 
 import { PrismaClient } from "@prisma/client";
 import { writeFileSync } from "fs";
@@ -17,10 +20,10 @@ function utcToJst(utcDate) {
   return new Date(utcDate.getTime() + 9 * 60 * 60 * 1000);
 }
 
-async function analyzeDailyMessageCount() {
+async function analyzeDailyAvgMessageReceivers() {
   try {
-    // 対象期間: JST 12/3 00:00 から 12/7 23:59:59
-    const startJst = { year: 2025, month: 12, day: 3, hour: 0, minute: 0, second: 0 };
+    // 対象期間: JST 10/13 00:00 から 12/7 23:59:59
+    const startJst = { year: 2025, month: 10, day: 13, hour: 0, minute: 0, second: 0 };
     const endJst = { year: 2025, month: 12, day: 7, hour: 23, minute: 59, second: 59 };
     
     const startUtc = jstToUtc(startJst.year, startJst.month, startJst.day, startJst.hour, startJst.minute, startJst.second);
@@ -42,6 +45,8 @@ async function analyzeDailyMessageCount() {
       },
       select: {
         senderId: true,
+        receiverId: true,
+        message: true,
         createdAt: true,
       },
       orderBy: {
@@ -52,7 +57,7 @@ async function analyzeDailyMessageCount() {
     console.log(`期間内のメッセージ総数: ${sentMessages.length}`);
     console.log('');
 
-    // 全ユーザーを取得（メッセージを送っていないユーザーも含める）
+    // 全ユーザーを取得
     const allUsers = await prisma.user.findMany({
       select: {
         id: true,
@@ -64,19 +69,6 @@ async function analyzeDailyMessageCount() {
       },
     });
 
-    const userMap = new Map(allUsers.map(u => [u.id, u]));
-
-    // 日付ごとの送信数を集計（ユーザー×日付）
-    const dailyCounts = new Map(); // key: "userId-date", value: count
-
-    sentMessages.forEach((msg) => {
-      const jstDate = utcToJst(msg.createdAt);
-      const dateKey = `${jstDate.getUTCFullYear()}-${String(jstDate.getUTCMonth() + 1).padStart(2, '0')}-${String(jstDate.getUTCDate()).padStart(2, '0')}`;
-      const userDateKey = `${msg.senderId}-${dateKey}`;
-      
-      dailyCounts.set(userDateKey, (dailyCounts.get(userDateKey) || 0) + 1);
-    });
-
     // 期間内の全日付を生成
     const allDates = [];
     const currentDate = new Date(startUtc);
@@ -86,6 +78,39 @@ async function analyzeDailyMessageCount() {
       allDates.push(dateKey);
       currentDate.setUTCDate(currentDate.getUTCDate() + 1);
     }
+
+    // ユーザー×日付×メッセージ内容ごとの送信先ユニーク数を集計
+    // key: "userId-date-message", value: Set of receiverIds
+    const dailyMessageReceivers = new Map();
+
+    sentMessages.forEach((msg) => {
+      const jstDate = utcToJst(msg.createdAt);
+      const dateKey = `${jstDate.getUTCFullYear()}-${String(jstDate.getUTCMonth() + 1).padStart(2, '0')}-${String(jstDate.getUTCDate()).padStart(2, '0')}`;
+      // キーの区切り文字を|に変更（UUIDに含まれない文字）
+      const userDateMessageKey = `${msg.senderId}|${dateKey}|${msg.message}`;
+      
+      if (!dailyMessageReceivers.has(userDateMessageKey)) {
+        dailyMessageReceivers.set(userDateMessageKey, new Set());
+      }
+      dailyMessageReceivers.get(userDateMessageKey).add(msg.receiverId);
+    });
+
+    // ユーザー×日付ごとに、各メッセージの送信先数の平均を計算
+    // key: "userId|date", value: { sum: number, count: number }
+    const dailyAvgReceivers = new Map();
+
+    dailyMessageReceivers.forEach((receivers, key) => {
+      const [userId, dateKey] = key.split('|');
+      const userDateKey = `${userId}|${dateKey}`;
+      const receiverCount = receivers.size;
+
+      if (!dailyAvgReceivers.has(userDateKey)) {
+        dailyAvgReceivers.set(userDateKey, { sum: 0, count: 0 });
+      }
+      const avgData = dailyAvgReceivers.get(userDateKey);
+      avgData.sum += receiverCount;
+      avgData.count += 1;
+    });
 
     // ピボットテーブル形式のCSVデータを生成
     // ヘッダー行: ユーザーID, ユーザー名, メールアドレス, 日付1, 日付2, ..., 合計
@@ -102,16 +127,23 @@ async function analyzeDailyMessageCount() {
       let userTotal = 0;
 
       allDates.forEach((dateKey) => {
-        const userDateKey = `${user.id}-${dateKey}`;
-        const count = dailyCounts.get(userDateKey) || 0;
-        row.push(count);
-        userTotal += count;
+        const userDateKey = `${user.id}|${dateKey}`;
+        const avgData = dailyAvgReceivers.get(userDateKey);
+        
+        let avgValue = 0;
+        if (avgData && avgData.count > 0) {
+          avgValue = avgData.sum / avgData.count;
+        }
+        
+        // 小数点以下2桁で表示
+        row.push(avgValue.toFixed(2));
+        userTotal += avgValue;
         // 日付ごとの合計に加算
-        dateTotals.set(dateKey, dateTotals.get(dateKey) + count);
+        dateTotals.set(dateKey, dateTotals.get(dateKey) + avgValue);
       });
 
       // ユーザーごとの合計を追加
-      row.push(userTotal);
+      row.push(userTotal.toFixed(2));
       csvLines.push(row.join(','));
     });
 
@@ -120,24 +152,25 @@ async function analyzeDailyMessageCount() {
     let grandTotal = 0;
     allDates.forEach((dateKey) => {
       const dateTotal = dateTotals.get(dateKey);
-      totalRow.push(dateTotal);
+      totalRow.push(dateTotal.toFixed(2));
       grandTotal += dateTotal;
     });
-    totalRow.push(grandTotal);
+    totalRow.push(grandTotal.toFixed(2));
     csvLines.push(totalRow.join(','));
 
     const csvContent = csvLines.join('\n');
-    const csvPath = join(process.cwd(), 'scripts', 'daily-message-count.csv');
+    const csvPath = join(process.cwd(), 'scripts', 'daily-avg-message-receivers.csv');
     writeFileSync(csvPath, csvContent, 'utf-8');
     
     // ダウンロードフォルダにもコピー（期間を含むファイル名）
-    const downloadPath = join(process.env.HOME || '~', 'Downloads', 'daily-message-count-12-03-to-12-07.csv');
+    const downloadPath = join(process.env.HOME || '~', 'Downloads', 'daily-avg-message-receivers-10-13-to-12-07.csv');
     writeFileSync(downloadPath, csvContent, 'utf-8');
     
     console.log(`✅ CSVファイルを出力しました: ${csvPath}`);
     console.log(`✅ ダウンロードフォルダにもコピーしました: ${downloadPath}`);
     console.log(`   ユーザー数: ${allUsers.length}`);
     console.log(`   日数: ${allDates.length}`);
+    console.log('');
 
     // サマリー統計
     const totalUsers = allUsers.length;
@@ -145,7 +178,6 @@ async function analyzeDailyMessageCount() {
     const totalMessages = sentMessages.length;
     const usersWithMessages = new Set(sentMessages.map(m => m.senderId)).size;
 
-    console.log('');
     console.log('=== サマリー ===');
     console.log(`対象ユーザー数: ${totalUsers}`);
     console.log(`メッセージ送信したユーザー数: ${usersWithMessages}`);
@@ -159,5 +191,5 @@ async function analyzeDailyMessageCount() {
   }
 }
 
-analyzeDailyMessageCount();
+analyzeDailyAvgMessageReceivers();
 

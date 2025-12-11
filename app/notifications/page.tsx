@@ -12,6 +12,7 @@ import TranslatedMessage from "../components/TranslatedMessage";
 interface SentMessage {
   id: string;
   receiver: { id: string; name: string };
+  sender?: { id: string; name: string };
   message: string;
   linkTitle?: string;
   linkImage?: string;
@@ -20,6 +21,9 @@ interface SentMessage {
   isExpired?: boolean;
   shortcutName?: string | null; // ショートカット名
   shortcutId?: string | null; // ショートカットID
+  replyText?: string | null;
+  replyToMessage?: { id: string; senderId: string; receiverId: string; message: string } | null;
+  direction?: "sent" | "received";
 }
 
 interface ApiResponse {
@@ -169,9 +173,9 @@ export default function Notifications() {
     (async () => {
       try {
         setIsLoading(true);
-        const res = await axios.get<ApiResponse>(
-          `/api/notifications?userId=${userId}`
-        );
+    const res = await axios.get<ApiResponse>(
+      `/api/notifications?userId=${userId}`
+    );
         // すべて保持（未マッチのみでフィルタしない）
         setSentMessages(res.data.sentMessages);
       } catch (e) {
@@ -339,10 +343,10 @@ export default function Notifications() {
                                 <div className="flex-1 min-w-0">
                                   <p className="text-lg font-semibold truncate">
                                     {isMulti
-                                      ? `To ${first.receiver.name} ほか${
+                                      ? `With ${first.receiver.name} ほか${
                                           g.items.length - 1
                                         }人`
-                                      : `To ${first.receiver.name}`}
+                                      : `With ${first.receiver.name}`}
                                   </p>
 
                                   {g.linkTitle || g.linkImage ? (
@@ -392,25 +396,30 @@ export default function Notifications() {
                                           </>
                                         ) : (
                                           <>
-                                            <p className="text-base font-bold text-gray-800">
-                                              {g.linkTitle || (
-                                                <TranslatedMessage
-                                                  text={g.message}
-                                                  sourceLang="ja"
-                                                />
-                                              )}
-                                            </p>
+                                        <p className="text-base font-bold text-gray-800">
+                                          {g.linkTitle || (
+                                            <TranslatedMessage
+                                              text={g.message}
+                                              sourceLang="ja"
+                                            />
+                                          )}
+                                        </p>
                                           </>
                                         )}
                                       </div>
                                     </div>
                                   ) : (
-                                    <p className="text-base whitespace-normal break-words mt-1">
-                                      <TranslatedMessage
-                                        text={g.message}
-                                        sourceLang="ja"
-                                      />
-                                    </p>
+                                <div className="text-base whitespace-normal break-words mt-1 text-gray-800">
+                                  <TranslatedMessage
+                                    text={g.message}
+                                    sourceLang="ja"
+                                  />
+                                  {first.replyText ? (
+                                    <span className="ml-1">
+                                      （返信: {first.replyText}）
+                                    </span>
+                                  ) : null}
+                                </div>
                                   )}
 
                                   <div className="flex items-center justify-end gap-2 mt-2">
@@ -483,8 +492,8 @@ export default function Notifications() {
                                         {getInitials(m.receiver.name)}
                                       </div>
                                       <div className="flex-1 min-w-0">
-                                        <p className="text-lg font-semibold truncate">
-                                          To {m.receiver.name}
+                                <p className="text-lg font-semibold truncate">
+                                          With {m.receiver.name}
                                           {m.shortcutId && (
                                             <span className="text-sm font-normal text-gray-600 ml-1">
                                               {m.shortcutName
@@ -588,10 +597,10 @@ export default function Notifications() {
                                 <div className="flex-1 min-w-0">
                                   <p className="text-lg font-semibold truncate">
                                     {isMulti
-                                      ? `To ${first.receiver.name} ほか${
+                                      ? `With ${first.receiver.name} ほか${
                                           g.items.length - 1
                                         }人`
-                                      : `To ${first.receiver.name}`}
+                                      : `With ${first.receiver.name}`}
                                   </p>
 
                                   {g.linkTitle || g.linkImage ? (
@@ -654,12 +663,17 @@ export default function Notifications() {
                                       </div>
                                     </div>
                                   ) : (
-                                    <p className="text-base whitespace-normal break-words mt-1">
+                                    <div className="text-base whitespace-normal break-words mt-1 text-gray-800">
                                       <TranslatedMessage
                                         text={g.message}
                                         sourceLang="ja"
                                       />
-                                    </p>
+                                      {first.replyText ? (
+                                        <span className="ml-1">
+                                          （返信: {first.replyText}）
+                                        </span>
+                                      ) : null}
+                                    </div>
                                   )}
 
                                   <div className="flex items-center justify-end gap-2 mt-2">
@@ -738,6 +752,17 @@ export default function Notifications() {
                                             {t("notifications.matchedStatus")}
                                           </span>
                                         </div>
+                                      <div className="mt-2 text-sm text-gray-800 whitespace-pre-wrap break-words">
+                                        <TranslatedMessage
+                                          text={m.message}
+                                          sourceLang="ja"
+                                        />
+                                        {m.replyText ? (
+                                          <span className="ml-1">
+                                            （返信: {m.replyText}）
+                                          </span>
+                                        ) : null}
+                                      </div>
                                       </div>
                                     </div>
                                   </li>

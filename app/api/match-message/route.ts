@@ -57,7 +57,9 @@ async function sendSentMessageNotification(
       where: { id: receiverId },
       select: { language: true },
     });
-    const receiverLanguage = (receiver?.language === "en" ? "en" : "ja") as "ja" | "en";
+    const receiverLanguage = (receiver?.language === "en" ? "en" : "ja") as
+      | "ja"
+      | "en";
 
     // 送信者の名前を取得
     const sender = await prisma.user.findUnique({
@@ -123,25 +125,30 @@ async function sendSentMessageNotification(
           if (r.status === "rejected") {
             const error = r.reason;
             const status = getStatusCode(error);
-            const errorBody = 
+            const errorBody =
               error && typeof error === "object" && "body" in error
                 ? (error as { body?: unknown }).body
                 : undefined;
-            
+
             // Apple Web Push の VapidPkHashMismatch (400)
-            const isAppleVapidMismatch = 
-              status === 400 && 
-              typeof errorBody === "string" && 
+            const isAppleVapidMismatch =
+              status === 400 &&
+              typeof errorBody === "string" &&
               errorBody.includes("VapidPkHashMismatch");
-            
+
             // Google FCM の VAPID認証エラー (403)
-            const isFcmVapidMismatch = 
-              status === 403 && 
-              typeof errorBody === "string" && 
+            const isFcmVapidMismatch =
+              status === 403 &&
+              typeof errorBody === "string" &&
               errorBody.includes("VAPID credentials");
-            
+
             // 404, 410, 400（VapidPkHashMismatch）、403（FCM VAPID認証エラー）を無効化対象
-            if (status === 404 || status === 410 || isAppleVapidMismatch || isFcmVapidMismatch) {
+            if (
+              status === 404 ||
+              status === 410 ||
+              isAppleVapidMismatch ||
+              isFcmVapidMismatch
+            ) {
               toDeactivate.push(subs[idx].endpoint);
             } else {
               // その他のエラーは記録
@@ -217,6 +224,8 @@ export async function POST(req: NextRequest) {
       linkTitle,
       linkImage,
       shortcutIdMap,
+      replyText,
+      replyToMessageId,
     } = await req.json();
 
     if (!senderId || !receiverIds?.length || !message) {
@@ -297,6 +306,81 @@ export async function POST(req: NextRequest) {
       `[match-message] 最終メタデータ: title=${finalLinkTitle}, image=${finalLinkImage}`
     );
 
+    // 返信テキストの有無
+    const normalizedReplyText =
+      typeof replyText === "string" ? replyText.trim() : "";
+    const hasReply = normalizedReplyText.length > 0;
+
+    // 返信を送れる相手を判定（相手→自分に同一メッセージがあるか、かつ未マッチ分が残っているか）
+    const recipientsToSend: string[] = [];
+    const skippedRecipients: string[] = [];
+    if (hasReply) {
+      // A: 相手→自分への同一メッセージ受信回数
+      const inboundCounts = await prisma.sentMessage.groupBy({
+        where: {
+          senderId: { in: receiverIds },
+          receiverId: senderId,
+          message,
+          isHidden: false,
+        },
+        by: ["senderId"],
+        _count: { senderId: true },
+      });
+
+      // B: 同一メッセージで相手とマッチした回数
+      const matchPairs = await prisma.matchPair.findMany({
+        where: {
+          message,
+          OR: [
+            { user1Id: senderId, user2Id: { in: receiverIds } },
+            { user2Id: senderId, user1Id: { in: receiverIds } },
+          ],
+        },
+        select: { user1Id: true, user2Id: true },
+      });
+
+      const inboundCountMap = new Map<string, number>();
+      inboundCounts.forEach((g) =>
+        inboundCountMap.set(g.senderId, g._count.senderId)
+      );
+
+      const matchCountMap = new Map<string, number>();
+      matchPairs.forEach((m) => {
+        const otherId = m.user1Id === senderId ? m.user2Id : m.user1Id;
+        matchCountMap.set(otherId, (matchCountMap.get(otherId) || 0) + 1);
+      });
+
+      for (const rid of receiverIds) {
+        const inbound = inboundCountMap.get(rid) || 0; // A
+        const matched = matchCountMap.get(rid) || 0; // B
+        // A > B のときだけ返信として送信を許可（未消化の受信が残っている場合のみ）
+        if (inbound > matched) {
+          recipientsToSend.push(rid);
+        } else {
+          skippedRecipients.push(rid);
+        }
+      }
+    } else {
+      recipientsToSend.push(...receiverIds);
+    }
+
+    if (recipientsToSend.length === 0) {
+      return NextResponse.json(
+        {
+          error: "no_valid_recipients",
+          message:
+            "今送ったメッセージのうち、返信にならないため送信できる宛先がありませんでした。",
+          sentCount: 0,
+          skippedCount: skippedRecipients.length,
+          skippedRecipientIds: skippedRecipients,
+        },
+        { status: 400 }
+      );
+    }
+
+    const sentCount = recipientsToSend.length;
+    const skippedCount = skippedRecipients.length;
+
     const matchedCandidates: {
       receiverId: string;
       reciprocalCreatedAt: Date;
@@ -307,7 +391,7 @@ export async function POST(req: NextRequest) {
     const isHidden = shouldHideMessage(message);
 
     // 1) 送信メッセージを保存しつつ、マッチを探す
-    for (const receiverId of receiverIds) {
+    for (const receiverId of recipientsToSend) {
       // この送信先のショートカットIDを取得
       const shortcutId = shortcutIdMap?.[receiverId] || null;
 
@@ -321,6 +405,8 @@ export async function POST(req: NextRequest) {
           linkImage: finalLinkImage,
           isHidden: isHidden,
           shortcutId: shortcutId, // ショートカットIDを記録
+          replyToMessageId: replyToMessageId || null,
+          replyText: hasReply ? normalizedReplyText : null,
         },
         select: { id: true, createdAt: true },
       });
@@ -521,6 +607,27 @@ export async function POST(req: NextRequest) {
 
         const chatId = await ensureChatBetween(senderId, receiverId);
 
+        // マッチ成立時に返信テキストをDMとして保存（重複ガード）
+        if (hasReply) {
+          const existingReply = await prisma.message.findFirst({
+            where: {
+              chatId,
+              senderId,
+              content: normalizedReplyText,
+              createdAt: { gte: guardThreshold },
+            },
+          });
+          if (!existingReply) {
+            await prisma.message.create({
+              data: {
+                chatId,
+                senderId,
+                content: `返信: ${normalizedReplyText}`,
+              },
+            });
+          }
+        }
+
         if (isNewlyCreated) {
           const subs = await prisma.pushSubscription.findMany({
             where: {
@@ -613,6 +720,9 @@ export async function POST(req: NextRequest) {
           matchedUserName: primary.matchedUserName,
           chatId: primary.chatId,
           matchedUsers: matchResults,
+          sentCount,
+          skippedCount,
+          skippedRecipientIds: skippedRecipients,
         });
       }
     }
@@ -626,7 +736,12 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    return NextResponse.json({ message: "Message sent, waiting for a match!" });
+    return NextResponse.json({
+      message: "Message sent, waiting for a match!",
+      sentCount,
+      skippedCount,
+      skippedRecipientIds: skippedRecipients,
+    });
   } catch (error) {
     console.error("🚨 マッチングエラー:", error);
     return NextResponse.json(

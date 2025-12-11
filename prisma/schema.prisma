@@ -57,12 +57,18 @@ model SentMessage {
   linkTitle  String?
   isHidden   Boolean  @default(false) // 非表示フラグ（キーワードフィルタまたは管理者による非表示）
   shortcutId String?  // ショートカット経由で送信した場合のショートカットID
+  // 返信メッセージ関連
+  replyToMessageId String?
+  replyText        String?
+  replyToMessage   SentMessage?  @relation("SentMessageReplies", fields: [replyToMessageId], references: [id])
+  replies          SentMessage[] @relation("SentMessageReplies")
   receiver   User     @relation("ReceivedMessages", fields: [receiverId], references: [id])
   sender     User     @relation("SentMessages", fields: [senderId], references: [id])
   shortcut   Shortcut? @relation("ShortcutSentMessages", fields: [shortcutId], references: [id])
   
   @@index([isHidden]) // 検索パフォーマンス向上
   @@index([shortcutId])
+  @@index([replyToMessageId])
 }
 
 model MatchPair {

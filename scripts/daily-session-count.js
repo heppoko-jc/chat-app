@@ -1,10 +1,29 @@
-// scripts/daily-message-count.js
+// scripts/daily-session-count.js
+
+import { config } from "dotenv";
+config();
 
 import { PrismaClient } from "@prisma/client";
 import { writeFileSync } from "fs";
 import { join } from "path";
 
 const prisma = new PrismaClient();
+
+// 除外するユーザーID（ダミーユーザー）
+const EXCLUDED_USER_IDS = [
+  'a3cb6700-2998-42ad-adc2-63cb847cc426',
+  '6450a621-02bc-4282-a79f-4e2cbc6cd352',
+  '100bbaea-98b5-427d-9903-86b9350932db',
+  'd06b5736-b45f-49f9-8022-7d9a7f07fff7',
+  '3e6c9b53-e16f-4cb0-b917-a6f5f4da8d1d',
+  'dee5119c-057a-4004-bea8-bf2c8944b7d7',
+  '17da8fcc-6289-494d-b0e6-cf9edc3a82f5',
+  '58a08854-03be-466e-9594-c07a2fc18cf4',
+  '37a83251-2515-4d60-88d9-6582bf8e7f17',
+  'b0b57a0c-334d-40cf-9eb5-77064281f380',
+  '8b1f95a9-858b-4e1c-ae64-2f939c3830e4',
+  'e50c0557-dc92-4cc5-832a-07508ff65f68',
+];
 
 // JST日付をUTCに変換（JST = UTC+9）
 function jstToUtc(jstYear, jstMonth, jstDay, hour = 0, minute = 0, second = 0) {
@@ -17,11 +36,11 @@ function utcToJst(utcDate) {
   return new Date(utcDate.getTime() + 9 * 60 * 60 * 1000);
 }
 
-async function analyzeDailyMessageCount() {
+async function analyzeDailySessionCount() {
   try {
-    // 対象期間: JST 12/3 00:00 から 12/7 23:59:59
-    const startJst = { year: 2025, month: 12, day: 3, hour: 0, minute: 0, second: 0 };
-    const endJst = { year: 2025, month: 12, day: 7, hour: 23, minute: 59, second: 59 };
+    // 対象期間: JST 10/11 00:00 から 12/2 23:59:59
+    const startJst = { year: 2025, month: 10, day: 11, hour: 0, minute: 0, second: 0 };
+    const endJst = { year: 2025, month: 12, day: 2, hour: 23, minute: 59, second: 59 };
     
     const startUtc = jstToUtc(startJst.year, startJst.month, startJst.day, startJst.hour, startJst.minute, startJst.second);
     const endUtc = jstToUtc(endJst.year, endJst.month, endJst.day, endJst.hour, endJst.minute, endJst.second);
@@ -31,29 +50,36 @@ async function analyzeDailyMessageCount() {
     console.log(`  UTC: ${startUtc.toISOString()} ～ ${endUtc.toISOString()}`);
     console.log('');
 
-    // 期間内の全SentMessageを取得（isHidden=falseのみ）
-    const sentMessages = await prisma.sentMessage.findMany({
+    // 期間内の全UserSessionを取得（除外ユーザーを除く）
+    const userSessions = await prisma.userSession.findMany({
       where: {
-        createdAt: {
+        startTime: {
           gte: startUtc,
           lte: endUtc,
         },
-        isHidden: false,
+        userId: {
+          notIn: EXCLUDED_USER_IDS,
+        },
       },
       select: {
-        senderId: true,
-        createdAt: true,
+        userId: true,
+        startTime: true,
       },
       orderBy: {
-        createdAt: 'asc',
+        startTime: 'asc',
       },
     });
 
-    console.log(`期間内のメッセージ総数: ${sentMessages.length}`);
+    console.log(`期間内のセッション総数: ${userSessions.length}`);
     console.log('');
 
-    // 全ユーザーを取得（メッセージを送っていないユーザーも含める）
+    // 全ユーザーを取得（除外ユーザーを除く）
     const allUsers = await prisma.user.findMany({
+      where: {
+        id: {
+          notIn: EXCLUDED_USER_IDS,
+        },
+      },
       select: {
         id: true,
         name: true,
@@ -64,15 +90,13 @@ async function analyzeDailyMessageCount() {
       },
     });
 
-    const userMap = new Map(allUsers.map(u => [u.id, u]));
+    // 日付ごとのセッション回数を集計（ユーザー×日付）
+    const dailyCounts = new Map(); // key: "userId|date", value: count
 
-    // 日付ごとの送信数を集計（ユーザー×日付）
-    const dailyCounts = new Map(); // key: "userId-date", value: count
-
-    sentMessages.forEach((msg) => {
-      const jstDate = utcToJst(msg.createdAt);
+    userSessions.forEach((session) => {
+      const jstDate = utcToJst(session.startTime);
       const dateKey = `${jstDate.getUTCFullYear()}-${String(jstDate.getUTCMonth() + 1).padStart(2, '0')}-${String(jstDate.getUTCDate()).padStart(2, '0')}`;
-      const userDateKey = `${msg.senderId}-${dateKey}`;
+      const userDateKey = `${session.userId}|${dateKey}`;
       
       dailyCounts.set(userDateKey, (dailyCounts.get(userDateKey) || 0) + 1);
     });
@@ -102,7 +126,7 @@ async function analyzeDailyMessageCount() {
       let userTotal = 0;
 
       allDates.forEach((dateKey) => {
-        const userDateKey = `${user.id}-${dateKey}`;
+        const userDateKey = `${user.id}|${dateKey}`;
         const count = dailyCounts.get(userDateKey) || 0;
         row.push(count);
         userTotal += count;
@@ -127,30 +151,30 @@ async function analyzeDailyMessageCount() {
     csvLines.push(totalRow.join(','));
 
     const csvContent = csvLines.join('\n');
-    const csvPath = join(process.cwd(), 'scripts', 'daily-message-count.csv');
+    const csvPath = join(process.cwd(), 'scripts', 'daily-session-count.csv');
     writeFileSync(csvPath, csvContent, 'utf-8');
     
     // ダウンロードフォルダにもコピー（期間を含むファイル名）
-    const downloadPath = join(process.env.HOME || '~', 'Downloads', 'daily-message-count-12-03-to-12-07.csv');
+    const downloadPath = join(process.env.HOME || '~', 'Downloads', 'daily-session-count-10-11-to-12-02.csv');
     writeFileSync(downloadPath, csvContent, 'utf-8');
     
     console.log(`✅ CSVファイルを出力しました: ${csvPath}`);
     console.log(`✅ ダウンロードフォルダにもコピーしました: ${downloadPath}`);
     console.log(`   ユーザー数: ${allUsers.length}`);
     console.log(`   日数: ${allDates.length}`);
+    console.log('');
 
     // サマリー統計
     const totalUsers = allUsers.length;
     const totalDays = allDates.length;
-    const totalMessages = sentMessages.length;
-    const usersWithMessages = new Set(sentMessages.map(m => m.senderId)).size;
+    const totalSessions = userSessions.length;
+    const usersWithSessions = new Set(userSessions.map(s => s.userId)).size;
 
-    console.log('');
     console.log('=== サマリー ===');
     console.log(`対象ユーザー数: ${totalUsers}`);
-    console.log(`メッセージ送信したユーザー数: ${usersWithMessages}`);
+    console.log(`セッションしたユーザー数: ${usersWithSessions}`);
     console.log(`対象期間の日数: ${totalDays}日`);
-    console.log(`総メッセージ送信数: ${totalMessages}`);
+    console.log(`総セッション数: ${totalSessions}`);
 
   } catch (error) {
     console.error("エラーが発生しました:", error);
@@ -159,5 +183,5 @@ async function analyzeDailyMessageCount() {
   }
 }
 
-analyzeDailyMessageCount();
+analyzeDailySessionCount();
 

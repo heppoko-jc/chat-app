@@ -6,6 +6,22 @@ import { join } from "path";
 
 const prisma = new PrismaClient();
 
+// 除外するユーザーID（ダミーユーザー）
+const EXCLUDED_USER_IDS = [
+  'a3cb6700-2998-42ad-adc2-63cb847cc426',
+  '6450a621-02bc-4282-a79f-4e2cbc6cd352',
+  '100bbaea-98b5-427d-9903-86b9350932db',
+  'd06b5736-b45f-49f9-8022-7d9a7f07fff7',
+  '3e6c9b53-e16f-4cb0-b917-a6f5f4da8d1d',
+  'dee5119c-057a-4004-bea8-bf2c8944b7d7',
+  '17da8fcc-6289-494d-b0e6-cf9edc3a82f5',
+  '58a08854-03be-466e-9594-c07a2fc18cf4',
+  '37a83251-2515-4d60-88d9-6582bf8e7f17',
+  'b0b57a0c-334d-40cf-9eb5-77064281f380',
+  '8b1f95a9-858b-4e1c-ae64-2f939c3830e4',
+  'e50c0557-dc92-4cc5-832a-07508ff65f68',
+];
+
 // JST日付をUTCに変換（JST = UTC+9）
 function jstToUtc(jstYear, jstMonth, jstDay, hour = 0, minute = 0, second = 0) {
   // JSTの日時を作成
@@ -35,12 +51,15 @@ async function analyzeUserGrowth() {
     console.log(`  UTC: ${startUtc.toISOString()} ～ ${endUtc.toISOString()}`);
     console.log('');
 
-    // 期間内に登録された全ユーザーを取得（createdAtでソート）
+    // 期間内に登録された全ユーザーを取得（createdAtでソート、除外ユーザーを除く）
     const users = await prisma.user.findMany({
       where: {
         createdAt: {
           gte: startUtc,
           lte: endUtc,
+        },
+        id: {
+          notIn: EXCLUDED_USER_IDS,
         },
       },
       select: {
@@ -69,11 +88,14 @@ async function analyzeUserGrowth() {
       currentDate.setUTCDate(currentDate.getUTCDate() + 1);
     }
 
-    // 期間前の累積ユーザー数を取得
+    // 期間前の累積ユーザー数を取得（除外ユーザーを除く）
     const usersBeforePeriod = await prisma.user.count({
       where: {
         createdAt: {
           lt: startUtc,
+        },
+        id: {
+          notIn: EXCLUDED_USER_IDS,
         },
       },
     });
@@ -128,8 +150,14 @@ async function analyzeUserGrowth() {
     const csvContent = csvLines.join('\n');
     const csvPath = join(process.cwd(), 'scripts', 'user-growth-data.csv');
     writeFileSync(csvPath, csvContent, 'utf-8');
+    
+    // ダウンロードフォルダにもコピー
+    const downloadPath = join(process.env.HOME || '~', 'Downloads', 'user-growth-data.csv');
+    writeFileSync(downloadPath, csvContent, 'utf-8');
+    
     console.log('');
     console.log(`✅ CSVファイルを出力しました: ${csvPath}`);
+    console.log(`✅ ダウンロードフォルダにもコピーしました: ${downloadPath}`);
 
   } catch (error) {
     console.error("エラーが発生しました:", error);

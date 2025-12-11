@@ -216,6 +216,25 @@ export default function Main() {
     title: string;
     image?: string;
   } | null>(null);
+  // 返信入力用
+  const [replyText, setReplyText] = useState<string>("");
+  const [showReplyModal, setShowReplyModal] = useState(false);
+  const [replyTargetMessage, setReplyTargetMessage] = useState<string | null>(
+    null
+  );
+  const [replyModalNotice, setReplyModalNotice] = useState(
+    "返信にならない相手には送信されません。"
+  );
+  const [warningNotification, setWarningNotification] = useState<{
+    isVisible: boolean;
+    message: string;
+  }>({ isVisible: false, message: "" });
+
+  const handleConfirmReplyModal = useCallback(() => {
+    // モーダルを閉じ、送信先選択へ遷移
+    setShowReplyModal(false);
+    setStep("select-recipients");
+  }, []);
 
   // ショートカット関連の状態
   const [shortcuts, setShortcuts] = useState<Shortcut[]>([]);
@@ -1031,16 +1050,13 @@ export default function Main() {
       return;
     }
 
-    setSelectedMessage((prev) => {
-      // 新しく選択した場合（以前の選択と異なる場合）のみ送信先リストに遷移
-      if (prev !== msg) {
-        // 次のレンダリングサイクルで遷移するようにsetTimeoutを使用
-        setTimeout(() => {
-          setStep("select-recipients");
-        }, 0);
-      }
-      return prev === msg ? null : msg;
-    });
+    // 返信モーダルを開く
+    setReplyTargetMessage(msg);
+    setReplyText("");
+    setShowReplyModal(true);
+
+    // 選択状態を保持（送信時に使用）
+    setSelectedMessage(msg);
     setInputMessage("");
     setSelectedMessageLinkData(null);
   };
@@ -1318,6 +1334,10 @@ export default function Main() {
     if (isInputMode && inputMessage.trim()) {
       const message = inputMessage.trim();
       setSelectedMessage(message);
+      setReplyTargetMessage(message);
+      setReplyText("");
+      setReplyTargetMessage(message);
+      setReplyText("");
       // setIsInputMode(false); // 入力モードを維持してキーボードを開いたままにする
 
       // 状態をリセット（重要！）
@@ -1409,6 +1429,8 @@ export default function Main() {
 
       setStep("select-recipients");
     } else if (selectedMessage) {
+      setReplyTargetMessage(selectedMessage);
+      setReplyText("");
       setStep("select-recipients");
     } else if (!selectedMessage && selectedRecipientIds.length > 0) {
       // メッセージが未選択で送信先が選択されている場合、メッセージリストに遷移
@@ -1521,7 +1543,7 @@ export default function Main() {
       }
 
       setIsSending(true);
-      const recipientsToSend = [...selectedRecipientIds];
+    const recipientsToSend = [...selectedRecipientIds];
 
       try {
         // /api/match-message 内でPresetMessageの処理を行うため、
@@ -1544,6 +1566,8 @@ export default function Main() {
           linkTitle: finalLinkData?.title,
           linkImage: finalLinkData?.image,
           shortcutIdMap: shortcutIdMap, // 送信先ごとのショートカットID
+          replyText: replyText.trim() || null,
+          replyToMessageId: null, // ここでは元メッセージID不明のため null（必要なら拡張）
         };
 
         console.log("[main] 送信データ:", {
@@ -1557,6 +1581,20 @@ export default function Main() {
           "/api/match-message",
           requestData
         );
+
+        // 成功時は以前のエラー表示をクリア
+        setErrorNotification({ isVisible: false, message: "" });
+
+        // 部分スキップがあれば警告表示
+        const skippedCount = matchResponse.data?.skippedCount || 0;
+        if (skippedCount > 0) {
+          const warnMsg =
+            t("main.replySkippedWarning", {
+              n: skippedCount,
+            }) ||
+            `今送ったメッセージのうち、${skippedCount}件は返信にならないため送信されませんでした`;
+          setWarningNotification({ isVisible: true, message: warnMsg });
+        }
 
         // 送信成功時のみ送信アニメーションを表示
         setSentMessageInfo({
@@ -1575,6 +1613,9 @@ export default function Main() {
         setSelectedMessageLinkData(null);
         setLinkPreview(null);
         setLinkComment("");
+        setReplyText("");
+        setReplyTargetMessage(null);
+        setShowReplyModal(false);
 
         // 成立 → 自分側も即キューに積む（後送/先送どちらでも）
         if (matchResponse.data.message === "Match created!") {
@@ -1620,6 +1661,15 @@ export default function Main() {
             isVisible: true,
             message: t("main.hiddenKeywordError"),
           });
+        } else if (
+          axios.isAxiosError(error) &&
+          error.response?.data?.error === "no_valid_recipients"
+        ) {
+          const skipped = error.response?.data?.skippedCount || 0;
+          const warnMsg =
+            t("main.replySkippedWarning", { n: skipped }) ||
+            `今送ったメッセージのうち、${skipped}件は返信にならないため送信されませんでした`;
+          setWarningNotification({ isVisible: true, message: warnMsg });
         } else {
           // その他のエラーの場合
           setErrorNotification({
@@ -1644,6 +1694,7 @@ export default function Main() {
     users,
     shortcuts,
     t,
+    replyText,
   ]);
 
   const canSend =
@@ -2665,6 +2716,44 @@ export default function Main() {
         </div>
       )}
 
+      {/* 返信入力モーダル */}
+      {showReplyModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center px-4">
+          <div className="bg-white rounded-2xl p-5 w-full max-w-md shadow-lg relative">
+            <button
+              onClick={() => setShowReplyModal(false)}
+              className="absolute top-3 right-3 text-gray-500 hover:text-gray-700"
+              aria-label="close reply modal"
+            >
+              ✕
+            </button>
+            <p className="text-sm text-orange-600 font-semibold mb-2">
+              {t("main.replyNotice") || replyModalNotice}
+            </p>
+            {replyTargetMessage ? (
+              <div className="mb-3 p-3 rounded-xl bg-gray-50 border text-sm text-gray-700">
+                {replyTargetMessage}
+              </div>
+            ) : null}
+            <textarea
+              className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
+              rows={3}
+              placeholder={t("main.replyPlaceholder") || "返信を入力（空でも可）"}
+              value={replyText}
+              onChange={(e) => setReplyText(e.target.value)}
+            />
+            <button
+              onClick={handleConfirmReplyModal}
+              className="mt-4 w-full py-3 rounded-xl font-bold text-white bg-orange-500 hover:bg-orange-600 transition disabled:opacity-50"
+            >
+              {replyText.trim()
+                ? t("main.replyDone") || "完了"
+                : t("main.replyNoMessage") || "返信メッセージなし"}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* マッチ通知（キュー先頭だけ表示） */}
       <MatchNotification
         isVisible={isPopupVisible}
@@ -2680,6 +2769,14 @@ export default function Main() {
         isVisible={errorNotification.isVisible}
         message={errorNotification.message}
         onClose={() => setErrorNotification({ isVisible: false, message: "" })}
+      />
+      {/* 警告通知（返信スキップなど） */}
+      <ErrorNotification
+        isVisible={warningNotification.isVisible}
+        message={warningNotification.message}
+        onClose={() =>
+          setWarningNotification({ isVisible: false, message: "" })
+        }
       />
 
       {/* ショートカット作成モーダル */}
