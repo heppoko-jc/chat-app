@@ -2721,7 +2721,12 @@ export default function Main() {
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center px-4">
           <div className="bg-white rounded-2xl p-5 w-full max-w-md shadow-lg relative">
             <button
-              onClick={() => setShowReplyModal(false)}
+              onClick={() => {
+                setShowReplyModal(false);
+                setSelectedMessage(null); // メッセージ選択を解除
+                setReplyTargetMessage(null); // 返信対象メッセージをクリア
+                setReplyText(""); // 返信テキストをクリア
+              }}
               className="absolute top-3 right-3 text-gray-500 hover:text-gray-700"
               aria-label="close reply modal"
             >
