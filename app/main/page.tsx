@@ -2719,7 +2719,7 @@ export default function Main() {
       {/* 返信入力モーダル */}
       {showReplyModal && (
         <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center px-4">
-          <div className="bg-white rounded-2xl p-5 w-full max-w-md shadow-lg relative">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl relative">
             <button
               onClick={() => {
                 setShowReplyModal(false);
@@ -2727,29 +2727,29 @@ export default function Main() {
                 setReplyTargetMessage(null); // 返信対象メッセージをクリア
                 setReplyText(""); // 返信テキストをクリア
               }}
-              className="absolute top-3 right-3 text-gray-500 hover:text-gray-700"
+              className="absolute top-4 right-4 text-gray-500 hover:text-gray-700 text-2xl w-10 h-10 flex items-center justify-center rounded-full hover:bg-gray-100 active:scale-90 transition-transform duration-150"
               aria-label="close reply modal"
             >
               ✕
             </button>
-            <p className="text-sm text-orange-600 font-semibold mb-2">
+            <p className="text-base text-orange-600 font-bold mb-4 leading-relaxed">
               {t("main.replyNotice") || replyModalNotice}
             </p>
             {replyTargetMessage ? (
-              <div className="mb-3 p-3 rounded-xl bg-gray-50 border text-sm text-gray-700">
+              <div className="mb-4 p-4 rounded-xl bg-gray-50 border text-base text-gray-700 font-medium">
                 {replyTargetMessage}
               </div>
             ) : null}
             <textarea
-              className="w-full border rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-400"
-              rows={3}
+              className="w-full border-2 rounded-xl px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-orange-400"
+              rows={4}
               placeholder={t("main.replyPlaceholder") || "返信を入力（空でも可）"}
               value={replyText}
               onChange={(e) => setReplyText(e.target.value)}
             />
             <button
               onClick={handleConfirmReplyModal}
-              className="mt-4 w-full py-3 rounded-xl font-bold text-white bg-orange-500 hover:bg-orange-600 transition disabled:opacity-50"
+              className="mt-5 w-full py-4 rounded-xl font-bold text-lg text-white bg-orange-500 hover:bg-orange-600 active:scale-95 transition-all duration-150 disabled:opacity-50 disabled:active:scale-100 shadow-lg hover:shadow-xl"
             >
               {replyText.trim()
                 ? t("main.replyDone") || "完了"
