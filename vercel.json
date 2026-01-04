@@ -1,4 +1,3 @@
 {
-  "buildCommand": "npm run build",
-  "ignoreCommand": "git diff --quiet HEAD^ HEAD -- prisma/schema.prisma"
+  "buildCommand": "npm run build"
 }
