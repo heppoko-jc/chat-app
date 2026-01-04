@@ -91,11 +91,20 @@ export async function POST(req: NextRequest) {
 
           emailSent = true;
           console.log("✅ パスワードリセットメールを送信しました:", user.email);
-        } catch (emailError: any) {
+        } catch (emailError: unknown) {
+          const errorMessage =
+            emailError instanceof Error ? emailError.message : String(emailError);
+          const errorResponse =
+            emailError &&
+            typeof emailError === "object" &&
+            "response" in emailError
+              ? (emailError as { response?: { data?: unknown } }).response
+              : undefined;
+
           console.error("🚨 メール送信エラー:", {
-            error: emailError?.message || emailError,
+            error: errorMessage,
             email: user.email,
-            resendError: emailError?.response?.data || emailError?.response,
+            resendError: errorResponse?.data || errorResponse,
           });
           // メール送信に失敗しても処理は続行（セキュリティのため）
         }
