@@ -25,9 +25,8 @@ export default function ForgotPassword() {
       const response = await axios.post("/api/auth/forgot-password", { email });
       setMessage(response.data.message);
 
-      // コンソールにトークンを表示（デバッグ用）
-      // 本番環境ではメールで送信
-      console.log("📧 パスワードリセット用のトークンが送信されました");
+      // メール送信完了
+      console.log("📧 パスワードリセットメールの送信リクエストが完了しました");
     } catch (error: unknown) {
       console.error("パスワードリセットエラー:", error);
       const axiosError = error as { response?: { data?: { error?: string } } };
@@ -72,11 +71,10 @@ export default function ForgotPassword() {
         </button>
       </form>
 
-      <div className="mt-4 p-3 bg-orange-50 border border-orange-200 rounded-lg">
+      <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
         <p className="text-sm text-gray-700">
-          ⚠️ <strong>注意:</strong>{" "}
-          パスワードリセットリンクはコンソールに出力されます。
-          本番環境では、メール送信機能を実装する必要があります。
+          💡 <strong>ご案内:</strong>{" "}
+          パスワードリセットリンクをメールで送信しました。メールが届かない場合は、迷惑メールフォルダもご確認ください。
         </p>
       </div>
 
