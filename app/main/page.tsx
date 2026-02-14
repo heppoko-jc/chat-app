@@ -216,25 +216,14 @@ export default function Main() {
     title: string;
     image?: string;
   } | null>(null);
-  // 返信入力用
-  const [replyText, setReplyText] = useState<string>("");
-  const [showReplyModal, setShowReplyModal] = useState(false);
-  const [replyTargetMessage, setReplyTargetMessage] = useState<string | null>(
-    null
-  );
-  const [replyModalNotice, setReplyModalNotice] = useState(
-    "返信にならない相手には送信されません。"
-  );
+  // 返信入力用（新規返信UI無効化のため setter のみ使用）
+  const [, setReplyText] = useState<string>("");
+  const [, setShowReplyModal] = useState(false);
+  const [, setReplyTargetMessage] = useState<string | null>(null);
   const [warningNotification, setWarningNotification] = useState<{
     isVisible: boolean;
     message: string;
   }>({ isVisible: false, message: "" });
-
-  const handleConfirmReplyModal = useCallback(() => {
-    // モーダルを閉じ、送信先選択へ遷移
-    setShowReplyModal(false);
-    setStep("select-recipients");
-  }, []);
 
   // ショートカット関連の状態
   const [shortcuts, setShortcuts] = useState<Shortcut[]>([]);
@@ -1688,6 +1677,7 @@ export default function Main() {
     users,
     shortcuts,
     t,
+    expiryDays,
   ]);
 
   const canSend =
