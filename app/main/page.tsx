@@ -1772,8 +1772,6 @@ export default function Main() {
 
         {friends.size === 0 ? (
           <p className={`text-[15px] text-gray-700 ${language === "en" ? "text-left" : "text-center"} leading-snug mt-1 font-medium`}>
-            {t("main.matchWithin24h")}
-            <br />
             {t("main.selectWordsAndPerson")}
             <br />
             {t("main.firstFollow")}
@@ -1786,8 +1784,6 @@ export default function Main() {
               language === "en" ? "text-left" : "text-center"
             } leading-snug -mt-1 font-medium`}
           >
-            {t("main.matchWithin24h")}
-            <br />
             {t("main.matchHow")}
           </p>
         )}
