@@ -165,6 +165,7 @@ export default function Login() {
           error: string;
           reason?: string;
           searchedBy?: string;
+          detail?: string;
         }>;
 
         console.log("📊 エラー情報:", {

@@ -233,6 +233,7 @@ export default function ChatList() {
   // 初回ロード
   useEffect(() => {
     if (isOpenedMatchStateLoaded) fetchChats();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchChats を deps に入れると初回のみの意図が崩れるため
   }, [isOpenedMatchStateLoaded]);
 
   // 未読合計が変わるたびに OS バッジへ反映
@@ -468,6 +469,7 @@ export default function ChatList() {
     return () => {
       socket.off("matchEstablished", handleMatchEstablished);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fetchChats は socket 登録時のみ参照でよい
   }, [userId]);
 
   // WebSocket: 新着メッセージで再取得
@@ -486,6 +488,7 @@ export default function ChatList() {
     return () => {
       socket.off("newMessage", handleNewMessage);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- マウント時のみソケット登録でよい
   }, []);
 
   // クリックで既読＆ハイライト解除
