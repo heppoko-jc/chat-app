@@ -28,6 +28,8 @@ model User {
   consentInterview     Boolean? // インタビュー同意
   consentDataUsage     Boolean? // データ使用同意
   consentRecording     Boolean? // 録音同意
+  // マッチ有効期間（送信時に選んだ最後の値。1=1日, 7=1週間, 14=2週間）
+  lastMatchExpiryDays  Int      @default(1)
   // リレーション
   chats1               Chat[]             @relation("ChatUser1")
   chats2               Chat[]             @relation("ChatUser2")
@@ -53,6 +55,7 @@ model SentMessage {
   receiverId String
   message    String
   createdAt  DateTime @default(now())
+  expiresAt  DateTime // マッチ有効期限（この日時以降はフィード・マッチ対象外）
   linkImage  String?
   linkTitle  String?
   isHidden   Boolean  @default(false) // 非表示フラグ（キーワードフィルタまたは管理者による非表示）
@@ -67,6 +70,7 @@ model SentMessage {
   shortcut   Shortcut? @relation("ShortcutSentMessages", fields: [shortcutId], references: [id])
   
   @@index([isHidden]) // 検索パフォーマンス向上
+  @@index([expiresAt]) // 有効期限フィルタ用
   @@index([shortcutId])
   @@index([replyToMessageId])
 }

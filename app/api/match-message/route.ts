@@ -4,6 +4,10 @@ import webpush, { PushSubscription as WebPushSubscription } from "web-push";
 import { io as ioClient } from "socket.io-client";
 import { shouldHideMessage } from "@/lib/content-filter";
 import { translate } from "@/lib/translations";
+import {
+  getExpiresAtForDays,
+  isValidExpiryDays,
+} from "@/lib/match-utils";
 
 const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL!;
 
@@ -61,13 +65,6 @@ async function sendSentMessageNotification(
       | "ja"
       | "en";
 
-    // 送信者の名前を取得
-    const sender = await prisma.user.findUnique({
-      where: { id: senderId },
-      select: { name: true },
-    });
-    const senderName = sender?.name || "誰か";
-
     // フォロー関係を判定
     const isFollowing = await prisma.friend.findFirst({
       where: {
@@ -82,8 +79,7 @@ async function sendSentMessageNotification(
       receiverLanguage,
       isFollowing
         ? "notification.anonymousMessageFollowing"
-        : "notification.anonymousMessageNotFollowing",
-      { name: senderName } // 送信者名をパラメータとして渡す
+        : "notification.anonymousMessageNotFollowing"
     );
 
     // 受信者のプッシュ購読を取得
@@ -226,11 +222,26 @@ export async function POST(req: NextRequest) {
       shortcutIdMap,
       replyText,
       replyToMessageId,
+      expiryDays: expiryDaysFromBody,
     } = await req.json();
 
     if (!senderId || !receiverIds?.length || !message) {
       return NextResponse.json({ error: "Invalid request" }, { status: 400 });
     }
+
+    // 有効期間: リクエストで指定されていればそれを使い、なければユーザーの最後に使った値（デフォルト1日）
+    let expiryDays: number;
+    if (isValidExpiryDays(expiryDaysFromBody)) {
+      expiryDays = expiryDaysFromBody;
+    } else {
+      const sender = await prisma.user.findUnique({
+        where: { id: senderId },
+        select: { lastMatchExpiryDays: true },
+      });
+      expiryDays = sender?.lastMatchExpiryDays ?? 1;
+    }
+    const now = new Date();
+    const expiresAt = getExpiresAtForDays(expiryDays);
 
     // リンクの場合はメタデータを取得
     let finalLinkTitle = linkTitle;
@@ -401,6 +412,7 @@ export async function POST(req: NextRequest) {
           senderId,
           receiverId,
           message,
+          expiresAt,
           linkTitle: finalLinkTitle,
           linkImage: finalLinkImage,
           isHidden: isHidden,
@@ -444,14 +456,15 @@ export async function POST(req: NextRequest) {
       const since = lastMatch?.matchedAt ?? new Date(0);
 
       // 「前回マッチ以降」に相手が自分宛に同じ message を送っているか
-      // ✅ 非表示メッセージは除外
+      // ✅ 非表示メッセージは除外。両方のメッセージが有効中（expiresAt >= now）のみマッチ
       const reciprocalAfterLastMatch = await prisma.sentMessage.findFirst({
         where: {
           senderId: receiverId,
           receiverId: senderId,
           message,
           createdAt: { gt: since },
-          isHidden: false, // ← 追加
+          isHidden: false,
+          expiresAt: { gte: now }, // 相手のメッセージがまだ有効
         },
         orderBy: { createdAt: "desc" },
         select: { id: true, createdAt: true },
@@ -467,6 +480,12 @@ export async function POST(req: NextRequest) {
       }
       // なければ次の候補ユーザーへ（マッチはまだ）
     }
+
+    // 送信成功時のみ、最後に使った有効期間を保存（次回のデフォルトになる）
+    await prisma.user.update({
+      where: { id: senderId },
+      data: { lastMatchExpiryDays: expiryDays },
+    });
 
     // PresetMessage の集計（マッチ成立/不成立に関係なく実行）
     console.log(`[match-message] PresetMessage処理開始: ${message}`);

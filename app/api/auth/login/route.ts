@@ -99,9 +99,15 @@ export async function POST(req: NextRequest) {
       loginMatchedBy: searchedBy,
     });
   } catch (error) {
-    console.error("🚨 ログインエラー:", error);
+    const err = error instanceof Error ? error : new Error(String(error));
+    console.error("🚨 ログインエラー:", err.message, err.stack);
+    const isDev = process.env.NODE_ENV === "development";
+    const detail = isDev ? err.message : undefined;
     return NextResponse.json(
-      { error: "ログインに失敗しました" },
+      {
+        error: "ログインに失敗しました",
+        ...(detail && { detail, reason: "SERVER_ERROR" }),
+      },
       { status: 500 }
     );
   }

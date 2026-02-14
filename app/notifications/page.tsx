@@ -17,10 +17,11 @@ interface SentMessage {
   linkTitle?: string;
   linkImage?: string;
   createdAt: string;
+  expiresAt?: string; // マッチ有効期限（ISO）
   isMatched: boolean;
   isExpired?: boolean;
-  shortcutName?: string | null; // ショートカット名
-  shortcutId?: string | null; // ショートカットID
+  shortcutName?: string | null;
+  shortcutId?: string | null;
   replyText?: string | null;
   replyToMessage?: { id: string; senderId: string; receiverId: string; message: string } | null;
   direction?: "sent" | "received";
@@ -65,6 +66,22 @@ function formatDate(iso: string) {
   const hh = d.getHours();
   const mm = d.getMinutes().toString().padStart(2, "0");
   return `${M}/${D} ${hh}:${mm}`;
+}
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+/** 有効期間ラベル（例: "1日" / "1週間" / "2週間"）と残り日数（例: "あと3日"）を返す */
+function getExpiryLabels(createdAt: string, expiresAt: string): { periodLabel: string; remainingLabel: string } {
+  const created = new Date(createdAt).getTime();
+  const expires = new Date(expiresAt).getTime();
+  const now = Date.now();
+  const totalDays = Math.round((expires - created) / MS_PER_DAY);
+  const periodLabel =
+    totalDays >= 14 ? "2週間" : totalDays >= 7 ? "1週間" : "1日";
+  const remainingMs = Math.max(0, expires - now);
+  const remainingDays = Math.ceil(remainingMs / MS_PER_DAY);
+  const remainingLabel =
+    remainingDays <= 0 ? "" : remainingDays === 1 ? "あと1日" : `あと${remainingDays}日`;
+  return { periodLabel, remainingLabel };
 }
 
 export default function Notifications() {
@@ -422,15 +439,19 @@ export default function Notifications() {
                                 </div>
                                   )}
 
-                                  <div className="flex items-center justify-end gap-2 mt-2">
+                                  <div className="flex flex-col items-end gap-1 mt-2">
+                                    {first.expiresAt && (() => {
+                                      const { periodLabel, remainingLabel } = getExpiryLabels(first.createdAt, first.expiresAt);
+                                      return remainingLabel ? (
+                                        <span className="text-xs text-gray-600">
+                                          {language === "ja" ? `このメッセージは${periodLabel}有効（${remainingLabel}）` : `${periodLabel} valid (${remainingLabel})`}
+                                        </span>
+                                      ) : null;
+                                    })()}
+                                    <div className="flex items-center gap-2">
                                     {formatDate(g.createdAtBase) && (
                                       <span className="text-xs text-gray-500 whitespace-nowrap">
                                         {formatDate(g.createdAtBase)}
-                                      </span>
-                                    )}
-                                    {g.items.some((m) => m.isExpired) && (
-                                      <span className="text-xs px-2 py-1 rounded-full bg-gray-200 text-gray-600 font-semibold whitespace-nowrap">
-                                        24時間期限切れ
                                       </span>
                                     )}
                                     {isMulti && (
@@ -438,6 +459,7 @@ export default function Notifications() {
                                         {t("notifications.sentTogetherUnmatched", { n: g.items.length })}
                                       </span>
                                     )}
+                                    </div>
                                   </div>
                                 </div>
                               </div>
@@ -502,15 +524,18 @@ export default function Notifications() {
                                             </span>
                                           )}
                                         </p>
+                                        {m.expiresAt && (() => {
+                                          const { periodLabel, remainingLabel } = getExpiryLabels(m.createdAt, m.expiresAt);
+                                          return remainingLabel ? (
+                                            <p className="text-xs text-gray-600 mt-0.5">
+                                              {language === "ja" ? `このメッセージは${periodLabel}有効（${remainingLabel}）` : `${periodLabel} valid (${remainingLabel})`}
+                                            </p>
+                                          ) : null;
+                                        })()}
                                         <div className="flex items-center gap-2 mt-1">
                                           {formatDate(m.createdAt) && (
                                             <span className="text-xs text-gray-500">
                                               {formatDate(m.createdAt)}
-                                            </span>
-                                          )}
-                                          {m.isExpired && (
-                                            <span className="text-xs px-2 py-1 rounded-full bg-gray-200 text-gray-600 font-semibold">
-                                              24時間期限切れ
                                             </span>
                                           )}
                                         </div>
@@ -676,27 +701,34 @@ export default function Notifications() {
                                     </div>
                                   )}
 
-                                  <div className="flex items-center justify-end gap-2 mt-2">
-                                    {formatDate(g.createdAtBase) && (
-                                      <span className="text-xs text-gray-500 whitespace-nowrap">
-                                        {formatDate(g.createdAtBase)}
-                                      </span>
-                                    )}
-                                    {g.items.some((m) => m.isExpired) && (
-                                      <span className="text-xs px-2 py-1 rounded-full bg-gray-200 text-gray-600 font-semibold whitespace-nowrap">
-                                        24時間期限切れ
-                                      </span>
-                                    )}
-                                    {isMulti && (
-                                      <span className="text-xs px-2 py-1 rounded-full bg-green-100 text-green-700 font-semibold whitespace-nowrap">
-                                        {t("notifications.sentTogether", { n: g.items.length })}
-                                      </span>
-                                    )}
-                                    {!isMulti && (
-                                      <span className="text-xs px-2 py-1 rounded-full bg-green-100 text-green-600 font-semibold">
-                                        {t("notifications.matchedStatus")}
-                                      </span>
-                                    )}
+                                  <div className="flex flex-col items-end gap-1 mt-2">
+                                    {first.expiresAt && (() => {
+                                      const { periodLabel, remainingLabel } = getExpiryLabels(first.createdAt, first.expiresAt);
+                                      return remainingLabel ? (
+                                        <span className="text-xs text-gray-600">
+                                          {language === "ja"
+                                            ? `このメッセージは${periodLabel}有効（${remainingLabel}）`
+                                            : `${periodLabel} valid (${remainingLabel})`}
+                                        </span>
+                                      ) : null;
+                                    })()}
+                                    <div className="flex items-center gap-2">
+                                      {formatDate(g.createdAtBase) && (
+                                        <span className="text-xs text-gray-500 whitespace-nowrap">
+                                          {formatDate(g.createdAtBase)}
+                                        </span>
+                                      )}
+                                      {isMulti && (
+                                        <span className="text-xs px-2 py-1 rounded-full bg-green-100 text-green-700 font-semibold whitespace-nowrap">
+                                          {t("notifications.sentTogether", { n: g.items.length })}
+                                        </span>
+                                      )}
+                                      {!isMulti && (
+                                        <span className="text-xs px-2 py-1 rounded-full bg-green-100 text-green-600 font-semibold">
+                                          {t("notifications.matchedStatus")}
+                                        </span>
+                                      )}
+                                    </div>
                                   </div>
                                 </div>
                               </div>
@@ -741,11 +773,6 @@ export default function Notifications() {
                                           {formatDate(m.createdAt) && (
                                             <span className="text-xs text-gray-500">
                                               {formatDate(m.createdAt)}
-                                            </span>
-                                          )}
-                                          {m.isExpired && (
-                                            <span className="text-xs px-2 py-1 rounded-full bg-gray-200 text-gray-600 font-semibold">
-                                              24時間期限切れ
                                             </span>
                                           )}
                                           <span className="text-xs px-2 py-1 rounded-full bg-green-100 text-green-600 font-semibold">

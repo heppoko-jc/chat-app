@@ -2,7 +2,6 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getMatchExpiryDate } from "@/lib/match-utils";
 
 export async function GET(req: NextRequest) {
   const { searchParams } = new URL(req.url);
@@ -12,12 +11,14 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "userId is required" }, { status: 400 });
   }
 
+  const now = new Date();
+
   try {
     // ✅ 自分が送信したマッチメッセージ履歴（非表示を除外）
     const sentMessages = await prisma.sentMessage.findMany({
       where: {
         senderId: userId,
-        isHidden: false, // ← 追加
+        isHidden: false,
       },
       select: {
         id: true,
@@ -27,12 +28,12 @@ export async function GET(req: NextRequest) {
         linkTitle: true,
         linkImage: true,
         createdAt: true,
+        expiresAt: true,
         isHidden: true,
         shortcutId: true,
         replyText: true,
         receiver: { select: { id: true, name: true } },
-        shortcut: { select: { id: true, name: true } }, // ショートカット情報を取得
-        // 返信情報を含める
+        shortcut: { select: { id: true, name: true } },
         replyToMessage: {
           select: {
             id: true,
@@ -60,6 +61,7 @@ export async function GET(req: NextRequest) {
         linkTitle: true,
         linkImage: true,
         createdAt: true,
+        expiresAt: true,
         replyText: true,
         sender: { select: { id: true, name: true } },
       },
@@ -78,21 +80,7 @@ export async function GET(req: NextRequest) {
       orderBy: { matchedAt: "desc" },
     });
 
-    // PresetMessageのlastSentAtを取得（期限切れ判定用）
-    const presetMessages = await prisma.presetMessage.findMany({
-      select: {
-        content: true,
-        lastSentAt: true,
-      },
-    });
-
-    const presetMessageMap = new Map(
-      presetMessages.map((pm) => [pm.content, pm.lastSentAt])
-    );
-
-    const expiryDate = getMatchExpiryDate();
-
-    // ✅ 送信済みメッセージとマッチ済みメッセージの照合
+    // ✅ 送信済みメッセージとマッチ済みメッセージの照合（期限は expiresAt で判定）
     const updatedSentMessages = sentMessages.map((msg) => ({
       ...msg,
       direction: "sent" as const,
@@ -102,11 +90,7 @@ export async function GET(req: NextRequest) {
           (match.user1.id === msg.receiver.id ||
             match.user2.id === msg.receiver.id)
       ),
-      // 期限切れ判定：PresetMessageのlastSentAtが24時間以上前
-      isExpired:
-        presetMessageMap.has(msg.message) &&
-        presetMessageMap.get(msg.message)! < expiryDate,
-      // ショートカット情報を追加
+      isExpired: msg.expiresAt < now,
       shortcutName: msg.shortcut?.name || null,
       shortcutId: msg.shortcutId || null,
     }));
@@ -114,20 +98,20 @@ export async function GET(req: NextRequest) {
     // ✅ 受信側としても履歴に含める（返信付きのみ）
     const receivedAsSentMessages = receivedReplies.map((msg) => ({
       id: msg.id,
-      // With 相手名で出すため、receiver を相手（送信者）にする
       receiver: { id: msg.sender?.id ?? "", name: msg.sender?.name ?? "" },
       message: msg.message,
       linkTitle: msg.linkTitle || undefined,
       linkImage: msg.linkImage || undefined,
       createdAt: msg.createdAt,
+      expiresAt: msg.expiresAt,
       isMatched: true,
-      isExpired: false,
+      isExpired: msg.expiresAt < now,
       shortcutName: null,
       shortcutId: null,
       replyText: msg.replyText,
       replyToMessage: null,
       direction: "received" as const,
-      sender: msg.sender, // UIでFrom表記に使う
+      sender: msg.sender,
     }));
 
     // 送信分と受信分を統合
@@ -203,8 +187,11 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // 期限切れの未マッチのみ除外。マッチ済みは期限に関係なく履歴に表示する
+    const visible = result.filter((m) => !m.isExpired || m.isMatched);
+
     return NextResponse.json({
-      sentMessages: result,
+      sentMessages: visible,
       matchedPairs,
     });
   } catch (error) {

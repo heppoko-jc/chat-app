@@ -2,12 +2,11 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getMatchExpiryDate } from "@/lib/match-utils";
 
 export async function GET(req: NextRequest) {
   try {
     const userId = req.headers.get("userId"); // 現在のユーザーIDを取得
-    const expiryDate = getMatchExpiryDate();
+    const now = new Date();
 
     // 現在のユーザーのともだち一覧を取得
     let friendIds: string[] = [];
@@ -19,12 +18,12 @@ export async function GET(req: NextRequest) {
       friendIds = friends.map((f) => f.friendId);
     }
 
-    // ともだちが24時間以内に送信したメッセージの内容を取得（非表示を除外）
+    // ともだちが送信したメッセージのうち、まだ有効なもの（expiresAt >= now）を取得
     const sentByFriends = await prisma.sentMessage.findMany({
       where: {
         senderId: { in: friendIds },
-        createdAt: { gte: expiryDate },
-        isHidden: false, // ← 追加
+        expiresAt: { gte: now },
+        isHidden: false,
       },
       select: {
         message: true,
@@ -33,14 +32,14 @@ export async function GET(req: NextRequest) {
     });
     const friendSentMessages = sentByFriends.map((s) => s.message);
 
-    // 自分が24時間以内に送信したメッセージの内容を取得（非表示を除外）
+    // 自分が送信したメッセージのうち、まだ有効なもの（expiresAt >= now）を取得
     let mySentMessages: string[] = [];
     if (userId) {
       const sentByMe = await prisma.sentMessage.findMany({
         where: {
           senderId: userId,
-          createdAt: { gte: expiryDate },
-          isHidden: false, // 非表示を除外
+          expiresAt: { gte: now },
+          isHidden: false,
         },
         select: {
           message: true,
@@ -60,11 +59,9 @@ export async function GET(req: NextRequest) {
       return NextResponse.json([]);
     }
 
-    // ✅ PresetMessageを取得（countフィルタを削除）
+    // ✅ PresetMessageを取得（表示対象のメッセージ内容に含まれるもの）
     const presetMessages = await prisma.presetMessage.findMany({
       where: {
-        // count: { gt: 0 }, ← このフィルタを削除
-        lastSentAt: { gte: expiryDate }, // 24時間以内のメッセージのみ取得
         content: { in: visibleMessages },
       },
       orderBy: { lastSentAt: "desc" },
@@ -84,12 +81,12 @@ export async function GET(req: NextRequest) {
     // ✅ 各PresetMessageについて、実際のcountとsenderCountを計算
     const messagesWithActualCounts = await Promise.all(
       presetMessages.map(async (msg) => {
-        // 実際のSentMessageの数を動的に計算（非表示を除外、24時間以内）
+        // 実際のSentMessageの数を動的に計算（非表示を除外、有効期限内のみ）
         const actualCount = await prisma.sentMessage.count({
           where: {
             message: msg.content,
             isHidden: false,
-            createdAt: { gte: expiryDate },
+            expiresAt: { gte: now },
           },
         });
 
@@ -98,12 +95,12 @@ export async function GET(req: NextRequest) {
           return null;
         }
 
-        // 実際のユニーク送信者数を動的に計算（非表示を除外、24時間以内）
+        // 実際のユニーク送信者数を動的に計算（非表示を除外、有効期限内のみ）
         const uniqueSenders = await prisma.sentMessage.findMany({
           where: {
             message: msg.content,
             isHidden: false,
-            createdAt: { gte: expiryDate },
+            expiresAt: { gte: now },
           },
           select: { senderId: true },
           distinct: ["senderId"],
@@ -130,13 +127,13 @@ export async function GET(req: NextRequest) {
       if (validMessages.length > 0) {
         const messageContents = validMessages.map(m => m.content);
         
-        // 自分宛に送られたメッセージを全て取得
+        // 自分宛に送られたメッセージのうち、まだ有効なものを取得
         const allSentToMe = await prisma.sentMessage.findMany({
           where: {
             receiverId: userId,
             message: { in: messageContents },
             isHidden: false,
-            createdAt: { gte: expiryDate },
+            expiresAt: { gte: now },
           },
           include: {
             sender: { select: { id: true, name: true } },

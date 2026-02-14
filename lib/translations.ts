@@ -6,8 +6,8 @@ type Language = "ja" | "en";
 const translations: Record<Language, Record<string, string>> = {
   ja: {
     "notification.newMessage": "新規メッセージ",
-    "notification.anonymousMessageFollowing": "あなた宛に{name}からメッセージが届きました（たった今）（この通知はリアルです）",
-    "notification.anonymousMessageNotFollowing": "あなた宛に{name}からメッセージが届きました（たった今）（この通知はリアルです）",
+    "notification.anonymousMessageFollowing": "あなた宛にメッセージが届きました（たった今）（この通知はリアルです）",
+    "notification.anonymousMessageNotFollowing": "あなた宛にメッセージが届きました（たった今）（この通知はリアルです）",
     "notification.newChatMessage": "{name}さんから新着メッセージ",
     "notification.digestNewMessage": "新着メッセージ",
     "notification.digestUnmatchedSingle": "あなたに誰かからメッセージが来ています（24時間以内）",
@@ -19,8 +19,8 @@ const translations: Record<Language, Record<string, string>> = {
   },
   en: {
     "notification.newMessage": "New Message",
-    "notification.anonymousMessageFollowing": "You've just received a message from {name} specifically for you.\n\nThis notification is real.",
-    "notification.anonymousMessageNotFollowing": "You've just received a message from {name} specifically for you.\n\nThis notification is real.",
+    "notification.anonymousMessageFollowing": "You've just received a message specifically for you.\n\nThis notification is real.",
+    "notification.anonymousMessageNotFollowing": "You've just received a message specifically for you.\n\nThis notification is real.",
     "notification.newChatMessage": "New message from {name}",
     "notification.digestNewMessage": "New Messages",
     "notification.digestUnmatchedSingle": "You have a message from someone (within 24 hours)",

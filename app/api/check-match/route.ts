@@ -44,12 +44,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 自分が receiver になっているメッセージを取得（非表示を除外）
+    const now = new Date();
+    // 自分が receiver になっているメッセージを取得（非表示・期限切れを除外）
     const matches = await prisma.sentMessage.findMany({
       where: {
         receiverId: senderId,
         message,
-        isHidden: false, // ← 追加
+        isHidden: false,
+        expiresAt: { gte: now },
       },
     });
 

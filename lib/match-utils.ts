@@ -1,8 +1,28 @@
 // lib/match-utils.ts
 // マッチ期限に関する共通ユーティリティ関数
 
-export const MATCH_EXPIRY_HOURS = 24; // マッチの期限（時間）
+export const MATCH_EXPIRY_HOURS = 24; // 旧: マッチの期限（時間）※スクリプト等で参照される可能性あり）
 export const MATCH_EXPIRY_MS = MATCH_EXPIRY_HOURS * 60 * 60 * 1000; // ミリ秒
+
+/** 送信時に選べる有効期間（日数） */
+export const EXPIRY_DAYS_OPTIONS = [1, 7, 14] as const;
+export type ExpiryDays = (typeof EXPIRY_DAYS_OPTIONS)[number];
+
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+/**
+ * 現在時刻から指定日数後の有効期限日時を返す（SentMessage.expiresAt 用）
+ */
+export function getExpiresAtForDays(days: number): Date {
+  return new Date(Date.now() + days * MS_PER_DAY);
+}
+
+/**
+ * 有効期間の値が 1 | 7 | 14 かどうか
+ */
+export function isValidExpiryDays(days: unknown): days is ExpiryDays {
+  return typeof days === "number" && EXPIRY_DAYS_OPTIONS.includes(days as ExpiryDays);
+}
 
 /**
  * マッチの期限切れ判定用の日時を取得

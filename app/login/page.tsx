@@ -182,7 +182,10 @@ export default function Login() {
           errorMsg =
             "パスワードが間違っています。大文字小文字・全角半角をご確認ください。再設定も可能です。";
         } else if (error.response?.data?.error) {
-          errorMsg = `ログインに失敗しました: ${error.response.data.error}`;
+          const detail = error.response?.data?.detail;
+          errorMsg = detail
+            ? `ログインに失敗しました: ${error.response.data.error}\n（詳細） ${detail}`
+            : `ログインに失敗しました: ${error.response.data.error}`;
         } else if (
           error.code === "ECONNABORTED" ||
           error.code === "ETIMEDOUT"

@@ -26,6 +26,10 @@ const translations: Record<Language, Record<string, string>> = {
     
     // メイン画面
     "main.matchWithin24h": "24時間以内にマッチできるかな？",
+    "main.matchHow": "同じメッセージを送り合うと初めてマッチします",
+    "main.expiry24h": "マッチ：24時間以内",
+    "main.expiry1week": "マッチ：1週間以内",
+    "main.expiry2weeks": "マッチ：2週間以内",
     "main.selectWordsAndPerson": "ことばと相手を選んで送ってみましょう。",
     "main.firstFollow": "まずは",
     "main.follow": "フォロー",
@@ -216,7 +220,10 @@ const translations: Record<Language, Record<string, string>> = {
     "main.replyDone": "Done",
     "main.replyPlaceholder": "Enter a reply (can be empty)",
     "main.registeredFriends": "Messages sent by {n} people you follow 👇",
-    "main.weekTestMessage": "\"__ sent this to you\" will only be displayed to the recipient. It will not be displayed to anyone other than the recipient, so please rest assured.",
+    "main.matchHow": "You only match when you both send the same message for the first time.",
+    "main.expiry24h": "Match: within 24 hours",
+    "main.expiry1week": "Match: within 1 week",
+    "main.expiry2weeks": "Match: within 2 weeks",
     "main.sentToYou": " sent to you",
     "main.inputMessage": "Enter message",
     "main.searchByName": "Search by name...",

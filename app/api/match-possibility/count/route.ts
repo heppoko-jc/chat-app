@@ -2,7 +2,6 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { getMatchExpiryDate } from "@/lib/match-utils";
 
 export async function GET(req: NextRequest) {
   try {
@@ -11,24 +10,18 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "userId required" }, { status: 400 });
     }
 
-    // 24時間前の日時を計算
-    const expiryDate = getMatchExpiryDate();
+    const now = new Date();
 
-    // 自分宛に送信された未マッチのメッセージを取得
-    // ✅ 非表示メッセージも除外
+    // 自分宛に送信されたメッセージのうち、有効期限内（expiresAt >= now）・非表示除外
     const unMatchedMessages = await prisma.sentMessage.findMany({
       where: {
         receiverId: userId,
-        isHidden: false, // ← 追加
-        // マッチしていないメッセージを取得するため、MatchPairに存在しないものを探す
-        NOT: {
-          // この条件は後で実装
-        },
+        isHidden: false,
+        expiresAt: { gte: now },
       },
       select: {
         id: true,
         message: true,
-        createdAt: true,
         senderId: true,
       },
     });
@@ -62,19 +55,13 @@ export async function GET(req: NextRequest) {
       );
     });
 
-    // 24時間以内のメッセージのみをカウント
-    const recentUnMatchedMessages = trulyUnMatchedMessages.filter(
-      (sm) => new Date(sm.createdAt) >= expiryDate
-    );
-
-    // マッチの可能性がある件数
-    const matchPossibilityCount = recentUnMatchedMessages.length;
+    // マッチの可能性がある件数（有効期限内は既にクエリで絞り込み済み）
+    const matchPossibilityCount = trulyUnMatchedMessages.length;
 
     console.log(`Match possibility count for user ${userId}:`, {
       totalUnMatched: unMatchedMessages.length,
       matchedMessages: matchedMessages.length,
       trulyUnMatched: trulyUnMatchedMessages.length,
-      recentUnMatched: recentUnMatchedMessages.length,
       matchPossibilityCount,
     });
 

@@ -255,6 +255,10 @@ export default function Main() {
   const [searchQuery, setSearchQuery] = useState("");
   const [debouncedSearchQuery, setDebouncedSearchQuery] = useState("");
 
+  // マッチ有効期間（1=1日, 7=1週間, 14=2週間）。送信時にAPIへ渡し、成功時にlastとして保存される
+  const [expiryDays, setExpiryDays] = useState<number>(1);
+  const [showExpiryPicker, setShowExpiryPicker] = useState(false);
+
   // デバウンス処理（300ms）
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -898,6 +902,16 @@ export default function Main() {
           setLastSentMap(map);
         })
         .catch((e) => console.error("last-sent 取得エラー:", e));
+
+      axios
+        .get<{ lastMatchExpiryDays: number }>("/api/users/last-expiry", {
+          headers: { userId: uid },
+        })
+        .then((res) => {
+          const d = res.data.lastMatchExpiryDays;
+          if (d === 1 || d === 7 || d === 14) setExpiryDays(d);
+        })
+        .catch(() => {});
     }
 
     fetchPresetMessages();
@@ -1050,15 +1064,11 @@ export default function Main() {
       return;
     }
 
-    // 返信モーダルを開く
-    setReplyTargetMessage(msg);
-    setReplyText("");
-    setShowReplyModal(true);
-
-    // 選択状態を保持（送信時に使用）
+    // 新規返信UIは無効化済み。メッセージを選択して送信先選択へ進む
     setSelectedMessage(msg);
     setInputMessage("");
     setSelectedMessageLinkData(null);
+    setStep("select-recipients");
   };
 
   const handleLinkAction = (action: "open" | "select") => {
@@ -1334,11 +1344,7 @@ export default function Main() {
     if (isInputMode && inputMessage.trim()) {
       const message = inputMessage.trim();
       setSelectedMessage(message);
-      setReplyTargetMessage(message);
-      setReplyText("");
-      setReplyTargetMessage(message);
-      setReplyText("");
-      // setIsInputMode(false); // 入力モードを維持してキーボードを開いたままにする
+      // 新規返信UIは無効化済み（返信モーダルは開かない）
 
       // 状態をリセット（重要！）
       setSelectedMessageLinkData(null);
@@ -1429,8 +1435,6 @@ export default function Main() {
 
       setStep("select-recipients");
     } else if (selectedMessage) {
-      setReplyTargetMessage(selectedMessage);
-      setReplyText("");
       setStep("select-recipients");
     } else if (!selectedMessage && selectedRecipientIds.length > 0) {
       // メッセージが未選択で送信先が選択されている場合、メッセージリストに遷移
@@ -1565,9 +1569,10 @@ export default function Main() {
           message: messageToSend,
           linkTitle: finalLinkData?.title,
           linkImage: finalLinkData?.image,
-          shortcutIdMap: shortcutIdMap, // 送信先ごとのショートカットID
-          replyText: replyText.trim() || null,
-          replyToMessageId: null, // ここでは元メッセージID不明のため null（必要なら拡張）
+          shortcutIdMap: shortcutIdMap,
+          replyText: null,
+          replyToMessageId: null,
+          expiryDays, // マッチ有効期間（1 | 7 | 14）。送信成功時に User.lastMatchExpiryDays に保存される
         };
 
         console.log("[main] 送信データ:", {
@@ -1584,17 +1589,6 @@ export default function Main() {
 
         // 成功時は以前のエラー表示をクリア
         setErrorNotification({ isVisible: false, message: "" });
-
-        // 部分スキップがあれば警告表示
-        const skippedCount = matchResponse.data?.skippedCount || 0;
-        if (skippedCount > 0) {
-          const warnMsg =
-            t("main.replySkippedWarning", {
-              n: skippedCount,
-            }) ||
-            `今送ったメッセージのうち、${skippedCount}件は返信にならないため送信されませんでした`;
-          setWarningNotification({ isVisible: true, message: warnMsg });
-        }
 
         // 送信成功時のみ送信アニメーションを表示
         setSentMessageInfo({
@@ -1665,11 +1659,11 @@ export default function Main() {
           axios.isAxiosError(error) &&
           error.response?.data?.error === "no_valid_recipients"
         ) {
-          const skipped = error.response?.data?.skippedCount || 0;
-          const warnMsg =
-            t("main.replySkippedWarning", { n: skipped }) ||
-            `今送ったメッセージのうち、${skipped}件は返信にならないため送信されませんでした`;
-          setWarningNotification({ isVisible: true, message: warnMsg });
+          // 新規返信UI無効化のため通常は発生しない。汎用エラー表示
+          setErrorNotification({
+            isVisible: true,
+            message: t("main.sendError"),
+          });
         } else {
           // その他のエラーの場合
           setErrorNotification({
@@ -1694,7 +1688,6 @@ export default function Main() {
     users,
     shortcuts,
     t,
-    replyText,
   ]);
 
   const canSend =
@@ -1798,10 +1791,14 @@ export default function Main() {
             {t("main.followToRegister")}
           </p>
         ) : (
-          <p className={`text-[15px] text-gray-700 ${language === "en" ? "text-left" : "text-center"} leading-snug -mt-1 font-medium`}>
+          <p
+            className={`text-[15px] text-gray-700 ${
+              language === "en" ? "text-left" : "text-center"
+            } leading-snug -mt-1 font-medium`}
+          >
             {t("main.matchWithin24h")}
             <br />
-            <span className="text-orange-600">{t("main.weekTestMessage")}</span>
+            {t("main.matchHow")}
           </p>
         )}
       </div>
@@ -1978,6 +1975,66 @@ export default function Main() {
               placeholder="メッセージを編集"
               onClick={(e) => e.stopPropagation()}
             />
+          )}
+        </div>
+
+        {/* マッチ有効期間選択（タップで変更） */}
+        <div className="relative flex-shrink-0 ml-1">
+          <button
+            type="button"
+            onClick={() => setShowExpiryPicker((v) => !v)}
+            className={`px-2 py-1 rounded-lg text-xs font-medium whitespace-nowrap ${
+              canSend
+                ? "bg-white/20 text-white hover:bg-white/30"
+                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+            }`}
+          >
+            {expiryDays === 7
+              ? t("main.expiry1week")
+              : expiryDays === 14
+              ? t("main.expiry2weeks")
+              : t("main.expiry24h")}
+          </button>
+          {showExpiryPicker && (
+            <>
+              <div
+                className="fixed inset-0 z-40"
+                aria-hidden
+                onClick={() => setShowExpiryPicker(false)}
+              />
+              <div className="absolute right-0 top-full mt-1 z-50 py-1 bg-white border border-gray-200 rounded-xl shadow-lg min-w-[140px]">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setExpiryDays(1);
+                    setShowExpiryPicker(false);
+                  }}
+                  className={`w-full text-left px-3 py-2 text-sm ${expiryDays === 1 ? "font-bold bg-gray-100" : ""}`}
+                >
+                  {t("main.expiry24h")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setExpiryDays(7);
+                    setShowExpiryPicker(false);
+                  }}
+                  className={`w-full text-left px-3 py-2 text-sm ${expiryDays === 7 ? "font-bold bg-gray-100" : ""}`}
+                >
+                  {t("main.expiry1week")}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setExpiryDays(14);
+                    setShowExpiryPicker(false);
+                  }}
+                  className={`w-full text-left px-3 py-2 text-sm ${expiryDays === 14 ? "font-bold bg-gray-100" : ""}`}
+                >
+                  {t("main.expiry2weeks")}
+                </button>
+              </div>
+            </>
           )}
         </div>
 
@@ -2283,21 +2340,6 @@ export default function Main() {
                           </>
                         )}
                         
-                        {/* ✅ 自分宛に送られたメッセージの場合、全送信者を表示 */}
-                        {msg.sentToMe && msg.sentToMe.length > 0 && (
-                          <p className="text-xs text-orange-600 font-medium mt-1 flex flex-wrap gap-x-1">
-                            <span>
-                              {msg.sentToMe.map((sender, idx) => (
-                                <span key={sender.senderId}>
-                                  {sender.senderName}
-                                  {idx < msg.sentToMe!.length - 1 && <span>、</span>}
-                                </span>
-                              ))}
-                            </span>
-                            <span>{t("main.sentToYou")}</span>
-                          </p>
-                        )}
-                        
                         <div className="flex gap-1 mt-1">
                           {msg.senderCount > 2 && (
                             <p className="text-xs text-black font-medium">
@@ -2369,20 +2411,6 @@ export default function Main() {
                     />
                     
                     {/* ✅ 自分宛に送られたメッセージの場合、全送信者を表示 */}
-                    {msg.sentToMe && msg.sentToMe.length > 0 && (
-                      <p className="text-xs text-orange-600 font-medium mt-1 flex flex-wrap gap-x-1">
-                        <span>
-                          {msg.sentToMe.map((sender, idx) => (
-                            <span key={sender.senderId}>
-                              {sender.senderName}
-                              {idx < msg.sentToMe!.length - 1 && <span>、</span>}
-                            </span>
-                          ))}
-                        </span>
-                        <span>{t("main.sentToYou")}</span>
-                      </p>
-                    )}
-                    
                     <div className="flex gap-1 items-center mt-2">
                       {msg.senderCount > 2 && (
                         <span className="text-xs text-black font-medium">
@@ -2716,48 +2744,7 @@ export default function Main() {
         </div>
       )}
 
-      {/* 返信入力モーダル */}
-      {showReplyModal && (
-        <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center px-4">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-md shadow-2xl relative">
-            <button
-              onClick={() => {
-                setShowReplyModal(false);
-                setSelectedMessage(null); // メッセージ選択を解除
-                setReplyTargetMessage(null); // 返信対象メッセージをクリア
-                setReplyText(""); // 返信テキストをクリア
-              }}
-              className="absolute top-4 right-4 text-gray-500 hover:text-gray-700 text-2xl w-10 h-10 flex items-center justify-center rounded-full hover:bg-gray-100 active:scale-90 transition-transform duration-150"
-              aria-label="close reply modal"
-            >
-              ✕
-            </button>
-            <p className="text-base text-orange-600 font-bold mb-4 leading-relaxed">
-              {t("main.replyNotice") || replyModalNotice}
-            </p>
-            {replyTargetMessage ? (
-              <div className="mb-4 p-4 rounded-xl bg-gray-50 border text-base text-gray-700 font-medium">
-                {replyTargetMessage}
-              </div>
-            ) : null}
-            <textarea
-              className="w-full border-2 rounded-xl px-4 py-3 text-base focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-orange-400"
-              rows={4}
-              placeholder={t("main.replyPlaceholder") || "返信を入力（空でも可）"}
-              value={replyText}
-              onChange={(e) => setReplyText(e.target.value)}
-            />
-            <button
-              onClick={handleConfirmReplyModal}
-              className="mt-5 w-full py-4 rounded-xl font-bold text-lg text-white bg-orange-500 hover:bg-orange-600 active:scale-95 transition-all duration-150 disabled:opacity-50 disabled:active:scale-100 shadow-lg hover:shadow-xl"
-            >
-              {replyText.trim()
-                ? t("main.replyDone") || "完了"
-                : t("main.replyNoMessage") || "返信メッセージなし"}
-            </button>
-          </div>
-        </div>
-      )}
+      {/* 新規返信UIは無効化（過去の返信履歴は history/チャット画面で表示。将来復活時用に状態変数は残置） */}
 
       {/* マッチ通知（キュー先頭だけ表示） */}
       <MatchNotification
